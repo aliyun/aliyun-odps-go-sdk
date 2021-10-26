@@ -1,0 +1,16 @@
+/node.md
+workspace.xml
+.DS_Store
+.tmp
+.settings
+*~
+.pyc
+*.py[co]
+# IDEA IDE
+.idea*
+build/
+dist/
+out/
+coverage.*
+.history/
+/document/
