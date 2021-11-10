@@ -5,11 +5,14 @@ import "net/http"
 type Provider uint
 
 const (
-	_ = iota
+	_ Provider = iota
+	// TAOBAO 淘宝账号
 	TAOBAO
+	// ALIYUN 阿里云账号
 	ALIYUN
 	STS
-	BEARER_TOKEN
+	// BearToken logview token
+	BearToken
 )
 
 type Account interface {
@@ -17,3 +20,5 @@ type Account interface {
 	SignRequest(req *http.Request)
 	Endpoint() string
 }
+
+// TODO 添加其他类型的账号

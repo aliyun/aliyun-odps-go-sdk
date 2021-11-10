@@ -1,36 +1,289 @@
 package odps
 
+import (
+	"encoding/xml"
+	"log"
+	"net/http"
+	"net/url"
+	"time"
+)
+
+// TODO 将status转换为enum
+
+const (
+	// ProjectStatusAvailable 项目状态, 正常
+	ProjectStatusAvailable = "AVAILABLE"
+	// ProjectStatusReadOnly 项目状态，只读
+	ProjectStatusReadOnly = "READONLY"
+	// ProjectStatusDeleting 项目状态，删除
+	ProjectStatusDeleting = "DELETING"
+	// ProjectStatusFrozen 项目状态，冻结
+	ProjectStatusFrozen = "FROZEN"
+	// ProjectStatusUnKnown 项目状态，未知，正常情况下不会出现这个状态
+	ProjectStatusUnKnown = "UNKNOWN"
+
+	// ProjectTypeManaged 项目类型，普通Odps项目
+	ProjectTypeManaged = "managed"
+	// ProjectExternalExternal 项目类型，映射到Odps的外部项目，例如hive
+	ProjectExternalExternal = "external"
+)
+
+
 type Project struct {
+	model         projectModel
+	allProperties []Property
+	exists        bool
+	beLoaded      bool
+	odpsIns       *Odps
+	rb            ResourceBuilder
+}
+
+type projectModel struct {
+	XMLName            xml.Name   `xml:"Project"`
 	Name               string     `xml:"Name"`
 	Type               string     `xml:"Type"`
 	Comment            string     `xml:"Comment"`
 	State              string     `xml:"State"`
 	ProjectGroupName   string     `xml:"ProjectGroupName"`
-	Properties         []Property `xml:"Properties"`
-	ExtendedProperties []Property `xml:"ExtendedProperties"`
+	Properties         []Property `xml:"Properties>Property"`
 	DefaultCluster     string     `xml:"DefaultCluster"`
-	Clusters           string     `xml:"Clusters"`
-	Owner              string     `xml:"Owner"`
-	CreationTime       string     `xml:"CreationTime"`
-	LastModifiedTime   string     `xml:"LastModifiedTime"`
-
-	rb ResourceBuilder
+	Clusters           []Cluster  `xml:"Clusters"`
+	ExtendedProperties []Property `xml:"ExtendedProperties>Property"`
+	// 这三个字段在/projects中和/projects/<projectName>接口中返回的未知不一样,
+	// 前者是body的xml数据中，后者在header里
+	Owner            string  `xml:"Owner"`
+	CreationTime     GMTTime `xml:"CreationTime"`
+	LastModifiedTime GMTTime `xml:"LastModifiedTime"`
 }
 
-type Property struct {
-	Name  string `xml:"Name"`
-	Value string `xml:"Value"`
+type OptionalQuota struct {
+	XMLName    xml.Name   `xml:"OptionalQuota"`
+	QuotaId    string     `xml:"QuotaID"`
+	Properties Properties `xml:"Properties"`
 }
 
 type Cluster struct {
-	QuotaID    string     `xml:"Name"`
-	Properties []Property `xml:"Properties"`
+	Name    string          `xml:"Name"`
+	QuotaId string          `xml:"QuotaId"`
+	Quotas  []OptionalQuota `xml:"Quotas"`
 }
 
-func (p *Project) baseUrlPath() string {
-	if p.rb.projectName == "" {
-		p.rb.projectName = p.Name
+func NewProject(name string, odpsIns *Odps) Project {
+	return Project{
+		model:   projectModel{Name: name},
+		odpsIns: odpsIns,
+		rb:      ResourceBuilder{projectName: name},
+	}
+}
+
+func (p *Project) RestClient() RestClient {
+	return p.odpsIns.restClient
+}
+
+type optionalParams struct {
+	// For compatibility. The static class 'Cluster' had strict schema validation. Unmarshalling will
+	// fail because of the new xml tag 'Quotas'.
+	usedByGroupApi     bool
+	withAllProperties  bool
+	extendedProperties bool
+}
+
+func (p *Project) _loadFromOdps(params optionalParams) (*projectModel, error) {
+	resource := p.rb.Project()
+	client := p.RestClient()
+
+	var urlQuery = make(url.Values)
+
+	if params.usedByGroupApi {
+		urlQuery.Set("isGroupApi", "true")
 	}
 
-	return p.rb.Project()
+	if params.withAllProperties {
+		urlQuery.Set("properties", "all")
+	}
+
+	if params.extendedProperties {
+		urlQuery.Set("extended", "")
+	}
+
+	model := projectModel{}
+
+	parseFunc := func(res *http.Response) error {
+		decoder := xml.NewDecoder(res.Body)
+		if err := decoder.Decode(&model); err != nil {
+			return err
+		}
+
+		header := res.Header
+		model.Owner = header.Get(HttpHeaderOdpsOwner)
+
+		creationTime, err := ParseRFC1123Date(header.Get(HttpHeaderOdpsCreationTime))
+		if err != nil {
+			log.Printf("/project get creation time error, %v", err)
+		}
+
+		lastModifiedTime, _ := ParseRFC1123Date(header.Get(HttpHeaderLastModified))
+		if err != nil {
+			log.Printf("/project get last modified time error, %v", err)
+		}
+
+		model.CreationTime = GMTTime(creationTime)
+		model.LastModifiedTime = GMTTime(lastModifiedTime)
+
+		return nil
+	}
+
+	if err := client.GetWithParseFunc(resource, urlQuery, parseFunc); err != nil {
+		return nil, err
+	}
+
+	return &model, nil
+}
+
+// Load should be called before get properties of project
+func (p *Project) Load() error {
+	model, err := p._loadFromOdps(optionalParams{})
+	p.beLoaded = true
+
+	if err != nil {
+		if httpNoteOk, ok := err.(HttpNotOk); ok {
+			if httpNoteOk.StatusCode == 404 {
+				p.exists = false
+			}
+		}
+
+		return err
+	}
+
+	p.exists = true
+	p.model = *model
+	return nil
+}
+
+// HasBeLoaded whether `Load()` has been called
+func (p *Project) HasBeLoaded() bool {
+	return p.beLoaded
+}
+
+func (p *Project) Name() string {
+	return p.model.Name
+}
+
+func (p *Project) Type() string {
+	return p.model.Type
+}
+
+func (p *Project) Comment() string {
+	return p.model.Comment
+}
+
+func (p *Project) State() string {
+	return p.model.State
+}
+
+func (p *Project) ProjectGroupName() string {
+	return p.model.ProjectGroupName
+}
+
+// PropertiesSet Properties 获取Project已配置过的的信息
+func (p *Project) PropertiesSet() Properties {
+	return p.model.Properties
+}
+
+// GetAllProperties 获取 Project 全部可配置的属性, 包含从group继承来的配置信息。
+// 注意GetAllProperties有可能会从odps后台加载数据，所以有可能会出错
+func (p *Project) GetAllProperties() (Properties, error) {
+	if p.allProperties != nil {
+		return p.allProperties, nil
+	}
+
+	model, err := p._loadFromOdps(optionalParams{withAllProperties: true})
+	if err != nil {
+		return nil, err
+	}
+
+	p.allProperties = model.Properties
+
+	return p.allProperties, nil
+}
+
+// GetDefaultCluster Get default cluster. This is an internal method for group-api.
+// Returns efault cluster when called by group owner, otherwise ,null.
+// 注意GetDefaultProperties有可能会从odps后台加载数据，所以有可能会出错
+func (p *Project) GetDefaultCluster() (string, error) {
+	if p.model.DefaultCluster != "" {
+		return p.model.DefaultCluster, nil
+	}
+
+	model, err := p._loadFromOdps(optionalParams{usedByGroupApi: true})
+	if err != nil {
+		return "", err
+	}
+
+	p.model.DefaultCluster = model.DefaultCluster
+	p.model.Clusters = model.Clusters
+
+	return p.model.DefaultCluster, nil
+}
+
+// GetClusters Get information of clusters owned by this project. This is an internal
+// method for group-api.
+// 注意GetClusters有可能会从odps后台加载数据，所以有可能会出错
+func (p *Project) GetClusters() ([]Cluster, error) {
+	if p.model.Clusters != nil {
+		return p.model.Clusters, nil
+	}
+
+	model, err := p._loadFromOdps(optionalParams{usedByGroupApi: true})
+	if err != nil {
+		return nil, err
+	}
+
+	p.model.DefaultCluster = model.DefaultCluster
+	p.model.Clusters = model.Clusters
+
+	return p.model.Clusters, nil
+}
+
+// GetExtendedProperties 获取项目的扩展属性
+// 注意GetExtendedProperties有可能会从odps后台加载数据，所以有可能会出错
+func (p *Project) GetExtendedProperties() (Properties, error) {
+	if p.model.ExtendedProperties != nil {
+		return p.model.ExtendedProperties, nil
+	}
+
+	model, err := p._loadFromOdps(optionalParams{extendedProperties: true})
+	if err != nil {
+		return nil, err
+	}
+
+	p.model.ExtendedProperties = model.ExtendedProperties
+
+	return p.model.ExtendedProperties, nil
+}
+
+func (p *Project) Owner() string {
+	return p.model.Owner
+}
+
+func (p *Project) CreationTime() time.Time {
+	return time.Time(p.model.CreationTime)
+}
+
+func (p *Project) LastModifiedTime() time.Time {
+	return time.Time(p.model.LastModifiedTime)
+}
+
+func (p *Project) Existed() bool {
+	return p.exists
+}
+
+func (p *Project) SecurityManager() SecurityManager {
+	panic("unimplemented!")
+	return SecurityManager{}
+}
+
+func (p *Project) TunnelEndpoint() string {
+	panic("unimplemented!")
+	return ""
 }

@@ -1,53 +1,37 @@
 package odps
 
-import (
-	"bytes"
-	"encoding/xml"
-	"fmt"
-	"io/ioutil"
-)
-
 type Odps struct {
-	defaultProject Project
+	defaultProject string
 
-	httpClient HttpClient
-	rb ResourceBuilder
+	restClient RestClient
+	rb         ResourceBuilder
+	projects Projects
 }
 
-func NewOdps(account Account) Odps  {
-	return Odps {
-		httpClient: NewOdpsHttpClient(account),
+func NewOdps(account Account) *Odps  {
+	ins := Odps {
+		restClient: NewOdpsHttpClient(account),
 	}
+
+	ins.projects = NewProjects(&ins)
+
+	return &ins
 }
 
 func (odps *Odps) DefaultProject() Project  {
+	return NewProject(odps.defaultProject, odps)
+}
+
+func (odps *Odps) DefaultProjectName() string  {
 	return odps.defaultProject
 }
 
-func (odps *Odps) SetDefaultProject(project Project)  {
-	odps.defaultProject = project
-	odps.rb.SetProject(project.Name)
+func (odps *Odps) SetDefaultProjectName(projectName string)  {
+	odps.defaultProject = projectName
+	odps.rb.SetProject(projectName)
+	odps.restClient.setDefaultProject(projectName)
 }
 
-func (odps *Odps) Projects()  {
-	resource := odps.rb.Projects()
-	req, err := odps.httpClient.NewRequest("GET", resource, nil)
-
-	if err != nil {
-		println(err)
-	}
-
-	res, _ := odps.httpClient.Do(req)
-
-	if res.StatusCode == 200 {
-		body, _ := ioutil.ReadAll(res.Body)
-		//println(string(body))
-		decoder := xml.NewDecoder(bytes.NewReader(body))
-		var projects Projects
-		var _ = decoder.Decode(&projects)
-
-		for _, p := range projects.Projects {
-			fmt.Printf("%+v\n", p)
-		}
-	}
+func (odps *Odps) Projects() Projects  {
+	return odps.projects
 }

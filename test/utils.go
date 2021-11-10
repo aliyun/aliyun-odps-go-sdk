@@ -6,7 +6,7 @@ import (
 
 
 var DefaultAccount odps.Account
-var DefaultOdpsHttpClient odps.HttpClient
+var DefaultOdpsHttpClient odps.RestClient
 
 func init() {
 	a := odps.AliyunAccountFromEnv()
