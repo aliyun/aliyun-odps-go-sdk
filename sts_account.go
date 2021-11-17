@@ -7,18 +7,21 @@ type StsAccount struct {
 	AliyunAccount
 }
 
-func NewStsAccount(accessId, accessKey, endpoint, stsToken string ) StsAccount {
+func NewStsAccount(accessId, accessKey, stsToken string) StsAccount {
 	return StsAccount {
 		stsToken: stsToken,
 		AliyunAccount: AliyunAccount{
-			endpoint: endpoint,
 			accessKey: accessKey,
 			accessId: accessId,
 		},
 	}
 }
 
-func (account *StsAccount) SignRequest(req *http.Request) {
-	account.AliyunAccount.SignRequest(req)
+func (account *StsAccount) GetType() AccountProvider {
+	return AccountSTS
+}
+
+func (account *StsAccount) SignRequest(req *http.Request, endpoint string) {
+	account.AliyunAccount.SignRequest(req, endpoint)
 	req.Header.Set(HttpHeaderAuthorizationSTSToken, account.stsToken)
 }

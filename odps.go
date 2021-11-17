@@ -8,14 +8,18 @@ type Odps struct {
 	projects Projects
 }
 
-func NewOdps(account Account) *Odps  {
+func NewOdps(account Account, endpoint string) *Odps  {
 	ins := Odps {
-		restClient: NewOdpsHttpClient(account),
+		restClient: NewOdpsHttpClient(account, endpoint),
 	}
 
 	ins.projects = NewProjects(&ins)
 
 	return &ins
+}
+
+func (odps *Odps) RestClient() RestClient  {
+	return odps.restClient
 }
 
 func (odps *Odps) DefaultProject() Project  {

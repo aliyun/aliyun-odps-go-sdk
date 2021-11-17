@@ -98,3 +98,10 @@ type TaskSummary struct {
 	JsonSummary string
 	Summary     string
 }
+
+type TaskResult struct {
+	Type   string `xml:"Type,attr"`
+	Name   string
+	Result string
+	Status TaskStatus
+}

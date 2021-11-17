@@ -79,3 +79,14 @@ func ExampleProject()  {
 	// Output:
 }
 
+func ExampleProject_GetTunnelEndpoint() {
+	project := odpsIns.DefaultProject()
+	tunnelEndpoint, err := project.GetTunnelEndpoint()
+	if err != nil {
+		println(err.Error())
+	} else {
+		println(tunnelEndpoint)
+	}
+
+	// Output:
+}

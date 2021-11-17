@@ -3,6 +3,7 @@ package odps
 import (
 	"encoding/json"
 	"encoding/xml"
+	"fmt"
 	"net/url"
 	"strings"
 )
@@ -215,6 +216,51 @@ func (tables *Tables) CreateExternalAndWait(
 	hints, alias map[string]string) error  {
 
 	instance, err := tables.CreateExternal(schema, createIfNotExists, serdeProperties, jars, hints, alias)
+
+	if err != nil {
+		return err
+	}
+
+	return instance.WaitForSuccess()
+}
+
+func (tables *Tables) CreateWithDataHub(
+	schema TableSchema,
+	createIfNotExists bool,
+	shardNum,
+	hubLifecycle int,
+	) (*Instance, error)  {
+
+	sql, err := schema.toSQLString(tables.projectName, createIfNotExists, false)
+	if err != nil {
+		return nil, err
+	}
+
+	var sb strings.Builder
+	sb.WriteString(sql)
+
+	if schema.Lifecycle > 0 {
+		sb.WriteString(fmt.Sprintf("\nlifecycle %d", schema.Lifecycle))
+	}
+
+	sb.WriteString(fmt.Sprintf("\ninto %d shards", shardNum))
+	sb.WriteString(fmt.Sprintf("\nhubLifecycle %d", hubLifecycle))
+	sb.WriteRune(';')
+
+	task := NewSqlTask("SQLCreateTableTaskWithDataHub", sb.String(), "", nil)
+
+	instances := NewInstances(tables.odpsIns, tables.projectName)
+
+	return instances.CreateTask(tables.projectName, &task)
+}
+
+func (tables *Tables) CreateWithDataHubAndWait(
+	schema TableSchema,
+	createIfNotExists bool,
+	shardNum,
+	hubLifecycle int,
+) error  {
+	instance, err := tables.CreateWithDataHub(schema, createIfNotExists, shardNum, hubLifecycle)
 
 	if err != nil {
 		return err

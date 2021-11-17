@@ -1,29 +1,35 @@
 package odps_test
 
-import odps "github.com/aliyun/aliyun-odps-go-sdk"
+import (
+	"fmt"
+	odps "github.com/aliyun/aliyun-odps-go-sdk"
+	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
+	"io"
+	"log"
+)
 
 func ExampleTableSchema_ToSQLString() {
 	c1 := odps.Column{
 		Name:    "name",
-		Type:    odps.STRING,
+		Type:    datatype.NewString(),
 		Comment: "name of user",
 	}
 
 	c2 := odps.Column{
 		Name:    "age",
-		Type:    odps.INT,
+		Type:    datatype.NewInt(),
 		Comment: "how old is the user",
 	}
 
 	p1 := odps.Column{
 		Name:    "region",
-		Type:    odps.STRING,
+		Type:    datatype.NewString(),
 		Comment: "居住区域",
 	}
 
 	p2 := odps.Column{
 		Name: "code",
-		Type: odps.INT,
+		Type: datatype.NewInt(),
 	}
 
 	serdeProperties := make(map[string]string)
@@ -65,68 +71,104 @@ func ExampleTableSchema_ToSQLString() {
 	// Output:
 }
 
-
-func ExampleTables_Create() {
-	c1 := odps.Column{
-		Name:    "name",
-		Type:    odps.STRING,
-		Comment: "name of user",
-	}
-
-	c2 := odps.Column{
-		Name:    "age",
-		Type:    odps.INT,
-		Comment: "how old is the user",
-	}
-
-	p1 := odps.Column{
-		Name:    "region",
-		Type:    odps.STRING,
-		Comment: "居住区域",
-	}
-
-	p2 := odps.Column{
-		Name: "code",
-		Type: odps.INT,
-	}
-
-	hints := make(map[string]string)
-	hints["odps.sql.preparse.odps2"] = "lot"
-	hints["odps.sql.planner.mode"] = "lot"
-	hints["odps.sql.planner.parser.odps2"] = "true"
-	hints["odps.sql.ddl.odps2"] = "true"
-	hints["odps.compiler.output.format"] = "lot,pot"
-
-	builder := odps.NewTableSchemaBuilder()
-	builder.Name("user").
-		Comment("这就是一条注释").
-		Columns(c1, c2).
-		PartitionColumns(p1, p2).
-		Lifecycle(2)
-
-	schema := builder.Build()
-	sql, _ := schema.ToSQLString("project_1", false)
-	println(sql)
-	tables := odps.NewTables(odpsIns, "project_1")
-	instance, err := tables.Create(schema, true, hints, nil)
+func ExampleTable_Load() {
+	table := odps.NewTable(odpsIns, "project_1", "has_struct")
+	err := table.Load()
 	if err != nil {
 		println(err.Error())
 	} else {
-		err := instance.WaitForSuccess()
+		schema := table.Schema()
+		println(fmt.Sprintf("%+v", schema.Columns))
+	}
+
+	// Output:
+}
+
+func ExampleTable_AddPartition() {
+	table := odps.NewTable(odpsIns, "project_1", "sale_detail")
+	instance, err := table.AddPartition(true, "sale_date='202111',region='hangzhou'")
+	if err != nil {
+		println(err.Error())
+	}
+
+	err = instance.WaitForSuccess()
+	if err != nil {
+		println(err.Error())
+	}
+
+	results := instance.TaskResults()
+	for _, result := range results {
+		println(fmt.Sprintf("%+v", result))
+	}
+
+	// Output:
+}
+
+func ExampleTable_GetPartitions() {
+	table := odps.NewTable(odpsIns, "project_1", "sale_detail")
+	c := make(chan odps.Partition)
+
+	go func() {
+		err := table.GetPartitions(c, "")
+
 		if err != nil {
 			println(err.Error())
+		}
+	}()
+
+	for p := range c {
+		println(fmt.Sprintf("Name: %s", p.Name()))
+		println(fmt.Sprintf("Create time: %s", p.CreatedTime()))
+		println(fmt.Sprintf("Last DDL time: %s", p.LastDDLTime()))
+		println(fmt.Sprintf("Last Modified time: %s", p.LastModifiedTime()))
+		println("")
+	}
+
+	// Output:
+}
+
+func ExampleTable_ExecSql() {
+	table := odps.NewTable(odpsIns, "project_1", "sale_detail")
+	instance, err := table.ExecSql("SelectSale_detail", "select * from sale_detail;")
+	if err != nil {
+		println(err.Error())
+	} else {
+		err = instance.WaitForSuccess()
+		if err != nil {
+			println(err.Error())
+		}
+
+		results, err := instance.GetResult()
+		if err != nil {
+			println(err.Error())
+		} else if len(results) > 0 {
+			println(fmt.Sprintf("%+v", results[0]))
 		}
 	}
 
 	// Output:
 }
 
-func ExampleTables_DeleteAndWait() {
-	//ExampleTables_Create()
-	tables := odps.NewTables(odpsIns, "project_1")
-	err := tables.DeleteAndWait("user1", false)
+func ExampleTable_Read() {
+	table := odps.NewTable(odpsIns, "project_1", "sale_detail")
+	columns := []string {
+		"shop_name", "customer_id", "total_price", "sale_date", "region",
+	}
+	reader, err := table.Read("", columns, -1, "")
 	if err != nil {
 		println(err.Error())
+	} else {
+		for {
+			record, err := reader.Read()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			println(fmt.Sprintf("%+v", record))
+		}
 	}
 
 	// Output:

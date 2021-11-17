@@ -2,20 +2,19 @@ package odps
 
 import "encoding/xml"
 
-type User struct {
+type Role struct {
 	odpsIns     *Odps
 	projectName string
-	model       userModel
+	model       roleModel
 }
 
-type userModel struct {
-	XMLName     xml.Name `xml:"User"`
-	ID          string
-	DisplayName string
-	Comment     string
+type roleModel struct {
+	XMLName xml.Name `xml:"Role"`
+	Name    string
+	Comment string
 }
 
-func NewUser(userId string, odpsIns *Odps, projectName ...string) User {
+func NewRole(name string, odpsIns *Odps, projectName ...string) Role {
 	var _projectName string
 
 	if len(projectName) > 0 {
@@ -24,29 +23,25 @@ func NewUser(userId string, odpsIns *Odps, projectName ...string) User {
 		_projectName = odpsIns.DefaultProjectName()
 	}
 
-	return User{
+	return Role{
 		odpsIns:     odpsIns,
 		projectName: _projectName,
-		model:       userModel{ID: userId},
+		model:       roleModel{Name: name},
 	}
 }
 
-func (user *User) Load() error {
-	rb := NewResourceBuilder(user.projectName)
-	resource := rb.User(user.model.ID)
-	client := user.odpsIns.restClient
+func (role *Role) Load() error {
+	rb := NewResourceBuilder(role.projectName)
+	resource := rb.Role(role.model.Name)
+	client := role.odpsIns.restClient
 
-	return client.GetWithModel(resource, nil, &user.model)
+	return client.GetWithModel(resource, nil, &role.model)
 }
 
-func (user *User) ID() string {
-	return user.model.ID
+func (role *Role) Name() string {
+	return role.model.Name
 }
 
-func (user *User) DisplayName() string {
-	return user.model.DisplayName
-}
-
-func (user *User) Comment() string {
-	return user.model.Comment
+func (role *Role) Comment() string {
+	return role.model.Comment
 }

@@ -87,6 +87,15 @@ func (t *SQLPlanTask) TaskType() string {
 	return "SQLPlan"
 }
 
+type SQLRTTask struct {
+	XMLName xml.Name `xml:"SQLRT"`
+	SQLTask
+}
+
+func (t *SQLRTTask) TaskType() string {
+	return "SQLRT"
+}
+
 type MergeTask struct {
 	XMLName  xml.Name `xml:"Merge"`
 	TaskName `xml:"Name"`

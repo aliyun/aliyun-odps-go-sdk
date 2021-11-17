@@ -1,6 +1,7 @@
 package odps
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -81,9 +82,7 @@ func (t *Table) HasBeLoad() bool {
 
 func (t *Table) Load() error {
 	client := t.odpsIns.restClient
-	rb := t.odpsIns.rb
-	resource := rb.Table(t.model.Name)
-
+	resource := t.ResourceUrl()
 	t.beLoaded = true
 
 	err := client.GetWithModel(resource, nil, &t.model)
@@ -91,25 +90,23 @@ func (t *Table) Load() error {
 		return err
 	}
 
-	return json.Unmarshal([]byte(t.model.Schema), &t.tableSchema)
-}
-
-func (t *Table) LoadExtendedInfo() error {
-	client := t.odpsIns.restClient
-	rb := t.odpsIns.rb
-	resource := rb.Table(t.model.Name)
-
-	urlQuery := make(url.Values)
-	urlQuery.Set("extended", "")
-
-	req, err := client.NewRequestWithUrlQuery(GetMethod, resource, nil, urlQuery)
+	err = json.Unmarshal([]byte(t.model.Schema), &t.tableSchema)
 	if err != nil {
 		return err
 	}
 
-	var model tableModel
+	return t.LoadExtendedInfo()
+}
 
-	err = client.DoWithModel(req, &model)
+func (t *Table) LoadExtendedInfo() error {
+	client := t.odpsIns.restClient
+	resource := t.ResourceUrl()
+
+	urlQuery := make(url.Values)
+	urlQuery.Set("extended", "")
+
+	var model tableModel
+	err := client.GetWithModel(resource, urlQuery, &model)
 	if err != nil {
 		return err
 	}
@@ -119,6 +116,11 @@ func (t *Table) LoadExtendedInfo() error {
 
 func (t *Table) Name() string {
 	return t.model.Name
+}
+
+func (t *Table) ResourceUrl() string  {
+	rb := ResourceBuilder{projectName: t.ProjectName()}
+	return rb.Table(t.Name())
 }
 
 func (t *Table) Comment() string {
@@ -285,9 +287,17 @@ func (t *Table) HubLifeCycle() int {
 	return t.tableSchema.HubLifecycle
 }
 
-func (t *Table) GetSchema() (*TableSchema, error)  {
+func (t *Table) PartitionColumns() []Column {
+	return t.tableSchema.PartitionColumns
+}
+
+func (t *Table) ShardInfoJson() string {
+	return t.tableSchema.ShardInfo
+}
+
+func (t *Table) GetSchema() (*TableSchema, error) {
 	err := json.Unmarshal([]byte(t.model.Schema), &t.tableSchema)
-	if err != nil  {
+	if err != nil {
 		return nil, err
 	}
 
@@ -317,9 +327,160 @@ func (t *Table) ExecSqlAndWait(taskName, sql string) error {
 	return instance.WaitForSuccess()
 }
 
-func (t *Table) AddPartition() error  {
+// AddPartition Example: AddPartition(true, "region='10026, name='abc'")
+func (t *Table) AddPartition(ifNotExists bool, partitionName string) (*Instance, error) {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("alter table %s.%s add", t.ProjectName(), t.Name()))
+	if ifNotExists {
+		sb.WriteString(" if not exists")
+	}
+
+	sb.WriteString(" partition (\n")
+	sb.WriteString(partitionName)
+	sb.WriteString("\n);")
+
+	return t.ExecSql("SQLAddPartitionTask", sb.String())
+}
+
+func (t *Table) AddPartitionAndWait(ifNotExists bool, partitionName string) error {
+	instance, err := t.AddPartition(ifNotExists, partitionName)
+	if err != nil {
+		return err
+	}
+	return instance.WaitForSuccess()
+}
+
+// DeletePartition Example: DeletePartition(true, "region='10026, name='abc'")
+func (t *Table) DeletePartition(ifExists bool, partitionName string) error {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("alter table %s.%s drop", t.ProjectName(), t.Name()))
+	if ifExists {
+		sb.WriteString(" if exists")
+	}
+
+	sb.WriteString(" partition (\n")
+	sb.WriteString(partitionName)
+	sb.WriteString("\n);")
+
+	return t.ExecSqlAndWait("SQLDropPartitionTask", sb.String())
+}
+
+// GetPartitions partitionName格式形如"region='10026, name='abc'"
+func (t *Table) GetPartitions(c chan Partition, partitionName string) error {
+	defer close(c)
+
+	queryArgs := make(url.Values, 4)
+	queryArgs.Set("partitions", "")
+	queryArgs.Set("expectmarker", "true")
+
+	if partitionName != "" {
+		queryArgs.Set("partition", partitionName)
+	}
+
+	resource := t.ResourceUrl()
+	client := t.odpsIns.restClient
+
+	type ResModel struct {
+		XMLName    xml.Name `xml:"Partitions"`
+		Marker     string
+		MaxItems   string
+		Partitions []struct {
+			Columns []struct {
+				Name  string `xml:"Name,attr"`
+				Value string `xml:"Value,attr"`
+			} `xml:"Column"`
+			CreationTime         int64
+			LastDDLTime          int64
+			LastModifiedTime     int64
+			PartitionSize        int
+			PartitionRecordCount int
+		} `xml:"Partition"`
+	}
+
+	var resModel ResModel
+
+	for {
+		err := client.GetWithModel(resource, queryArgs, &resModel)
+		if err != nil {
+			return err
+		}
+
+		if len(resModel.Partitions) == 0 {
+			return nil
+		}
+
+		var pModel partitionModel
+
+		for _, p := range resModel.Partitions {
+			kv := make(map[string]string, len(p.Columns))
+			for _, c := range p.Columns {
+				kv[c.Name] = c.Value
+			}
+
+			pModel.CreateTime = GMTTime(time.Unix(p.CreationTime,  0))
+			pModel.LastDDLTime = GMTTime(time.Unix(p.LastDDLTime, 0))
+			pModel.LastModifiedTime = GMTTime(time.Unix(p.LastModifiedTime , 0))
+			pModel.PartitionSize = p.PartitionSize
+			pModel.PartitionRecordNum = p.PartitionRecordCount
+
+			partition := NewPartition(t.odpsIns, t.ProjectName(), t.Name(), kv)
+			partition.model = pModel
+			c <- partition
+		}
+
+		if resModel.Marker != "" {
+			queryArgs.Set("marker", resModel.Marker)
+			resModel = ResModel{}
+		} else {
+			break
+		}
+	}
 
 	return nil
+}
+
+func (t *Table) Read(partition string, columns []string, limit int, timezone string) (*csv.Reader, error) {
+	queryArgs := make(url.Values, 4)
+
+	queryArgs.Set("data", "")
+	if partition != "" {
+		queryArgs.Set("partition", partition)
+	}
+
+	if len(columns) > 0 {
+		queryArgs.Set("cols", strings.Join(columns, ","))
+	}
+
+	if limit > 0 {
+		queryArgs.Set("linenum", strconv.Itoa(limit))
+	}
+
+	client := t.odpsIns.restClient
+	resource := t.ResourceUrl()
+
+	req, err := client.NewRequestWithUrlQuery(GetMethod, resource, nil, queryArgs)
+	if err != nil {
+		return nil, err
+	}
+
+	if timezone != "" {
+		req.Header.Set(HttpHeaderSqlTimezone, timezone)
+	}
+
+
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	return csv.NewReader(res.Body), nil
+}
+
+func (t *Table) CreateShards(shardCount int) error  {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("alter table %s.%s", t.ProjectName(), t.Name()))
+	sb.WriteString(fmt.Sprintf("\ninto %d shards;", shardCount))
+	return t.ExecSqlAndWait("SQLCreateShardsTask", sb.String())
 }
 
 func (t *TableType) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {

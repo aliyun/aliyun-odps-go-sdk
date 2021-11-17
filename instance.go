@@ -59,7 +59,7 @@ type Instance struct {
 	reLoaded          bool
 	resourceUrl       string
 	taskNameCommitted string
-	tasksGenerated    []string
+	taskResults       []TaskResult
 	isSync            bool
 }
 
@@ -86,12 +86,12 @@ func (instance *Instance) HasBeLoaded() bool {
 	return instance.reLoaded
 }
 
-func (instance *Instance) IsSync() bool  {
+func (instance *Instance) IsSync() bool {
 	return instance.isSync
 }
 
-func (instance *Instance) IsAsync() bool  {
-	return ! instance.isSync
+func (instance *Instance) IsAsync() bool {
+	return !instance.isSync
 }
 
 func (instance *Instance) Load() error {
@@ -152,28 +152,11 @@ func (instance *Instance) GetTasks() ([]TaskInInstance, error) {
 		return nil, err
 	}
 
-	instance.tasksGenerated = make([]string, len(resModel.Tasks))
-	for i, task := range resModel.Tasks {
-		instance.tasksGenerated[i] = task.Name
-	}
 
 	return resModel.Tasks, nil
 }
 
 func (instance *Instance) GetTaskProgress(taskName string) ([]TaskProgressStage, error) {
-	nameIsOk := false
-
-	for _, _taskName := range instance.tasksGenerated {
-		if _taskName == taskName {
-			nameIsOk = true
-			break
-		}
-	}
-
-	if !nameIsOk {
-		return nil, errors.New(fmt.Sprintf("task %s is not belong to instance %s", taskName, instance.id))
-	}
-
 	queryArgs := make(url.Values)
 	queryArgs.Set("instanceprogress", "")
 	queryArgs.Set("taskname", taskName)
@@ -305,8 +288,12 @@ func (instance *Instance) EndTime() time.Time {
 	return instance.endTime
 }
 
+func (instance *Instance) TaskResults() []TaskResult {
+	return instance.taskResults
+}
+
 func (instance *Instance) WaitForSuccess() error {
-	for  {
+	for {
 		err := instance.Load()
 		if err != nil {
 			return err
@@ -337,6 +324,25 @@ func (instance *Instance) WaitForSuccess() error {
 	}
 
 	return nil
+}
+
+func (instance *Instance) GetResult() ([]TaskResult, error) {
+	queryArgs := make(url.Values, 1)
+	queryArgs.Set("result", "")
+	client := instance.odpsIns.restClient
+
+	type ResModel struct {
+		XMLName xml.Name     `xml:"Instance"`
+		Tasks   []TaskResult `xml:"Tasks>Task"`
+	}
+
+	var resModel ResModel
+	err := client.GetWithModel(instance.resourceUrl, queryArgs, &resModel)
+	if err != nil {
+		return nil, err
+	}
+
+	return resModel.Tasks, nil
 }
 
 func (status *InstanceStatus) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {

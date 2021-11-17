@@ -3,7 +3,8 @@ package odps_test
 import odps "github.com/aliyun/aliyun-odps-go-sdk"
 
 var account = odps.AliyunAccountFromEnv()
-var odpsIns = odps.NewOdps(&account)
+var endpoint = odps.LoadEndpointFromEnv()
+var odpsIns = odps.NewOdps(&account, endpoint)
 
 func init()  {
 	if account.AccessId() == "" {

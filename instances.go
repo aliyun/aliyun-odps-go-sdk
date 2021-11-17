@@ -30,7 +30,7 @@ func NewInstances(odpsIns *Odps, projectName ...string) Instances {
 
 	return Instances{
 		projectName: _projectName,
-		odpsIns: odpsIns,
+		odpsIns:     odpsIns,
 	}
 }
 
@@ -60,12 +60,18 @@ func (instances Instances) CreateTaskWithPriority(projectName string, task Task,
 		},
 	}
 
+	type ResModel struct {
+		XMLName xml.Name     `xml:"Instance"`
+		Tasks   []TaskResult `xml:"Tasks>Task"`
+	}
+	var resModel ResModel
+
 	client := instances.odpsIns.restClient
 	rb := ResourceBuilder{}
 	rb.SetProject(projectName)
 	resource := rb.Instances()
 	var instanceId string
-	var isSync  bool
+	var isSync bool
 
 	err := client.DoXmlWithParseFunc(PostMethod, resource, nil, &instanceCreationModel, func(res *http.Response) error {
 		location := res.Header.Get(HttpHeaderLocation)
@@ -81,7 +87,9 @@ func (instances Instances) CreateTaskWithPriority(projectName string, task Task,
 
 		instanceId = location[splitAt+1:]
 		isSync = res.StatusCode == 201
-		return nil
+
+		decoder := xml.NewDecoder(res.Body)
+		return decoder.Decode(&resModel)
 	})
 
 	if err != nil {
@@ -90,7 +98,7 @@ func (instances Instances) CreateTaskWithPriority(projectName string, task Task,
 
 	instance := NewInstance(instances.odpsIns, projectName, instanceId)
 	instance.taskNameCommitted = task.GetName()
-	instance.tasksGenerated = append(instance.tasksGenerated, task.GetName())
+	instance.taskResults = resModel.Tasks
 	instance.isSync = isSync
 
 	return &instance, nil
@@ -114,7 +122,7 @@ func (instances Instances) List(c chan Instance, filter ...InstancesFilter) erro
 		XMLName   xml.Name `xml:"Instances"`
 		Marker    string
 		MaxItems  int
-		Instances [] struct {
+		Instances []struct {
 			Name      string
 			Owner     string
 			StartTime GMTTime
@@ -173,10 +181,10 @@ func (instances Instances) ListInstancesQueued(c chan string, filter ...Instance
 	resources := rb.CachedInstances()
 
 	type ResModel struct {
-		XMLName   xml.Name `xml:"Instances"`
-		Marker    string
-		MaxItems  int
-		Content   string
+		XMLName  xml.Name `xml:"Instances"`
+		Marker   string
+		MaxItems int
+		Content  string
 	}
 
 	var resModel ResModel

@@ -9,22 +9,27 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
+
+// Todo 请求方法需要重构，加入header参数
 
 type RestClient struct {
 	// odps 账号
 	Account
 	// http超时时间，从tcp握手开始计时, 默认为0，即没有超时时间
-	Timeout time.Duration
-	_client *http.Client
+	Timeout        time.Duration
+	_client        *http.Client
 	defaultProject string
+	endpoint       string
 }
 
-func NewOdpsHttpClient(a Account) RestClient {
+func NewOdpsHttpClient(a Account, endpoint string) RestClient {
 	var client = RestClient{
 		Account: a,
+		endpoint: endpoint,
 	}
 
 	var _ = client.client()
@@ -32,9 +37,10 @@ func NewOdpsHttpClient(a Account) RestClient {
 	return client
 }
 
-func NewOdpsHttpClientWithTimeout(a Account, timeout time.Duration) RestClient {
+func NewOdpsHttpClientWithTimeout(a Account, endpoint string, timeout time.Duration) RestClient {
 	var client = RestClient{
 		Account: a,
+		endpoint: endpoint,
 	}
 
 	var c = client.client()
@@ -43,8 +49,18 @@ func NewOdpsHttpClientWithTimeout(a Account, timeout time.Duration) RestClient {
 	return client
 }
 
+
+func LoadEndpointFromEnv() string {
+	endpoint, _:= os.LookupEnv("odps_endpoint")
+	return endpoint
+}
+
 func (client *RestClient) setDefaultProject(projectName string) {
 	client.defaultProject = projectName
+}
+
+func (client *RestClient) Endpoint() string {
+	return client.endpoint
 }
 
 func (client *RestClient) client() *http.Client {
@@ -70,8 +86,8 @@ func (client *RestClient) client() *http.Client {
 	return client._client
 }
 
-func (client *RestClient) NewRequest(method, resource string, body io.Reader) (*http.Request, error)  {
-	var url = fmt.Sprintf (
+func (client *RestClient) NewRequest(method, resource string, body io.Reader) (*http.Request, error) {
+	var url = fmt.Sprintf(
 		"%s/%s",
 		strings.TrimRight(client.Endpoint(), "/"),
 		strings.TrimLeft(resource, "/"))
@@ -79,7 +95,7 @@ func (client *RestClient) NewRequest(method, resource string, body io.Reader) (*
 	return http.NewRequest(method, url, body)
 }
 
-func (client *RestClient) NewRequestWithUrlQuery(method, resource string, body io.Reader, queryArgs url.Values) (*http.Request, error)  {
+func (client *RestClient) NewRequestWithUrlQuery(method, resource string, body io.Reader, queryArgs url.Values) (*http.Request, error) {
 	req, err := client.NewRequest(method, resource, body)
 	if err != nil {
 		return nil, err
@@ -92,8 +108,7 @@ func (client *RestClient) NewRequestWithUrlQuery(method, resource string, body i
 	return req, nil
 }
 
-
-func (client *RestClient) Do(req *http.Request) (*http.Response, error)  {
+func (client *RestClient) Do(req *http.Request) (*http.Response, error) {
 	req.Header.Set(HttpHeaderXOdpsUserAgent, UserAgentValue)
 	gmtTime := time.Now().In(GMT).Format(time.RFC1123)
 	req.Header.Set(HttpHeaderDate, gmtTime)
@@ -104,12 +119,26 @@ func (client *RestClient) Do(req *http.Request) (*http.Response, error)  {
 	}
 	req.URL.RawQuery = query.Encode()
 
-	client.SignRequest(req)
+	client.SignRequest(req, client.endpoint)
 
 	return client._client.Do(req)
 }
 
-func (client *RestClient) DoWithParseFunc(req *http.Request, parseFunc func(res *http.Response) error) error  {
+func (client *RestClient) DoWithParseFunc(req *http.Request, parseFunc func(res *http.Response) error) error {
+	return client.DoWithParseRes(req, func(res *http.Response) error {
+		if res.StatusCode < 200 || res.StatusCode >= 300 {
+			return NewHttpNotOk(res)
+		}
+
+		if parseFunc == nil {
+			return nil
+		}
+
+		return parseFunc(res)
+	})
+}
+
+func (client *RestClient) DoWithParseRes(req *http.Request, parseFunc func(res *http.Response) error) error {
 	res, err := client.Do(req)
 
 	defer func(Body io.ReadCloser) {
@@ -123,10 +152,6 @@ func (client *RestClient) DoWithParseFunc(req *http.Request, parseFunc func(res 
 		return err
 	}
 
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return NewHttpNotOk(res)
-	}
-
 	if parseFunc == nil {
 		return nil
 	}
@@ -134,18 +159,17 @@ func (client *RestClient) DoWithParseFunc(req *http.Request, parseFunc func(res 
 	return parseFunc(res)
 }
 
-func (client *RestClient) DoWithModel(req *http.Request, model interface{}) error  {
+func (client *RestClient) DoWithModel(req *http.Request, model interface{}) error {
 	parseFunc := func(res *http.Response) error {
 		decoder := xml.NewDecoder(res.Body)
 
 		return decoder.Decode(model)
 	}
 
-
 	return client.DoWithParseFunc(req, parseFunc)
 }
 
-func (client *RestClient) GetWithModel(resource string, queryArgs url.Values, model interface{}) error  {
+func (client *RestClient) GetWithModel(resource string, queryArgs url.Values, model interface{}) error {
 	req, err := client.NewRequestWithUrlQuery(GetMethod, resource, nil, queryArgs)
 	if err != nil {
 		return err
@@ -154,8 +178,17 @@ func (client *RestClient) GetWithModel(resource string, queryArgs url.Values, mo
 	return client.DoWithModel(req, model)
 }
 
-func (client *RestClient) GetWithParseFunc(resource string, queryArgs url.Values, parseFunc func(res *http.Response) error) error  {
+func (client *RestClient) GetWithParseFunc(resource string, queryArgs url.Values, parseFunc func(res *http.Response) error) error {
 	req, err := client.NewRequestWithUrlQuery(GetMethod, resource, nil, queryArgs)
+	if err != nil {
+		return err
+	}
+
+	return client.DoWithParseFunc(req, parseFunc)
+}
+
+func (client *RestClient) PutWithParseFunc(resource string, queryArgs url.Values, body io.Reader, parseFunc func(res *http.Response) error) error {
+	req, err := client.NewRequestWithUrlQuery(PutMethod, resource, body, queryArgs)
 	if err != nil {
 		return err
 	}
@@ -184,6 +217,29 @@ func (client *RestClient) DoXmlWithParseFunc(
 	}
 
 	return client.DoWithParseFunc(req, parseFunc)
+}
+
+func (client *RestClient) DoXmlWithParseRes(
+	method string,
+	resource string,
+	queryArgs url.Values,
+	bodyModel interface{},
+	parseFunc func(res *http.Response) error) error {
+
+	bodyXml, err := xml.Marshal(bodyModel)
+
+	if err != nil {
+		return err
+	}
+
+	req, err := client.NewRequestWithUrlQuery(method, resource, bytes.NewReader(bodyXml), queryArgs)
+	req.Header.Set(HttpHeaderContentType, XMLContentType)
+
+	if err != nil {
+		return err
+	}
+
+	return client.DoWithParseRes(req, parseFunc)
 }
 
 func (client *RestClient) DoXmlWithModel(

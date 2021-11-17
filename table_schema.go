@@ -25,6 +25,7 @@ type TableSchema struct {
 	PartitionColumns   []Column `json:"PartitionKeys"`
 	RecordNum          int
 	ShardExist         bool
+	ShardInfo          string
 	Size               int
 	TableLabel         string
 	ViewText           string
@@ -65,6 +66,7 @@ type TableSchemaBuilder struct {
 	location         string
 	lifecycle        int
 }
+
 
 func NewTableSchemaBuilder() TableSchemaBuilder {
 	return TableSchemaBuilder{}
@@ -264,3 +266,6 @@ func (schema TableSchema) ToExternalSQLString(
 	builder.WriteRune(';')
 	return builder.String(), nil
 }
+
+
+

@@ -2,6 +2,8 @@ package odps
 
 import (
 	"encoding/xml"
+	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -279,11 +281,30 @@ func (p *Project) Existed() bool {
 }
 
 func (p *Project) SecurityManager() SecurityManager {
-	panic("unimplemented!")
-	return SecurityManager{}
+	return NewSecurityManager(p.odpsIns, p.Name())
 }
 
-func (p *Project) TunnelEndpoint() string {
-	panic("unimplemented!")
-	return ""
+func (p *Project) GetTunnelEndpoint() (string, error) {
+	client := p.odpsIns.restClient
+	resource := p.rb.Tunnel()
+	queryArgs := make(url.Values, 1)
+	queryArgs.Set("service", "")
+	req, err := client.NewRequestWithUrlQuery(GetMethod, resource, nil, queryArgs)
+	if err != nil {
+		return "", err
+	}
+
+	schema := req.URL.Scheme
+	var tunnelEndpoint string
+	err = client.DoWithParseFunc(req, func(res *http.Response) error {
+		b, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			return err
+		}
+		tunnelEndpoint = string(b)
+		return nil
+	})
+
+	return fmt.Sprintf("%s://%s", schema, tunnelEndpoint), err
 }
+

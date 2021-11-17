@@ -2,9 +2,6 @@ package odps
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"crypto/sha1"
-	"encoding/base64"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,14 +10,12 @@ import (
 )
 
 type AliyunAccount struct {
-	endpoint  string
 	accessId  string
 	accessKey string
 }
 
-func NewAliyunAccount(accessId string, accessKey string, endpoint string) AliyunAccount {
+func NewAliyunAccount(accessId string, accessKey string) AliyunAccount {
 	return AliyunAccount{
-		endpoint:  endpoint,
 		accessId:  accessId,
 		accessKey: accessKey,
 	}
@@ -28,10 +23,6 @@ func NewAliyunAccount(accessId string, accessKey string, endpoint string) Aliyun
 
 func AliyunAccountFromEnv() AliyunAccount {
 	account := AliyunAccount{}
-
-	if endpoint, found := os.LookupEnv("odps_endpoint"); found {
-		account.endpoint = endpoint
-	}
 
 	if accessId, found := os.LookupEnv("odps_accessId"); found {
 		account.accessId = accessId
@@ -52,15 +43,11 @@ func (account *AliyunAccount) AccessKey() string {
 	return account.accessKey
 }
 
-func (account *AliyunAccount) Endpoint() string {
-	return account.endpoint
+func (account *AliyunAccount) GetType() AccountProvider {
+	return AccountAliyun
 }
 
-func (account *AliyunAccount) GetType() Provider {
-	return ALIYUN
-}
-
-func (account *AliyunAccount) SignRequest(req *http.Request) {
+func (account *AliyunAccount) SignRequest(req *http.Request, endpoint string) {
 	var msg bytes.Buffer
 
 	// write verb
@@ -95,10 +82,10 @@ func (account *AliyunAccount) SignRequest(req *http.Request) {
 
 	// build canonical resource
 	var canonicalResource bytes.Buffer
-	endpoint, _ := url.Parse(account.endpoint)
-	basePath := endpoint.Path
+	endpointSeg, _ := url.Parse(endpoint)
+	basePath := endpointSeg.Path
 	if strings.HasPrefix(req.URL.Path, basePath) {
-		canonicalResource.WriteString(req.URL.Path[len(endpoint.Path):])
+		canonicalResource.WriteString(req.URL.Path[len(endpointSeg.Path):])
 	} else {
 		canonicalResource.WriteString(req.URL.Path)
 	}
@@ -131,15 +118,14 @@ func (account *AliyunAccount) SignRequest(req *http.Request) {
 	msg.Write(canonicalResource.Bytes())
 
 	// signature = base64(HMacSha1(msg))
-	hasher := hmac.New(sha1.New,  []byte(account.accessKey))
-	hasher.Write(msg.Bytes())
+	_signature := base64HmacSha1([]byte(account.accessKey), msg.Bytes())
 
 	// Set header: "Authorization: ODPS" + AccessID + ":" + Signature
 	var signature bytes.Buffer
 	signature.WriteString("ODPS ")
 	signature.WriteString(account.accessId)
 	signature.WriteByte(':')
-	signature.WriteString(base64.StdEncoding.EncodeToString(hasher.Sum(nil)))
+	signature.WriteString(_signature)
 
 	req.Header.Set(HttpHeaderAuthorization, signature.String())
 }
