@@ -58,14 +58,14 @@ func TestTypeParser(t *testing.T)  {
 		t.Fatalf("failed to parse data type %s", name)
 	}
 
-	expected := NewStructType([]StructField {
-		NewStructField("x", NewInt()),
-		NewStructField("y", NewVarcharType(256)),
-		NewStructField(
+	expected := NewStructType([]StructFieldType{
+		NewStructFieldType("x", NewIntType()),
+		NewStructFieldType("y", NewVarcharType(256)),
+		NewStructFieldType(
 			"z",
 			NewStructType(
-				NewStructField("a", NewTinyint()),
-				NewStructField("b", NewDate()),
+				NewStructFieldType("a", NewTinyintType()),
+				NewStructFieldType("b", NewDateType()),
 			)),
 	}...)
 
@@ -148,7 +148,7 @@ func TestParserMap(t *testing.T)  {
 		t.Fatalf("failed to parse data type %s", name)
 	}
 
-	expected := NewMapType(NewCharType(10), NewInt())
+	expected := NewMapType(NewCharType(10), NewIntType())
 
 	if ! IsTypeEqual(expected, got) {
 		t.Fatalf("failed to parse type: %s, got %s", name, got.Name())
@@ -168,7 +168,7 @@ func TestParserArray(t *testing.T)  {
 		t.Fatalf("failed to parse data type %s", name)
 	}
 
-	expected := NewArrayType(NewMapType(NewCharType(10), NewInt()))
+	expected := NewArrayType(NewMapType(NewCharType(10), NewIntType()))
 
 	if ! IsTypeEqual(expected, got) {
 		t.Fatalf("failed to parse type: %s, got %s", name, got.Name())
@@ -208,21 +208,21 @@ func TestParseFailed(t *testing.T)  {
 
 func TestDataTyeName(t *testing.T)  {
 	types := []DataType{
-		NewMapType(NewCharType(10), NewInt()),
-		NewStructType([]StructField{
-			NewStructField("x", NewInt()),
-			NewStructField("y", NewVarcharType(256)),
-			NewStructField(
+		NewMapType(NewCharType(10), NewIntType()),
+		NewStructType([]StructFieldType{
+			NewStructFieldType("x", NewIntType()),
+			NewStructFieldType("y", NewVarcharType(256)),
+			NewStructFieldType(
 				"z",
 				NewStructType(
-					NewStructField("a", NewTinyint()),
-					NewStructField("b", NewDate()),
+					NewStructFieldType("a", NewTinyintType()),
+					NewStructFieldType("b", NewDateType()),
 				)),
 		}...),
 		NewCharType(10),
 		NewVarcharType(10),
 		NewDecimalType(20, 3),
-		NewArrayType(NewArrayType(NewInt())),
+		NewArrayType(NewArrayType(NewIntType())),
 	}
 
 	names := []string {

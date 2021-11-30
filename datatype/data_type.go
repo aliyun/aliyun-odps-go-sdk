@@ -7,10 +7,10 @@ import (
 	"strings"
 )
 
-type TypeCode int
+type TypeID int
 
 const (
-	_ TypeCode = iota
+	_ TypeID = iota
 	// BIGINT 8字节有符号整形
 	BIGINT
 
@@ -78,7 +78,7 @@ const (
 	TypeUnknown
 )
 
-func TypeCodeFromStr(s string) TypeCode {
+func TypeCodeFromStr(s string) TypeID {
 	switch strings.ToUpper(s) {
 	case "BIGINT":
 		return BIGINT
@@ -127,7 +127,7 @@ func TypeCodeFromStr(s string) TypeCode {
 	}
 }
 
-func (t *TypeCode) UnmarshalJSON(b []byte) error {
+func (t *TypeID) UnmarshalJSON(b []byte) error {
 	unquoted, err := strconv.Unquote(string(b))
 	if err != nil {
 		return err
@@ -138,7 +138,7 @@ func (t *TypeCode) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func (t TypeCode) String() string {
+func (t TypeID) String() string {
 	switch t {
 	case BIGINT:
 		return "BIGINT"
@@ -192,21 +192,21 @@ type ColumnDataType struct {
 }
 
 type DataType interface {
-	Code() TypeCode
+	ID() TypeID
 	Name() string
 }
 
 type PrimitiveType struct {
-	TypeCode TypeCode
+	TypeCode TypeID
 }
 
-func NewPrimitiveType(code TypeCode) PrimitiveType  {
+func NewPrimitiveType(code TypeID) PrimitiveType  {
 	return PrimitiveType{
 		TypeCode: code,
 	}
 }
 
-func (p PrimitiveType) Code() TypeCode {
+func (p PrimitiveType) ID() TypeID {
 	return p.TypeCode
 }
 
@@ -226,7 +226,7 @@ func NewCharType(length int) CharType {
 	return CharType{length}
 }
 
-func (c CharType) Code() TypeCode {
+func (c CharType) ID() TypeID {
 	return CHAR
 }
 
@@ -246,7 +246,7 @@ func NewVarcharType(length int) VarcharType {
 	return VarcharType{length}
 }
 
-func (c VarcharType) Code() TypeCode {
+func (c VarcharType) ID() TypeID {
 	return CHAR
 }
 
@@ -259,15 +259,15 @@ func (c VarcharType) String() string {
 }
 
 type DecimalType struct {
-	Precision int
-	Scale     int
+	Precision int32
+	Scale     int32
 }
 
-func NewDecimalType(precision, scale int) DecimalType  {
+func NewDecimalType(precision, scale int32) DecimalType  {
 	return DecimalType{precision, scale}
 }
 
-func (d DecimalType) Code() TypeCode {
+func (d DecimalType) ID() TypeID {
 	return DECIMAL
 }
 
@@ -287,7 +287,7 @@ func NewArrayType(elementType DataType) ArrayType  {
 	return ArrayType{elementType}
 }
 
-func (a ArrayType) Code() TypeCode {
+func (a ArrayType) ID() TypeID {
 	return ARRAY
 }
 
@@ -308,7 +308,7 @@ func NewMapType(keyType, valueType DataType) MapType {
 	return MapType{keyType, valueType}
 }
 
-func (m MapType) Code() TypeCode {
+func (m MapType) ID() TypeID {
 	return MAP
 }
 
@@ -321,14 +321,14 @@ func (m MapType) String() string {
 }
 
 type StructType struct {
-	Fields []StructField
+	Fields []StructFieldType
 }
 
-func NewStructType(fields ...StructField) StructType {
+func NewStructType(fields ...StructFieldType) StructType {
 	return StructType{fields}
 }
 
-func (s StructType) Code() TypeCode {
+func (s StructType) ID() TypeID {
 	return STRUCT
 }
 
@@ -357,19 +357,19 @@ func (s StructType) String() string {
 	return s.Name()
 }
 
-type StructField struct {
+type StructFieldType struct {
 	Name string
 	Type DataType
 }
 
-func NewStructField(name string, _type DataType) StructField  {
-	return StructField{
+func NewStructFieldType(name string, _type DataType) StructFieldType {
+	return StructFieldType{
 		Name: name,
 		Type: _type,
 	}
 }
 
-type StructFields []StructField
+type StructFields []StructFieldType
 
 func (s StructFields) Len() int {
 	return len(s)
@@ -384,7 +384,7 @@ func (s StructFields) Less(i, j int) bool {
 }
 
 func IsTypeEqual(t1, t2 DataType) bool  {
-	if t1.Code() != t2.Code() {
+	if t1.ID() != t2.ID() {
 		return false
 	}
 
@@ -430,51 +430,58 @@ func IsTypeEqual(t1, t2 DataType) bool  {
 	return true
 }
 
-func NewBigInt() PrimitiveType  {
+func NewBigIntType() PrimitiveType  {
 	return PrimitiveType{BIGINT}
 }
 
-func NewDouble() PrimitiveType  {
+func NewDoubleType() PrimitiveType  {
 	return PrimitiveType{DOUBLE}
 }
 
-func NewBoolean() PrimitiveType  {
+func NewBooleanType() PrimitiveType  {
 	return PrimitiveType{BOOLEAN}
 }
 
-func NewDateTime() PrimitiveType  {
+func NewDateTimeType() PrimitiveType  {
 	return PrimitiveType{DATETIME}
 }
 
-func NewString() PrimitiveType  {
+func NewStringType() PrimitiveType  {
 	return PrimitiveType{STRING}
 }
 
-func NewTinyint() PrimitiveType  {
+func NewTinyintType() PrimitiveType  {
 	return PrimitiveType{TINYINT}
 }
 
-func NewSmallint() PrimitiveType  {
+func NewSmallintType() PrimitiveType  {
 	return PrimitiveType{SMALLINT}
 }
 
-func NewInt() PrimitiveType  {
+func NewIntType() PrimitiveType  {
 	return PrimitiveType{INT}
 }
 
-func NewFloat() PrimitiveType  {
+func NewFloatType() PrimitiveType  {
 	return PrimitiveType{FLOAT}
 }
 
-func NewDate() PrimitiveType  {
+func NewDateType() PrimitiveType  {
 	return PrimitiveType{DATE}
 }
 
-func NewTimestamp() PrimitiveType  {
+func NewTimestampType() PrimitiveType  {
 	return PrimitiveType{TIMESTAMP}
 }
 
-func NewBinary() PrimitiveType  {
+func NewBinaryType() PrimitiveType  {
 	return PrimitiveType{BINARY}
 }
 
+func NewIntervalDayTimeType() PrimitiveType  {
+	return PrimitiveType{IntervalDayTime}
+}
+
+func NewIntervalYearMonthType() PrimitiveType  {
+	return PrimitiveType{IntervalYearMonth}
+}

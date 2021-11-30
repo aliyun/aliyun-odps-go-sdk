@@ -1,79 +1,77 @@
 package tunnel
 
 import (
-	"fmt"
 	"io"
 )
 
 const DefaultChunkSize = 65536
 
-// ArrowChunkWriter 将数据构建成固定大小的chunk，以chunk为单位计算crc，并将crc写入数据流
-type ArrowChunkWriter struct {
-	inner       *io.PipeWriter
-	chunkCrc    Crc32CheckSum
-	globalCrc   Crc32CheckSum
-	chunkLength int
-	firstWrite  bool
+// ArrowHttpWriter 将数据构建成固定大小的chunk，以chunk为单位计算crc，并将crc写入数据流
+type ArrowHttpWriter struct {
+	inner              io.WriteCloser
+	chunkCrc           Crc32CheckSum
+	globalCrc          Crc32CheckSum
+	currentChunkLength int
+	firstWrite         bool
 }
 
-func NewArrowChunkWriter(w *io.PipeWriter) *ArrowChunkWriter {
-	return &ArrowChunkWriter{
-		inner:       w,
-		chunkCrc:    NewCrc32CheckSum(),
-		globalCrc:   NewCrc32CheckSum(),
-		chunkLength: 0,
-		firstWrite:  true,
+func NewArrowChunkWriter(w io.WriteCloser) *ArrowHttpWriter {
+	return &ArrowHttpWriter{
+		inner:              w,
+		chunkCrc:           NewCrc32CheckSum(),
+		globalCrc:          NewCrc32CheckSum(),
+		currentChunkLength: 0,
+		firstWrite:         true,
 	}
 }
 
-func (a *ArrowChunkWriter) Write(data []byte) (int, error) {
-	if a.firstWrite {
-		err := a.writeUint32(DefaultChunkSize)
+func (aw *ArrowHttpWriter) Write(data []byte) (int, error) {
+	if aw.firstWrite {
+		err := aw.writeUint32(DefaultChunkSize)
 		if err != nil {
 			return 0, err
 		}
 
-		a.firstWrite = false
+		aw.firstWrite = false
 	}
 
 	totalWrite := 0
 
 	for dataLength := len(data); totalWrite < dataLength; {
-
-		toWriteN := min(a.leftChunkLength(), dataLength-totalWrite)
-		bytesToWrite := data[totalWrite:toWriteN]
+		toWriteN := min(aw.leftChunkLength(), dataLength-totalWrite)
+		bytesToWrite := data[totalWrite : totalWrite+toWriteN]
 
 		totalWrite += toWriteN
-		a.chunkLength += toWriteN
+		aw.currentChunkLength += toWriteN
 
-		a.chunkCrc.Update(bytesToWrite)
-		a.globalCrc.Update(bytesToWrite)
+		aw.chunkCrc.Update(bytesToWrite)
+		aw.globalCrc.Update(bytesToWrite)
 
-		_, err := a.writeAll(bytesToWrite)
+		_, err := aw.writeAll(bytesToWrite)
 		if err != nil {
 			return 0, err
 		}
 
-		if a.chunkIsFull() {
-			crc := a.chunkCrc.Value()
-			println(fmt.Sprintf("*****%d", crc))
-			err = a.writeUint32(crc)
-			a.chunkCrc.Reset()
+		if aw.chunkIsFull() {
+			crc := aw.chunkCrc.Value()
+			err = aw.writeUint32(crc)
+			aw.chunkCrc.Reset()
 			if err != nil {
 				return 0, err
 			}
-			a.chunkLength = 0
+			aw.currentChunkLength = 0
 		}
 	}
 
 	return totalWrite, nil
 }
 
-func (a *ArrowChunkWriter) Close() error {
-	crc := a.globalCrc.Value()
-	err1 := a.writeUint32(crc)
-	a.globalCrc.Reset()
-	err2 := a.inner.Close()
+func (aw *ArrowHttpWriter) Close() error {
+	crc := aw.globalCrc.Value()
+	err1 := aw.writeUint32(crc)
+	aw.globalCrc.Reset()
+
+	err2 := aw.inner.Close()
 
 	if err1 != nil {
 		return err1
@@ -82,26 +80,26 @@ func (a *ArrowChunkWriter) Close() error {
 	return err2
 }
 
-func (a *ArrowChunkWriter) chunkIsFull() bool {
-	return a.chunkLength >= DefaultChunkSize
+func (aw *ArrowHttpWriter) chunkIsFull() bool {
+	return aw.currentChunkLength >= DefaultChunkSize
 }
 
-func (a *ArrowChunkWriter) leftChunkLength() int {
-	return DefaultChunkSize - a.chunkLength
+func (aw *ArrowHttpWriter) leftChunkLength() int {
+	return DefaultChunkSize - aw.currentChunkLength
 }
 
-func (a *ArrowChunkWriter) writeUint32(crcValue uint32) error {
+func (aw *ArrowHttpWriter) writeUint32(crcValue uint32) error {
 	b := uint32ToBytes(crcValue)
-	var _, err = a.writeAll(b)
+	var _, err = aw.writeAll(b)
 
 	return err
 }
 
-func (a *ArrowChunkWriter) writeAll(b []byte) (int, error) {
+func (aw *ArrowHttpWriter) writeAll(b []byte) (int, error) {
 	total := len(b)
 
 	for hasWrite := 0; hasWrite < total; {
-		n, err := a.inner.Write(b)
+		n, err := aw.inner.Write(b)
 		hasWrite += n
 
 		if err != nil {
@@ -110,13 +108,6 @@ func (a *ArrowChunkWriter) writeAll(b []byte) (int, error) {
 	}
 
 	return total, nil
-}
-
-func min(x, y int) int {
-	if x <= y {
-		return x
-	}
-	return y
 }
 
 func uint32ToBytes(n uint32) []byte {

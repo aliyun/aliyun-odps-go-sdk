@@ -120,7 +120,7 @@ func (tables *Tables) BatchLoadTables(tableNames []string) ([]Table, error) {
 	resource := rb.Tables()
 	client := tables.odpsIns.restClient
 
-	err := client.DoXmlWithModel(PostMethod, resource, queryArgs, &postBodyModel, &resModel)
+	err := client.DoXmlWithModel(HttpMethod.PostMethod, resource, queryArgs, &postBodyModel, &resModel)
 	if err != nil {
 		return nil, err
 	}

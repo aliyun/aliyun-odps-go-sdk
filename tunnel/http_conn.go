@@ -5,14 +5,12 @@ import (
 	"net/http"
 )
 
-type HttpOutStream struct {
-	writer io.Writer
-	response *http.Response
+type httpConnection struct {
+	Writer  io.WriteCloser
+	resChan <-chan resOrErr
 }
 
-
-
-
-
-
-
+type resOrErr struct {
+	err error
+	res *http.Response
+}

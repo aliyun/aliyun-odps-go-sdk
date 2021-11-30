@@ -3,13 +3,15 @@ package odps
 type Odps struct {
 	defaultProject string
 
+	account    Account
 	restClient RestClient
 	rb         ResourceBuilder
-	projects Projects
+	projects   Projects
 }
 
-func NewOdps(account Account, endpoint string) *Odps  {
-	ins := Odps {
+func NewOdps(account Account, endpoint string) *Odps {
+	ins := Odps{
+		account: account,
 		restClient: NewOdpsHttpClient(account, endpoint),
 	}
 
@@ -18,24 +20,28 @@ func NewOdps(account Account, endpoint string) *Odps  {
 	return &ins
 }
 
-func (odps *Odps) RestClient() RestClient  {
+func (odps *Odps) Account() Account {
+	return odps.account
+}
+
+func (odps *Odps) RestClient() RestClient {
 	return odps.restClient
 }
 
-func (odps *Odps) DefaultProject() Project  {
+func (odps *Odps) DefaultProject() Project {
 	return NewProject(odps.defaultProject, odps)
 }
 
-func (odps *Odps) DefaultProjectName() string  {
+func (odps *Odps) DefaultProjectName() string {
 	return odps.defaultProject
 }
 
-func (odps *Odps) SetDefaultProjectName(projectName string)  {
+func (odps *Odps) SetDefaultProjectName(projectName string) {
 	odps.defaultProject = projectName
 	odps.rb.SetProject(projectName)
 	odps.restClient.setDefaultProject(projectName)
 }
 
-func (odps *Odps) Projects() Projects  {
+func (odps *Odps) Projects() Projects {
 	return odps.projects
 }

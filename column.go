@@ -12,6 +12,7 @@ type Column struct {
 	Label           string
 	IsNullable      bool
 	HasDefaultValue bool
+	DefaultValue    string
 	ExtendedLabels  []string
 }
 

@@ -5,12 +5,17 @@ import "time"
 const UserAgentValue = "odps-go-sdk/0.0.1 Go/1.17.2"
 const HttpHeaderOdpsPrefix = "x-odps-"
 
-const (
-	GetMethod    = "GET"
-	PutMethod    = "PUT"
-	PostMethod   = "POST"
-	DeleteMethod = "DELETE"
-)
+var HttpMethod = struct {
+	GetMethod    string
+	PutMethod    string
+	PostMethod   string
+	DeleteMethod string
+}{
+	GetMethod:    "GET",
+	PutMethod:    "PUT",
+	PostMethod:   "POST",
+	DeleteMethod: "DELETE",
+}
 
 var GMT, _ = time.LoadLocation("GMT")
 
@@ -35,6 +40,8 @@ const (
 	HttpHeaderSTSAuthentication     = "sts-authentication"
 	HttpHeaderSTSToken              = "sts-token"
 	HttpHeaderODPSBearerToken       = "x-odps-bearer-token"
+	HttpHeaderOdpsDateTransFrom     = "odps-tunnel-date-transform"
+	HttpHeaderOdpsTunnelVersion     = "x-odps-tunnel-version"
 
 	XMLContentType = "application/xml"
 )

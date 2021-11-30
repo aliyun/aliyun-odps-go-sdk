@@ -1,5 +1,6 @@
 package tunnel
 
 const (
-	TunnelDateTransformVersion = "v1"
+	DateTransformVersion = "v1"
+	Version = "5"
 )

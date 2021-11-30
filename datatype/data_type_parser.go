@@ -112,7 +112,7 @@ func (parser *typeParser) expect(expected string) error  {
 	return nil
 }
 
-func (parser *typeParser) newPrimitive(typeCode TypeCode) (PrimitiveType, error) {
+func (parser *typeParser) newPrimitive(typeCode TypeID) (PrimitiveType, error) {
 	return PrimitiveType{typeCode}, nil
 }
 
@@ -171,7 +171,7 @@ func (parser *typeParser) parseDecimal() (DecimalType, error)  {
 	}
 
 	token := parser.consumeToken()
-	precision, err := strconv.Atoi(token)
+	precision, err := strconv.ParseInt(token, 10, 32)
 	if err != nil {
 		return DecimalType{}, err
 	}
@@ -182,7 +182,7 @@ func (parser *typeParser) parseDecimal() (DecimalType, error)  {
 	}
 
 	token = parser.consumeToken()
-	scale, err := strconv.Atoi(token)
+	scale, err := strconv.ParseInt(token, 10, 32)
 	if err != nil {
 		return DecimalType{}, err
 	}
@@ -193,8 +193,8 @@ func (parser *typeParser) parseDecimal() (DecimalType, error)  {
 	}
 
 	decimal := DecimalType{
-		Precision: precision,
-		Scale: scale,
+		Precision: int32(precision),
+		Scale: int32(scale),
 	}
 
 	return decimal, nil
@@ -263,7 +263,7 @@ func (parser *typeParser) parseStruct() (StructType, error) {
 		return StructType{}, err
 	}
 
-	var fields []StructField
+	var fields []StructFieldType
 
 LOOP:
 	for {
@@ -277,7 +277,7 @@ LOOP:
 			return StructType{}, err
 		}
 
-		structFiled := StructField{
+		structFiled := StructFieldType{
 			Name: filedName,
 			Type: filedType,
 		}

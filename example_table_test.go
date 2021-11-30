@@ -11,25 +11,25 @@ import (
 func ExampleTableSchema_ToSQLString() {
 	c1 := odps.Column{
 		Name:    "name",
-		Type:    datatype.NewString(),
+		Type:    datatype.NewStringType(),
 		Comment: "name of user",
 	}
 
 	c2 := odps.Column{
 		Name:    "age",
-		Type:    datatype.NewInt(),
+		Type:    datatype.NewIntType(),
 		Comment: "how old is the user",
 	}
 
 	p1 := odps.Column{
 		Name:    "region",
-		Type:    datatype.NewString(),
+		Type:    datatype.NewStringType(),
 		Comment: "居住区域",
 	}
 
 	p2 := odps.Column{
 		Name: "code",
-		Type: datatype.NewInt(),
+		Type: datatype.NewIntType(),
 	}
 
 	serdeProperties := make(map[string]string)

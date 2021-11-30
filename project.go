@@ -289,7 +289,7 @@ func (p *Project) GetTunnelEndpoint() (string, error) {
 	resource := p.rb.Tunnel()
 	queryArgs := make(url.Values, 1)
 	queryArgs.Set("service", "")
-	req, err := client.NewRequestWithUrlQuery(GetMethod, resource, nil, queryArgs)
+	req, err := client.NewRequestWithUrlQuery(HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
 		return "", err
 	}

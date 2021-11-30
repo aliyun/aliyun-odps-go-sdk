@@ -15,7 +15,7 @@ func TestOdpsHttpClient(t *testing.T)  {
 	rb := odps.ResourceBuilder{}
 	rb.SetProject("project_1")
 
-	req, err := httpClient.NewRequest(odps.GetMethod, rb.Project(), nil)
+	req, err := httpClient.NewRequest(odps.HttpMethod.GetMethod, rb.Project(), nil)
 
 	if err != nil {
 		panic(err)

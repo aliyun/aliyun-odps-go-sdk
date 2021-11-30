@@ -7,6 +7,7 @@ import (
 
 const (
 	ProjectsPath        = "/projects"
+	SchemasPath          = "/schemas"
 	TablesPath          = "/tables"
 	RegistrationPath    = "/registration"
 	FunctionsPath       = "/functions"
@@ -58,6 +59,10 @@ func (rb *ResourceBuilder) Table(tableName string) string {
 	return path.Join(ProjectsPath, rb.projectName, TablesPath, url.PathEscape(tableName))
 }
 
+func (rb *ResourceBuilder) TableWithSchemaName(tableName, schemaName string) string {
+	return path.Join(ProjectsPath, rb.projectName, SchemasPath, schemaName, TablesPath, url.PathEscape(tableName))
+}
+
 func (rb *ResourceBuilder) Functions() string {
 	return path.Join(ProjectsPath, rb.projectName, RegistrationPath, FunctionsPath)
 }
@@ -102,8 +107,8 @@ func (rb *ResourceBuilder) Volume(volumeName string) string {
 	return path.Join(ProjectsPath, rb.projectName, VolumesPath, url.PathEscape(volumeName))
 }
 
-func (rb *ResourceBuilder) VolumePartition(volumeName, partitionName string) string {
-	return path.Join(ProjectsPath, rb.projectName, VolumesPath, url.PathEscape(volumeName), partitionName)
+func (rb *ResourceBuilder) VolumePartition(volumeName, partitionKey string) string {
+	return path.Join(ProjectsPath, rb.projectName, VolumesPath, url.PathEscape(volumeName), partitionKey)
 }
 
 func (rb *ResourceBuilder) Users() string {

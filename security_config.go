@@ -94,7 +94,7 @@ func (sc *SecurityConfig) Update(supervisionToken string) error {
 		return err
 	}
 
-	req, err := client.NewRequestWithUrlQuery(PutMethod, resource, bytes.NewReader(bodyXml), queryArgs)
+	req, err := client.NewRequestWithUrlQuery(HttpMethod.PutMethod, resource, bytes.NewReader(bodyXml), queryArgs)
 	if err != nil {
 		return err
 	}

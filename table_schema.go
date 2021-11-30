@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/fetchadd/arrow"
 	"html/template"
 	"strings"
 )
@@ -66,7 +67,6 @@ type TableSchemaBuilder struct {
 	location         string
 	lifecycle        int
 }
-
 
 func NewTableSchemaBuilder() TableSchemaBuilder {
 	return TableSchemaBuilder{}
@@ -224,7 +224,7 @@ func (schema TableSchema) ToExternalSQLString(
 	builder.WriteString(baseSql)
 
 	// stored by, 用于指定自定义格式StorageHandler的类名或其他外部表文件格式
-	builder.WriteString(fmt.Sprintf("stored by '%s'\n", schema.StorageHandler))
+	builder.WriteString(fmt.Sprintf("\nstored by '%s'\n", schema.StorageHandler))
 
 	// serde properties, 序列化属性参数
 	if len(serdeProperties) > 0 {
@@ -267,5 +267,17 @@ func (schema TableSchema) ToExternalSQLString(
 	return builder.String(), nil
 }
 
+func (schema TableSchema) ToArrowSchema() *arrow.Schema {
+	fields := make([]arrow.Field, len(schema.Columns))
+	for i, column := range schema.Columns {
+		arrowType, _ := TypeToArrowType(column.Type)
+		fields[i] = arrow.Field {
+			Name: column.Name,
+			Type: arrowType,
+			Nullable: column.IsNullable,
+		}
+	}
 
+	return arrow.NewSchema(fields, nil)
+}
 

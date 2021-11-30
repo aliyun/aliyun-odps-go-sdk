@@ -64,7 +64,7 @@ func (sm *SecurityManager) CheckPermissionV1(p Permission) (*PermissionCheckResu
 		return nil, err
 	}
 
-	req, err := client.NewRequest(PostMethod, resource, bytes.NewReader(body))
+	req, err := client.NewRequest(HttpMethod.PostMethod, resource, bytes.NewReader(body))
 	req.Header.Set(HttpHeaderContentType, "application/json")
 	var resModel ResModel
 	err = client.DoWithModel(req, &resModel)
@@ -129,7 +129,7 @@ func (sm *SecurityManager) setPolicy(resource, policyType string, policy string)
 	queryArgs := make(url.Values, 1)
 	queryArgs.Set(policyType, "")
 	client := sm.odpsIns.restClient
-	req, err := client.NewRequestWithUrlQuery(PutMethod, resource, strings.NewReader(policy), queryArgs)
+	req, err := client.NewRequestWithUrlQuery(HttpMethod.PutMethod, resource, strings.NewReader(policy), queryArgs)
 
 	if err != nil {
 		return err
@@ -319,7 +319,7 @@ func (sm *SecurityManager) RunQuery(query string, jsonOutput bool, supervisionTo
 	var resModel ResModel
 	var isAsync bool
 
-	err := client.DoXmlWithParseRes(PostMethod, resource, nil, reqBody, func(res *http.Response) error {
+	err := client.DoXmlWithParseRes(HttpMethod.PostMethod, resource, nil, reqBody, func(res *http.Response) error {
 		if res.StatusCode < 200 || res.StatusCode >= 300 {
 			return NewHttpNotOk(res)
 		}
@@ -354,7 +354,7 @@ func (sm *SecurityManager) GenerateAuthorizationToken(policy string) (string, er
 
 	queryArgs := make(url.Values, 1)
 	queryArgs.Set("sign_bearer_token", "")
-	req, err := client.NewRequest(PostMethod, resource, strings.NewReader(policy))
+	req, err := client.NewRequest(HttpMethod.PostMethod, resource, strings.NewReader(policy))
 	if err != nil {
 		return "", err
 	}

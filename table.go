@@ -328,7 +328,7 @@ func (t *Table) ExecSqlAndWait(taskName, sql string) error {
 }
 
 // AddPartition Example: AddPartition(true, "region='10026, name='abc'")
-func (t *Table) AddPartition(ifNotExists bool, partitionName string) (*Instance, error) {
+func (t *Table) AddPartition(ifNotExists bool, partitionKey string) (*Instance, error) {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("alter table %s.%s add", t.ProjectName(), t.Name()))
 	if ifNotExists {
@@ -336,14 +336,14 @@ func (t *Table) AddPartition(ifNotExists bool, partitionName string) (*Instance,
 	}
 
 	sb.WriteString(" partition (\n")
-	sb.WriteString(partitionName)
+	sb.WriteString(partitionKey)
 	sb.WriteString("\n);")
 
 	return t.ExecSql("SQLAddPartitionTask", sb.String())
 }
 
-func (t *Table) AddPartitionAndWait(ifNotExists bool, partitionName string) error {
-	instance, err := t.AddPartition(ifNotExists, partitionName)
+func (t *Table) AddPartitionAndWait(ifNotExists bool, partitionKey string) error {
+	instance, err := t.AddPartition(ifNotExists, partitionKey)
 	if err != nil {
 		return err
 	}
@@ -351,7 +351,7 @@ func (t *Table) AddPartitionAndWait(ifNotExists bool, partitionName string) erro
 }
 
 // DeletePartition Example: DeletePartition(true, "region='10026, name='abc'")
-func (t *Table) DeletePartition(ifExists bool, partitionName string) error {
+func (t *Table) DeletePartition(ifExists bool, partitionKey string) error {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("alter table %s.%s drop", t.ProjectName(), t.Name()))
 	if ifExists {
@@ -359,22 +359,22 @@ func (t *Table) DeletePartition(ifExists bool, partitionName string) error {
 	}
 
 	sb.WriteString(" partition (\n")
-	sb.WriteString(partitionName)
+	sb.WriteString(partitionKey)
 	sb.WriteString("\n);")
 
 	return t.ExecSqlAndWait("SQLDropPartitionTask", sb.String())
 }
 
-// GetPartitions partitionName格式形如"region='10026, name='abc'"
-func (t *Table) GetPartitions(c chan Partition, partitionName string) error {
+// GetPartitions partitionKey格式形如"region='10026, name='abc'"
+func (t *Table) GetPartitions(c chan Partition, partitionKey string) error {
 	defer close(c)
 
 	queryArgs := make(url.Values, 4)
 	queryArgs.Set("partitions", "")
 	queryArgs.Set("expectmarker", "true")
 
-	if partitionName != "" {
-		queryArgs.Set("partition", partitionName)
+	if partitionKey != "" {
+		queryArgs.Set("partition", partitionKey)
 	}
 
 	resource := t.ResourceUrl()
@@ -458,7 +458,7 @@ func (t *Table) Read(partition string, columns []string, limit int, timezone str
 	client := t.odpsIns.restClient
 	resource := t.ResourceUrl()
 
-	req, err := client.NewRequestWithUrlQuery(GetMethod, resource, nil, queryArgs)
+	req, err := client.NewRequestWithUrlQuery(HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"compress/flate"
+	"compress/zlib"
 	"github.com/golang/snappy"
 	"io"
 )
@@ -10,14 +11,6 @@ type Compressor interface {
 	Name() string
 	NewReader(readCloser io.ReadCloser) io.ReadCloser
 	NewWriter(writeCloser io.WriteCloser) io.WriteCloser
-}
-
-var Compressors = struct {
-	SnappyFramed func() SnappyFramed
-	Deflate      func(int) Deflate
-}{
-	SnappyFramed: newSnappyFramed,
-	Deflate:      newDeflate,
 }
 
 type SnappyFramed int
@@ -32,16 +25,29 @@ func (s SnappyFramed) Name() string {
 	return SnappyFramedName
 }
 
+type snappyWrapper struct {
+	reader *snappy.Reader
+}
+
+func (s snappyWrapper) Read(p []byte) (int, error) {
+	return s.reader.Read(p)
+}
+
+func (s snappyWrapper) Close() error {
+	return nil
+}
+
 func (s SnappyFramed) NewReader(rc io.ReadCloser) io.ReadCloser {
+
 	return readCloser {
-		reader: snappy.NewReader(rc),
+		readCloser: snappyWrapper{ snappy.NewReader(rc) },
 		closer: rc,
 	}
 }
 
 func (s SnappyFramed) NewWriter(wc io.WriteCloser) io.WriteCloser {
 	return writeCloser {
-		writer: snappy.NewBufferedWriter(wc),
+		writeCloser: snappy.NewBufferedWriter(wc),
 		closer: wc,
 	}
 }
@@ -74,44 +80,64 @@ func newDeflate(level int) Deflate {
 	return Deflate{level: level}
 }
 
+func defaultDeflate() Deflate {
+	return Deflate{level: DeflateLevel.BestSpeed}
+}
+
 
 func (d Deflate) NewReader(rc io.ReadCloser) io.ReadCloser {
+	r, _ := zlib.NewReader(rc)
+
 	return readCloser {
-		reader: flate.NewReader(rc),
+		readCloser: r,
 		closer: rc,
 	}
 }
 
 func (d Deflate) NewWriter(wc io.WriteCloser) io.WriteCloser {
-	w, _ := flate.NewWriter(wc, d.level)
+	w, _ := zlib.NewWriterLevel(wc, flate.DefaultCompression)
 	return writeCloser {
-		writer: w,
+		writeCloser: w,
 		closer: wc,
 	}
 }
 
 type readCloser struct {
-	reader io.Reader
+	readCloser io.ReadCloser
 	closer io.Closer
 }
 
 func (r readCloser) Read(p []byte) (int, error) {
-	return r.reader.Read(p)
+	return r.readCloser.Read(p)
 }
 
 func (r readCloser) Close() error {
-	return r.closer.Close()
+	err1 := r.readCloser.Close()
+	err2 := r.closer.Close()
+
+	if err1 != nil {
+		return err1
+	}
+
+	return err2
 }
 
 type writeCloser struct {
-	writer io.Writer
+	writeCloser io.WriteCloser
 	closer io.Closer
 }
 
 func (w writeCloser) Write(p []byte) (int, error) {
-	return w.writer.Write(p)
+	return w.writeCloser.Write(p)
 }
 
 func (w writeCloser) Close() error {
-	return w.closer.Close()
+	err1 := w.writeCloser.Close()
+	err2 := w.closer.Close()
+
+	if err1 != nil {
+		return err1
+	}
+
+	return err2
 }

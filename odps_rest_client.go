@@ -15,31 +15,41 @@ import (
 )
 
 // Todo 请求方法需要重构，加入header参数
+const (
+	DefaultHttpTimeout          = 0
+	DefaultTcpConnectionTimeout = 30
+)
 
 type RestClient struct {
 	// odps 账号
 	Account
 	// http超时时间，从tcp握手开始计时, 默认为0，即没有超时时间
-	Timeout        time.Duration
-	_client        *http.Client
+	HttpTimeout          time.Duration
+	TcpConnectionTimeout time.Duration
+	DisableCompression   bool
+	_client              *http.Client
+
 	defaultProject string
 	endpoint       string
 }
 
 func NewOdpsHttpClient(a Account, endpoint string) RestClient {
 	var client = RestClient{
-		Account: a,
-		endpoint: endpoint,
+		Account:              a,
+		endpoint:             endpoint,
+		HttpTimeout:          DefaultHttpTimeout,
+		TcpConnectionTimeout: DefaultTcpConnectionTimeout * time.Second,
+		DisableCompression:   true,
 	}
 
-	var _ = client.client()
+	//var _ = client.client()
 
 	return client
 }
 
 func NewOdpsHttpClientWithTimeout(a Account, endpoint string, timeout time.Duration) RestClient {
 	var client = RestClient{
-		Account: a,
+		Account:  a,
 		endpoint: endpoint,
 	}
 
@@ -49,9 +59,8 @@ func NewOdpsHttpClientWithTimeout(a Account, endpoint string, timeout time.Durat
 	return client
 }
 
-
 func LoadEndpointFromEnv() string {
-	endpoint, _:= os.LookupEnv("odps_endpoint")
+	endpoint, _ := os.LookupEnv("odps_endpoint")
 	return endpoint
 }
 
@@ -71,16 +80,17 @@ func (client *RestClient) client() *http.Client {
 	var transport = http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
+			Timeout:   client.TcpConnectionTimeout,
 			KeepAlive: 30 * time.Second,
 		}).DialContext,
 		ForceAttemptHTTP2: false,
-		DisableKeepAlives: false,
+		DisableKeepAlives: true,
+		DisableCompression: client.DisableCompression,
 	}
 
 	client._client = &http.Client{
 		Transport: &transport,
-		Timeout:   client.Timeout,
+		Timeout:   client.HttpTimeout,
 	}
 
 	return client._client
@@ -121,7 +131,7 @@ func (client *RestClient) Do(req *http.Request) (*http.Response, error) {
 
 	client.SignRequest(req, client.endpoint)
 
-	return client._client.Do(req)
+	return client.client().Do(req)
 }
 
 func (client *RestClient) DoWithParseFunc(req *http.Request, parseFunc func(res *http.Response) error) error {
@@ -140,6 +150,9 @@ func (client *RestClient) DoWithParseFunc(req *http.Request, parseFunc func(res 
 
 func (client *RestClient) DoWithParseRes(req *http.Request, parseFunc func(res *http.Response) error) error {
 	res, err := client.Do(req)
+	if err != nil {
+		return err
+	}
 
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
@@ -147,10 +160,6 @@ func (client *RestClient) DoWithParseRes(req *http.Request, parseFunc func(res *
 			log.Fatalf("close http error, url=%s", req.URL.String())
 		}
 	}(res.Body)
-
-	if err != nil {
-		return err
-	}
 
 	if parseFunc == nil {
 		return nil
@@ -170,7 +179,7 @@ func (client *RestClient) DoWithModel(req *http.Request, model interface{}) erro
 }
 
 func (client *RestClient) GetWithModel(resource string, queryArgs url.Values, model interface{}) error {
-	req, err := client.NewRequestWithUrlQuery(GetMethod, resource, nil, queryArgs)
+	req, err := client.NewRequestWithUrlQuery(HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
 		return err
 	}
@@ -179,7 +188,7 @@ func (client *RestClient) GetWithModel(resource string, queryArgs url.Values, mo
 }
 
 func (client *RestClient) GetWithParseFunc(resource string, queryArgs url.Values, parseFunc func(res *http.Response) error) error {
-	req, err := client.NewRequestWithUrlQuery(GetMethod, resource, nil, queryArgs)
+	req, err := client.NewRequestWithUrlQuery(HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
 		return err
 	}
@@ -188,7 +197,7 @@ func (client *RestClient) GetWithParseFunc(resource string, queryArgs url.Values
 }
 
 func (client *RestClient) PutWithParseFunc(resource string, queryArgs url.Values, body io.Reader, parseFunc func(res *http.Response) error) error {
-	req, err := client.NewRequestWithUrlQuery(PutMethod, resource, body, queryArgs)
+	req, err := client.NewRequestWithUrlQuery(HttpMethod.PutMethod, resource, body, queryArgs)
 	if err != nil {
 		return err
 	}
