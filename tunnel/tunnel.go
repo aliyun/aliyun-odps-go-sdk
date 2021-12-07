@@ -23,8 +23,6 @@ import (
 // 2. 创建DownloadSession
 // 3. 创建RecordReader, 读取Record
 
-const DefaultTcpConnectionTimeout = 10 * time.Second
-
 type TableTunnel struct {
 	odpsIns              *odps.Odps
 	endpoint             string

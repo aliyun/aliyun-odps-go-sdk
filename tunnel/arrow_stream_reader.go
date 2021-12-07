@@ -5,7 +5,7 @@ import (
 	"io"
 )
 
-var CrcErr = errors.New("crc value error when get a tunnel arrow stream")
+var ArrowCrcErr = errors.New("crc value error when get a tunnel arrow stream")
 
 type arrowHttpReaderStatus int
 
@@ -68,7 +68,7 @@ func (ar *ArrowHttpReader) ReadChunk() error {
 		crcExpected := ar.chunkCrc.Value()
 
 		if chunkCrcValue != crcExpected {
-			return CrcErr
+			return ArrowCrcErr
 		}
 	case io.EOF, io.ErrUnexpectedEOF:
 		ar.eof = true
@@ -88,7 +88,7 @@ func (ar *ArrowHttpReader) ReadChunk() error {
 		ar.globalCrc.Reset()
 
 		if globalCrcValue != crcExpected {
-			return CrcErr
+			return ArrowCrcErr
 		}
 
 		return nil
