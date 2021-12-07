@@ -18,26 +18,30 @@ const (
 	Day          = 3600 * 24                  // total seconds in one day
 )
 
-type RecordProtoReader struct {
+type RecordProtocReader struct {
 	httpRes     *http.Response
-	protoReader *ProtoStreamReader
+	protoReader *ProtocStreamReader
 	columns     []odps.Column
 	recordCrc   Crc32CheckSum
 	crcOfCrc    Crc32CheckSum // crc of record crc
 	count       int64
 }
 
-func newRecordProtoReader(httpRes *http.Response, columns []odps.Column) RecordProtoReader {
-	return RecordProtoReader{
+func newRecordProtocReader(httpRes *http.Response, columns []odps.Column) RecordProtocReader {
+	return RecordProtocReader{
 		httpRes:     httpRes,
-		protoReader: NewProtoStreamReader(httpRes.Body),
+		protoReader: NewProtocStreamReader(httpRes.Body),
 		columns:     columns,
 		recordCrc:   NewCrc32CheckSum(),
 		crcOfCrc:    NewCrc32CheckSum(),
 	}
 }
 
-func (r *RecordProtoReader) Read() (data.Record, error) {
+func (r *RecordProtocReader) HttpRes() *http.Response {
+	return r.httpRes
+}
+
+func (r *RecordProtocReader) Read() (data.Record, error) {
 	record := data.NewRecord(len(r.columns))
 
 LOOP:
@@ -111,7 +115,31 @@ LOOP:
 	return record, nil
 }
 
-func (r *RecordProtoReader) readField(dt datatype.DataType) (data.Data, error) {
+func (r *RecordProtocReader) Iterator() <- chan data.Record {
+	records := make(chan data.Record)
+
+	go func() {
+		defer close(records)
+
+		for {
+			record, _ := r.Read()
+			if record == nil {
+				return
+			}
+
+			records <- record
+		}
+	}()
+
+	return records
+}
+
+func (r *RecordProtocReader) Close() error {
+	_ = r.httpRes.Body.Close()
+	return nil
+}
+
+func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) {
 	var fieldValue data.Data
 
 	switch dt.ID() {
@@ -287,7 +315,7 @@ func (r *RecordProtoReader) readField(dt datatype.DataType) (data.Data, error) {
 	return fieldValue, nil
 }
 
-func (r *RecordProtoReader) readArray(t datatype.DataType) (*data.Array, error) {
+func (r *RecordProtocReader) readArray(t datatype.DataType) (*data.Array, error) {
 	arraySize, err := r.protoReader.ReadUInt32()
 	if err != nil {
 		return nil, err
@@ -315,7 +343,7 @@ func (r *RecordProtoReader) readArray(t datatype.DataType) (*data.Array, error) 
 	return array, nil
 }
 
-func (r *RecordProtoReader) readMap(t datatype.MapType) (*data.Map, error) {
+func (r *RecordProtocReader) readMap(t datatype.MapType) (*data.Map, error) {
 	keys, err := r.readArray(t.KeyType)
 	if err != nil {
 		return nil, err
@@ -343,7 +371,7 @@ func (r *RecordProtoReader) readMap(t datatype.MapType) (*data.Map, error) {
 	return dm, nil
 }
 
-func (r *RecordProtoReader) readStruct(t datatype.StructType) (*data.Struct, error) {
+func (r *RecordProtocReader) readStruct(t datatype.StructType) (*data.Struct, error) {
 	sd := data.NewStruct(t)
 
 	for _, ft := range t.Fields {

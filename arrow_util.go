@@ -87,17 +87,17 @@ func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error)  {
 			return arrow.Null, err
 		}
 		return arrow.ListOf(itemType), nil
-	//case datatype.MAP:
-	//	mapType, _ := odpsType.(datatype.MapType)
-	//	keyType, err := TypeToArrowType(mapType.KeyType)
-	//	if err != nil {
-	//		return arrow.Null, err
-	//	}
-	//	valueType, err := TypeToArrowType(mapType.ValueType)
-	//	if err != nil {
-	//		return arrow.Null, err
-	//	}
-	//	return arrow.MapOf(keyType, valueType), nil
+	case datatype.MAP:
+		mapType, _ := odpsType.(datatype.MapType)
+		keyType, err := TypeToArrowType(mapType.KeyType)
+		if err != nil {
+			return arrow.Null, err
+		}
+		valueType, err := TypeToArrowType(mapType.ValueType)
+		if err != nil {
+			return arrow.Null, err
+		}
+		return arrow.MapOf(keyType, valueType), nil
 	}
 
 	return arrow.Null, errors.New("unknown odps data type: " + odpsType.Name())

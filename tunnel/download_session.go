@@ -51,30 +51,6 @@ type DownloadSession struct {
 	arrowSchema         *arrow.Schema
 }
 
-func (ds *DownloadSession) Schema() odps.TableSchema {
-	return ds.schema
-}
-
-func (ds *DownloadSession) Status() DownLoadStatus {
-	return ds.status
-}
-
-func (ds *DownloadSession) RecordCount() int {
-	return ds.recordCount
-}
-
-func (ds *DownloadSession) ShouldTransformDate() bool {
-	return ds.shouldTransformDate
-}
-
-func (ds *DownloadSession) ArrowSchema() *arrow.Schema {
-	if ds.arrowSchema != nil {
-		return ds.arrowSchema
-	}
-	ds.arrowSchema = ds.schema.ToArrowSchema()
-	return ds.arrowSchema
-}
-
 // CreateDownloadSession
 // Option是可选项，有
 // ${@link SessionCfg}.WithPartitionKey(string)
@@ -148,6 +124,30 @@ func AttachToExistedDownloadSession(
 	}
 
 	return &session, nil
+}
+
+func (ds *DownloadSession) Schema() odps.TableSchema {
+	return ds.schema
+}
+
+func (ds *DownloadSession) Status() DownLoadStatus {
+	return ds.status
+}
+
+func (ds *DownloadSession) RecordCount() int {
+	return ds.recordCount
+}
+
+func (ds *DownloadSession) ShouldTransformDate() bool {
+	return ds.shouldTransformDate
+}
+
+func (ds *DownloadSession) ArrowSchema() *arrow.Schema {
+	if ds.arrowSchema != nil {
+		return ds.arrowSchema
+	}
+	ds.arrowSchema = ds.schema.ToArrowSchema()
+	return ds.arrowSchema
 }
 
 func (ds *DownloadSession) PartitionKey() string {
@@ -318,13 +318,7 @@ func (ds *DownloadSession) newDownloadConnection(start, count int, columnNames [
 
 	contentEncoding := res.Header.Get("Content-Encoding")
 	if contentEncoding != "" {
-		contentEncoding = strings.ToLower(contentEncoding)
-		switch {
-		case strings.Contains(contentEncoding, DeflateName):
-			res.Body = defaultDeflate().NewReader(res.Body)
-		case strings.Contains(contentEncoding, SnappyFramedName):
-			res.Body = newSnappyFramed().NewReader(res.Body)
-		}
+		 res.Body = WrapByCompressor(res.Body, contentEncoding)
 	}
 
 	return res, nil

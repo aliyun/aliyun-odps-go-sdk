@@ -5,6 +5,7 @@ import (
 	"compress/zlib"
 	"github.com/golang/snappy"
 	"io"
+	"strings"
 )
 
 type Compressor interface {
@@ -39,16 +40,16 @@ func (s snappyWrapper) Close() error {
 
 func (s SnappyFramed) NewReader(rc io.ReadCloser) io.ReadCloser {
 
-	return readCloser {
-		readCloser: snappyWrapper{ snappy.NewReader(rc) },
-		closer: rc,
+	return readCloser{
+		readCloser: snappyWrapper{snappy.NewReader(rc)},
+		closer:     rc,
 	}
 }
 
 func (s SnappyFramed) NewWriter(wc io.WriteCloser) io.WriteCloser {
-	return writeCloser {
+	return writeCloser{
 		writeCloser: snappy.NewBufferedWriter(wc),
-		closer: wc,
+		closer:      wc,
 	}
 }
 
@@ -84,27 +85,26 @@ func defaultDeflate() Deflate {
 	return Deflate{level: DeflateLevel.BestSpeed}
 }
 
-
 func (d Deflate) NewReader(rc io.ReadCloser) io.ReadCloser {
 	r, _ := zlib.NewReader(rc)
 
-	return readCloser {
+	return readCloser{
 		readCloser: r,
-		closer: rc,
+		closer:     rc,
 	}
 }
 
 func (d Deflate) NewWriter(wc io.WriteCloser) io.WriteCloser {
 	w, _ := zlib.NewWriterLevel(wc, flate.DefaultCompression)
-	return writeCloser {
+	return writeCloser{
 		writeCloser: w,
-		closer: wc,
+		closer:      wc,
 	}
 }
 
 type readCloser struct {
 	readCloser io.ReadCloser
-	closer io.Closer
+	closer     io.Closer
 }
 
 func (r readCloser) Read(p []byte) (int, error) {
@@ -124,7 +124,7 @@ func (r readCloser) Close() error {
 
 type writeCloser struct {
 	writeCloser io.WriteCloser
-	closer io.Closer
+	closer      io.Closer
 }
 
 func (w writeCloser) Write(p []byte) (int, error) {
@@ -140,4 +140,16 @@ func (w writeCloser) Close() error {
 	}
 
 	return err2
+}
+
+func WrapByCompressor(rc io.ReadCloser, contentEncoding string) io.ReadCloser {
+	contentEncoding = strings.ToLower(contentEncoding)
+	switch {
+	case strings.Contains(contentEncoding, DeflateName):
+		return defaultDeflate().NewReader(rc)
+	case strings.Contains(contentEncoding, SnappyFramedName):
+		return newSnappyFramed().NewReader(rc)
+	}
+
+	return rc
 }

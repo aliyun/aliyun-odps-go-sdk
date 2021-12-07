@@ -99,7 +99,11 @@ func (parser *typeParser)consumeToken() string {
 }
 
 func (parser *typeParser) peekToken() string {
-	return parser.tokens[parser.index]
+	if parser.index < len(parser.tokens) {
+		return parser.tokens[parser.index]
+	}
+
+	return ""
 }
 
 func (parser *typeParser) expect(expected string) error  {
@@ -165,6 +169,10 @@ func (parser *typeParser) parserVarchar() (VarcharType, error) {
 }
 
 func (parser *typeParser) parseDecimal() (DecimalType, error)  {
+	if parser.peekToken() == "" {
+		return NewDecimalType(38, 18), nil
+	}
+
 	err := parser.expect("(")
 	if err != nil {
 		return DecimalType{}, err

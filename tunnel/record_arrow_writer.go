@@ -11,11 +11,11 @@ type RecordArrowWriter struct {
 	resChan           <-chan resOrErr
 	schema            *arrow.Schema
 	recordBatchWriter *ipc.RecordBatchWriter
-	httpWriter        *ArrowHttpWriter
+	httpWriter        *ArrowStreamWriter
 }
 
 func newRecordArrowWriter(conn *httpConnection, schema *arrow.Schema) RecordArrowWriter {
-	httpWriter := NewArrowChunkWriter(conn.Writer)
+	httpWriter := NewArrowStreamWriter(conn.Writer)
 
 	return RecordArrowWriter{
 		resChan:           conn.resChan,

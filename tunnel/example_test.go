@@ -10,7 +10,8 @@ import (
 	"time"
 )
 
-var tunnelIns tunnel.TableTunnel
+var tunnelIns tunnel.Tunnel
+var odpsIns *odps.Odps
 
 func init() {
 	accessId := os.Getenv("tunnel_odps_accessId")
@@ -19,8 +20,8 @@ func init() {
 	tunnelEndpoint := os.Getenv("tunnel_odps_endpoint")
 
 	account := odps.NewAliyunAccount(accessId, accessKey)
-	odpsIns := odps.NewOdps(&account, odpsEndpoint)
-	tunnelIns = tunnel.NewTableTunnel(odpsIns, tunnelEndpoint)
+	odpsIns = odps.NewOdps(&account, odpsEndpoint)
+	tunnelIns = tunnel.NewTunnel(odpsIns, tunnelEndpoint)
 }
 
 func Example_tunnel_upload_arrow() {
@@ -159,7 +160,7 @@ func Example_tunnel_download_arrow_simple() {
 		}
 
 		rec.Release()
-		n ++
+		n++
 	}
 
 	err = reader.Close()
@@ -199,7 +200,7 @@ func Example_tunnel_download_arrow_with_partition() {
 		}
 
 		rec.Release()
-		n ++
+		n++
 	}
 
 	err = reader.Close()

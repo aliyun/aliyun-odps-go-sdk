@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 )
 
 type UploadStatus int
@@ -221,17 +220,10 @@ func (u *UploadSession) Commit(blockIds []int) error {
 		return err
 	}
 
-	sleepTime := int64(1)
-
-	for i := 0; i < 3; i++ {
+	Retry(func() error {
 		_, err = u.RestClient.Do(req)
-		if err == nil {
-			break
-		}
-
-		sleepTime *= 1 << i
-		time.Sleep(time.Duration(sleepTime) * time.Second)
-	}
+		return err
+	})
 
 	return err
 }

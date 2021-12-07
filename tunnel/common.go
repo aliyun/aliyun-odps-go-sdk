@@ -4,6 +4,7 @@ import (
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
 	"net/http"
+	"time"
 )
 
 func addCommonSessionHttpHeader(header http.Header) {
@@ -78,4 +79,18 @@ func min(x, y int) int {
 		return x
 	}
 	return y
+}
+
+func Retry(f func() error)  {
+	sleepTime := int64(1)
+
+	for i := 0; i < 3; i ++ {
+		err := f()
+		if err == nil {
+			break
+		}
+
+		sleepTime *= 1 << i
+		time.Sleep(time.Duration(sleepTime) * time.Second)
+	}
 }

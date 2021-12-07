@@ -88,6 +88,10 @@ func (instances Instances) CreateTaskWithPriority(projectName string, task Task,
 		instanceId = location[splitAt+1:]
 		isSync = res.StatusCode == 201
 
+		if isSync {
+			return nil
+		}
+
 		decoder := xml.NewDecoder(res.Body)
 		return decoder.Decode(&resModel)
 	})

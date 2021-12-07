@@ -45,3 +45,13 @@ func (odps *Odps) SetDefaultProjectName(projectName string) {
 func (odps *Odps) Projects() Projects {
 	return odps.projects
 }
+
+func (odps *Odps) Project(name string) Project {
+	return NewProject(name, odps)
+}
+
+func (odps *Odps) RunSQlTask(sql string) (*Instance, error) {
+	task := NewSqlTask("execute_sql", sql, "", nil)
+	Instances := NewInstances(odps, odps.defaultProject)
+	return Instances.CreateTask(odps.defaultProject, &task)
+}

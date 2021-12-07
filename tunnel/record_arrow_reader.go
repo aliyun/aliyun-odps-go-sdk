@@ -10,16 +10,16 @@ import (
 type RecordArrowReader struct {
 	httpRes *http.Response
 	recordBatchReader *ipc.RecordBatchReader
-	httpReader *ArrowHttpReader
+	arrowReader       *ArrowStreamReader
 }
 
 func newRecordArrowReader(res *http.Response, schema *arrow.Schema) RecordArrowReader  {
-	httpReader := NewArrowHttpReader(res.Body)
+	httpReader := NewArrowStreamReader(res.Body)
 
 	return RecordArrowReader{
-		httpRes: res,
+		httpRes:           res,
 		recordBatchReader: ipc.NewRecordBatchReader(httpReader, schema),
-		httpReader: httpReader,
+		arrowReader:       httpReader,
 	}
 }
 
@@ -35,13 +35,13 @@ func (r *RecordArrowReader) Iterator() <-chan array.Record {
 	records := make(chan array.Record)
 
 	go func() {
+		defer close(records)
+
 		for r.recordBatchReader.Next() {
 			record := r.recordBatchReader.Record()
 			record.Retain()
 			records <- record
 		}
-
-		close(records)
 	}()
 
 	return records
@@ -51,11 +51,9 @@ func (r *RecordArrowReader) Read() (array.Record, error) {
 	return r.recordBatchReader.Read()
 }
 
-
 func (r *RecordArrowReader) Close() error {
 	r.recordBatchReader.Release()
-
-	return r.httpReader.Close()
+	return r.arrowReader.Close()
 }
 
 

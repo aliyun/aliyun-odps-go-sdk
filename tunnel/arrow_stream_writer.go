@@ -6,8 +6,8 @@ import (
 
 const DefaultChunkSize = 65536
 
-// ArrowHttpWriter 将数据构建成固定大小的chunk，以chunk为单位计算crc，并将crc写入数据流
-type ArrowHttpWriter struct {
+// ArrowStreamWriter 将数据构建成固定大小的chunk，以chunk为单位计算crc，并将crc写入数据流
+type ArrowStreamWriter struct {
 	inner              io.WriteCloser
 	chunkCrc           Crc32CheckSum
 	globalCrc          Crc32CheckSum
@@ -15,8 +15,8 @@ type ArrowHttpWriter struct {
 	firstWrite         bool
 }
 
-func NewArrowChunkWriter(w io.WriteCloser) *ArrowHttpWriter {
-	return &ArrowHttpWriter{
+func NewArrowStreamWriter(w io.WriteCloser) *ArrowStreamWriter {
+	return &ArrowStreamWriter{
 		inner:              w,
 		chunkCrc:           NewCrc32CheckSum(),
 		globalCrc:          NewCrc32CheckSum(),
@@ -25,7 +25,7 @@ func NewArrowChunkWriter(w io.WriteCloser) *ArrowHttpWriter {
 	}
 }
 
-func (aw *ArrowHttpWriter) Write(data []byte) (int, error) {
+func (aw *ArrowStreamWriter) Write(data []byte) (int, error) {
 	if aw.firstWrite {
 		err := aw.writeUint32(DefaultChunkSize)
 		if err != nil {
@@ -66,7 +66,7 @@ func (aw *ArrowHttpWriter) Write(data []byte) (int, error) {
 	return totalWrite, nil
 }
 
-func (aw *ArrowHttpWriter) Close() error {
+func (aw *ArrowStreamWriter) Close() error {
 	crc := aw.globalCrc.Value()
 	err1 := aw.writeUint32(crc)
 	aw.globalCrc.Reset()
@@ -80,22 +80,22 @@ func (aw *ArrowHttpWriter) Close() error {
 	return err2
 }
 
-func (aw *ArrowHttpWriter) chunkIsFull() bool {
+func (aw *ArrowStreamWriter) chunkIsFull() bool {
 	return aw.currentChunkLength >= DefaultChunkSize
 }
 
-func (aw *ArrowHttpWriter) leftChunkLength() int {
+func (aw *ArrowStreamWriter) leftChunkLength() int {
 	return DefaultChunkSize - aw.currentChunkLength
 }
 
-func (aw *ArrowHttpWriter) writeUint32(crcValue uint32) error {
+func (aw *ArrowStreamWriter) writeUint32(crcValue uint32) error {
 	b := uint32ToBytes(crcValue)
 	var _, err = aw.writeAll(b)
 
 	return err
 }
 
-func (aw *ArrowHttpWriter) writeAll(b []byte) (int, error) {
+func (aw *ArrowStreamWriter) writeAll(b []byte) (int, error) {
 	total := len(b)
 
 	for hasWrite := 0; hasWrite < total; {

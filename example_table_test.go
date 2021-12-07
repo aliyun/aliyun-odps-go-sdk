@@ -11,25 +11,25 @@ import (
 func ExampleTableSchema_ToSQLString() {
 	c1 := odps.Column{
 		Name:    "name",
-		Type:    datatype.NewStringType(),
+		Type:    datatype.StringType,
 		Comment: "name of user",
 	}
 
 	c2 := odps.Column{
 		Name:    "age",
-		Type:    datatype.NewIntType(),
+		Type:    datatype.IntType,
 		Comment: "how old is the user",
 	}
 
 	p1 := odps.Column{
 		Name:    "region",
-		Type:    datatype.NewStringType(),
+		Type:    datatype.StringType,
 		Comment: "居住区域",
 	}
 
 	p2 := odps.Column{
 		Name: "code",
-		Type: datatype.NewIntType(),
+		Type: datatype.IntType,
 	}
 
 	serdeProperties := make(map[string]string)
@@ -128,8 +128,10 @@ func ExampleTable_GetPartitions() {
 }
 
 func ExampleTable_ExecSql() {
-	table := odps.NewTable(odpsIns, "project_1", "sale_detail")
-	instance, err := table.ExecSql("SelectSale_detail", "select * from sale_detail;")
+	//table := odps.NewTable(odpsIns, "project_1", "sale_detail")
+	table := odps.NewTable(odpsIns, "project_1", "has_struct")
+	//instance, err := table.ExecSql("SelectSale_detail", "select * from sale_detail;")
+	instance, err := table.ExecSql("Select_has_struct", "select * from has_struct;")
 	if err != nil {
 		println(err.Error())
 	} else {

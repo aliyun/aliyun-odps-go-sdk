@@ -14,7 +14,7 @@ const (
 	readFromChunkStatus
 )
 
-type ArrowHttpReader struct {
+type ArrowStreamReader struct {
 	inner     io.ReadCloser
 	chunkCrc  Crc32CheckSum
 	globalCrc Crc32CheckSum
@@ -25,8 +25,8 @@ type ArrowHttpReader struct {
 	status    arrowHttpReaderStatus
 }
 
-func NewArrowHttpReader(rc io.ReadCloser) *ArrowHttpReader {
-	return &ArrowHttpReader{
+func NewArrowStreamReader(rc io.ReadCloser) *ArrowStreamReader {
+	return &ArrowStreamReader{
 		inner:     rc,
 		chunkCrc:  NewCrc32CheckSum(),
 		globalCrc: NewCrc32CheckSum(),
@@ -35,7 +35,7 @@ func NewArrowHttpReader(rc io.ReadCloser) *ArrowHttpReader {
 	}
 }
 
-func (ar *ArrowHttpReader) ReadChunk() error {
+func (ar *ArrowStreamReader) ReadChunk() error {
 	ar.status = readFromChunkStatus
 
 	// read chunk size from the first 4 bytes
@@ -98,7 +98,7 @@ func (ar *ArrowHttpReader) ReadChunk() error {
 	return err
 }
 
-func (ar *ArrowHttpReader) Read(dst []byte) (int, error) {
+func (ar *ArrowStreamReader) Read(dst []byte) (int, error) {
 	// read chunkSize bytes or read to end of inner reader
 	if ar.status == readToChunkStatus {
 		err := ar.ReadChunk()
@@ -121,11 +121,11 @@ func (ar *ArrowHttpReader) Read(dst []byte) (int, error) {
 	return n, nil
 }
 
-func (ar *ArrowHttpReader) Close() error {
+func (ar *ArrowStreamReader) Close() error {
 	return ar.inner.Close()
 }
 
-func (ar *ArrowHttpReader) readUint32() (uint32, error) {
+func (ar *ArrowStreamReader) readUint32() (uint32, error) {
 	uint32Bytes := make([]byte, 4)
 	_, err := io.ReadFull(ar.inner, uint32Bytes)
 	if err != nil {

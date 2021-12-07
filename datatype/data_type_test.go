@@ -59,13 +59,13 @@ func TestTypeParser(t *testing.T)  {
 	}
 
 	expected := NewStructType([]StructFieldType{
-		NewStructFieldType("x", NewIntType()),
+		NewStructFieldType("x", IntType),
 		NewStructFieldType("y", NewVarcharType(256)),
 		NewStructFieldType(
 			"z",
 			NewStructType(
-				NewStructFieldType("a", NewTinyintType()),
-				NewStructFieldType("b", NewDateType()),
+				NewStructFieldType("a", TinyIntType),
+				NewStructFieldType("b", DateType),
 			)),
 	}...)
 
@@ -74,27 +74,32 @@ func TestTypeParser(t *testing.T)  {
 	}
 }
 
-func TestParserDecimal(t *testing.T)  {
-	name := "Decimal(10,2)"
-	dataType, err := ParseDataType(name)
-	if err != nil {
-		t.Fatal(err.Error())
+func TestParseDecimal(t *testing.T)  {
+	names := []string{"Decimal(10,2)", "Decimal"}
+	expected := []DecimalType{
+		NewDecimalType(10, 2),
+		NewDecimalType(38, 18),
 	}
 
-	got, ok := dataType.(DecimalType)
+	for i, name := range names {
+		dataType, err := ParseDataType(name)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
 
-	if !ok {
-		t.Fatalf("failed to parse data type %s", name)
-	}
+		got, ok := dataType.(DecimalType)
 
-	expected := NewDecimalType(10, 2)
+		if !ok {
+			t.Fatalf("failed to parse data type %s", name)
+		}
 
-	if ! IsTypeEqual(expected, got) {
-		t.Fatalf("failed to parse type: %s, got %s", name, got.Name())
+		if ! IsTypeEqual(expected[i], got) {
+			t.Fatalf("failed to parse type: %s, got %s", name, got.Name())
+		}
 	}
 }
 
-func TestParserVarchar(t *testing.T)  {
+func TestParseVarchar(t *testing.T)  {
 	name := "Varchar(32768)"
 	dataType, err := ParseDataType(name)
 	if err != nil {
@@ -115,7 +120,7 @@ func TestParserVarchar(t *testing.T)  {
 }
 
 
-func TestParserChar(t *testing.T)  {
+func TestParseChar(t *testing.T)  {
 	name := "Char(23)"
 	dataType, err := ParseDataType(name)
 	if err != nil {
@@ -135,7 +140,7 @@ func TestParserChar(t *testing.T)  {
 	}
 }
 
-func TestParserMap(t *testing.T)  {
+func TestParseMap(t *testing.T)  {
 	name := "Map<char(10),int>"
 	dataType, err := ParseDataType(name)
 	if err != nil {
@@ -148,14 +153,14 @@ func TestParserMap(t *testing.T)  {
 		t.Fatalf("failed to parse data type %s", name)
 	}
 
-	expected := NewMapType(NewCharType(10), NewIntType())
+	expected := NewMapType(NewCharType(10), IntType)
 
 	if ! IsTypeEqual(expected, got) {
 		t.Fatalf("failed to parse type: %s, got %s", name, got.Name())
 	}
 }
 
-func TestParserArray(t *testing.T)  {
+func TestParseArray(t *testing.T)  {
 	name := "Array<Map<char(10),int>>"
 	dataType, err := ParseDataType(name)
 	if err != nil {
@@ -168,14 +173,14 @@ func TestParserArray(t *testing.T)  {
 		t.Fatalf("failed to parse data type %s", name)
 	}
 
-	expected := NewArrayType(NewMapType(NewCharType(10), NewIntType()))
+	expected := NewArrayType(NewMapType(NewCharType(10), IntType))
 
 	if ! IsTypeEqual(expected, got) {
 		t.Fatalf("failed to parse type: %s, got %s", name, got.Name())
 	}
 }
 
-func TestParserPrimitive(t *testing.T)  {
+func TestParsePrimitive(t *testing.T)  {
 	name := "datetime"
 	dataType, err := ParseDataType(name)
 	if err != nil {
@@ -195,6 +200,7 @@ func TestParserPrimitive(t *testing.T)  {
 	}
 }
 
+
 func TestParseFailed(t *testing.T)  {
 	names := []string{"datetime,", "int tinyint"}
 	for _, name := range names {
@@ -208,21 +214,21 @@ func TestParseFailed(t *testing.T)  {
 
 func TestDataTyeName(t *testing.T)  {
 	types := []DataType{
-		NewMapType(NewCharType(10), NewIntType()),
+		NewMapType(NewCharType(10), IntType),
 		NewStructType([]StructFieldType{
-			NewStructFieldType("x", NewIntType()),
+			NewStructFieldType("x", IntType),
 			NewStructFieldType("y", NewVarcharType(256)),
 			NewStructFieldType(
 				"z",
 				NewStructType(
-					NewStructFieldType("a", NewTinyintType()),
-					NewStructFieldType("b", NewDateType()),
+					NewStructFieldType("a", TinyIntType),
+					NewStructFieldType("b", DateType),
 				)),
 		}...),
 		NewCharType(10),
 		NewVarcharType(10),
 		NewDecimalType(20, 3),
-		NewArrayType(NewArrayType(NewIntType())),
+		NewArrayType(NewArrayType(IntType)),
 	}
 
 	names := []string {

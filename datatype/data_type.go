@@ -10,7 +10,7 @@ import (
 type TypeID int
 
 const (
-	_ TypeID = iota
+	NULL TypeID = iota
 	// BIGINT 8字节有符号整形
 	BIGINT
 
@@ -247,7 +247,7 @@ func NewVarcharType(length int) VarcharType {
 }
 
 func (c VarcharType) ID() TypeID {
-	return CHAR
+	return VARCHAR
 }
 
 func (c VarcharType) Name() string {
@@ -357,6 +357,16 @@ func (s StructType) String() string {
 	return s.Name()
 }
 
+func (s StructType) FieldType(fileName string) DataType {
+	for _, f := range s.Fields {
+		if f.Name == fileName {
+			return f.Type
+		}
+	}
+
+	return nil
+}
+
 type StructFieldType struct {
 	Name string
 	Type DataType
@@ -384,6 +394,16 @@ func (s StructFields) Less(i, j int) bool {
 }
 
 func IsTypeEqual(t1, t2 DataType) bool  {
+	switch t1.ID() {
+	case ARRAY, MAP:
+		if IsNullType(t2) {
+			return true
+		}
+	case NULL:
+		t2Id := t2.ID()
+		return t2Id == ARRAY || t2Id == MAP || t2Id == NULL
+	}
+
 	if t1.ID() != t2.ID() {
 		return false
 	}
@@ -430,58 +450,23 @@ func IsTypeEqual(t1, t2 DataType) bool  {
 	return true
 }
 
-func NewBigIntType() PrimitiveType  {
-	return PrimitiveType{BIGINT}
-}
 
-func NewDoubleType() PrimitiveType  {
-	return PrimitiveType{DOUBLE}
-}
+var TinyIntType = PrimitiveType{TINYINT}
+var SmallIntType = PrimitiveType{SMALLINT}
+var IntType  = PrimitiveType{INT}
+var BigIntType = PrimitiveType{BIGINT}
+var DoubleType = PrimitiveType{DOUBLE}
+var BooleanType = PrimitiveType{BOOLEAN}
+var DateType = PrimitiveType{DATE}
+var DateTimeType = PrimitiveType{DATETIME}
+var TimestampType = PrimitiveType{TIMESTAMP}
+var StringType = PrimitiveType{STRING}
+var FloatType =  PrimitiveType{FLOAT}
+var BinaryType = PrimitiveType{BINARY}
+var IntervalDayTimeType = PrimitiveType{IntervalDayTime}
+var IntervalYearMonthType = PrimitiveType{IntervalYearMonth}
+var NullType = PrimitiveType{NULL}
 
-func NewBooleanType() PrimitiveType  {
-	return PrimitiveType{BOOLEAN}
-}
-
-func NewDateTimeType() PrimitiveType  {
-	return PrimitiveType{DATETIME}
-}
-
-func NewStringType() PrimitiveType  {
-	return PrimitiveType{STRING}
-}
-
-func NewTinyintType() PrimitiveType  {
-	return PrimitiveType{TINYINT}
-}
-
-func NewSmallintType() PrimitiveType  {
-	return PrimitiveType{SMALLINT}
-}
-
-func NewIntType() PrimitiveType  {
-	return PrimitiveType{INT}
-}
-
-func NewFloatType() PrimitiveType  {
-	return PrimitiveType{FLOAT}
-}
-
-func NewDateType() PrimitiveType  {
-	return PrimitiveType{DATE}
-}
-
-func NewTimestampType() PrimitiveType  {
-	return PrimitiveType{TIMESTAMP}
-}
-
-func NewBinaryType() PrimitiveType  {
-	return PrimitiveType{BINARY}
-}
-
-func NewIntervalDayTimeType() PrimitiveType  {
-	return PrimitiveType{IntervalDayTime}
-}
-
-func NewIntervalYearMonthType() PrimitiveType  {
-	return PrimitiveType{IntervalYearMonth}
+func IsNullType(t DataType) bool  {
+	return t.ID() == NULL
 }

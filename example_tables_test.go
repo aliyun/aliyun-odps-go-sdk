@@ -58,25 +58,25 @@ func ExampleTables_BatchLoadTables() {
 func ExampleTables_Create() {
 	c1 := odps.Column{
 		Name:    "name",
-		Type:    datatype.NewStringType(),
+		Type:    datatype.StringType,
 		Comment: "name of user",
 	}
 
 	c2 := odps.Column{
 		Name:    "age",
-		Type:    datatype.NewIntType(),
+		Type:    datatype.IntType,
 		Comment: "how old is the user",
 	}
 
 	p1 := odps.Column{
 		Name:    "region",
-		Type:    datatype.NewStringType(),
+		Type:    datatype.StringType,
 		Comment: "居住区域",
 	}
 
 	p2 := odps.Column{
 		Name: "code",
-		Type: datatype.NewIntType(),
+		Type: datatype.IntType,
 	}
 
 	hints := make(map[string]string)

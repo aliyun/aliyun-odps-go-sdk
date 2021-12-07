@@ -40,6 +40,10 @@ type Project struct {
 	rb            ResourceBuilder
 }
 
+func (p *Project) OdpsIns() *Odps {
+	return p.odpsIns
+}
+
 type projectModel struct {
 	XMLName            xml.Name   `xml:"Project"`
 	Name               string     `xml:"Name"`

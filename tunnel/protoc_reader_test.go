@@ -9,13 +9,13 @@ import (
 	"testing"
 )
 
-var structTypeProtoData = []byte{
+var structTypeProtocData = []byte{
 	0x0a, 0x00, 0x16, 0x00, 0x05, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x00, 0xc8, 0x01, 0x00, 0x00,
 	0x80, 0xc0, 0xff, 0x7f, 0xa0, 0x92, 0x83, 0xc9, 0x05, 0xf0, 0xff, 0xff, 0x7f, 0x02, 0xf8, 0xff,
 	0xff, 0x7f, 0xf0, 0xcc, 0xb3, 0xc0, 0x01,
 }
 
-var simpleTypeProtoData = []byte{
+var simpleTypeProtocData = []byte{
 	0x08, 0x02, 0x10, 0xfe, 0xff, 0x03, 0x18, 0xc8, 0x01, 0x20, 0x80, 0xa0, 0xb7, 0x87, 0xe9, 0x05,
 	0x2a, 0x10, 0xfa, 0x34, 0xe1, 0x02, 0x93, 0xcb, 0x42, 0x84, 0x85, 0x73, 0xa4, 0xe3, 0x99, 0x37,
 	0xf4, 0x79, 0x35, 0x3b, 0xaf, 0xef, 0x4b, 0x39, 0x9a, 0x99, 0x99, 0x61, 0xe7, 0xf5, 0x7d, 0x41,
@@ -33,8 +33,8 @@ var simpleTypeProtoData = []byte{
 }
 
 
-func TestProtoReadStructType(t *testing.T) {
-	br := bytes.NewReader(structTypeProtoData)
+func TestProtocReadStructType(t *testing.T) {
+	br := bytes.NewReader(structTypeProtocData)
 
 	typeName := "struct<x:int,y:varchar(256),z:struct<a:tinyint,b:date>>"
 	dt, _ := datatype.ParseDataType(typeName)
@@ -46,9 +46,9 @@ func TestProtoReadStructType(t *testing.T) {
 		},
 	}
 
-	rp := RecordProtoReader{
+	rp := RecordProtocReader{
 		httpRes:     nil,
-		protoReader: NewProtoStreamReader(br),
+		protoReader: NewProtocStreamReader(br),
 		columns:     columns,
 		recordCrc:   NewCrc32CheckSum(),
 		crcOfCrc:    NewCrc32CheckSum(),
@@ -109,8 +109,8 @@ func TestProtoReadStructType(t *testing.T) {
 	}
 }
 
-func TestProtoReadSimpleType(t *testing.T) {
-	br := bytes.NewReader(simpleTypeProtoData)
+func TestProtocReadSimpleType(t *testing.T) {
+	br := bytes.NewReader(simpleTypeProtocData)
 
 	columns := []odps.Column{
 		{
@@ -175,9 +175,9 @@ func TestProtoReadSimpleType(t *testing.T) {
 		},
 	}
 
-	rp := RecordProtoReader{
+	rp := RecordProtocReader{
 		httpRes:     nil,
-		protoReader: NewProtoStreamReader(br),
+		protoReader: NewProtocStreamReader(br),
 		columns:     columns,
 		recordCrc:   NewCrc32CheckSum(),
 		crcOfCrc:    NewCrc32CheckSum(),

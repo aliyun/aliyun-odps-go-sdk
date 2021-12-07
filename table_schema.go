@@ -128,7 +128,7 @@ func (builder *TableSchemaBuilder) Build() TableSchema {
 	}
 }
 
-func (schema TableSchema) toSQLString(projectName string, createIfNotExists, isExternal bool) (string, error) {
+func (schema *TableSchema) toSQLString(projectName string, createIfNotExists, isExternal bool) (string, error) {
 	if schema.TableName == "" {
 		return "", errors.New("table name is not set")
 	}
@@ -169,7 +169,7 @@ func (schema TableSchema) toSQLString(projectName string, createIfNotExists, isE
 
 	type Data struct {
 		ProjectName       string
-		Schema            TableSchema
+		Schema            *TableSchema
 		IsExternal        bool
 		CreateIfNotExists bool
 	}
@@ -185,7 +185,7 @@ func (schema TableSchema) toSQLString(projectName string, createIfNotExists, isE
 	}
 }
 
-func (schema TableSchema) ToSQLString(projectName string, createIfNotExists bool) (string, error) {
+func (schema *TableSchema) ToSQLString(projectName string, createIfNotExists bool) (string, error) {
 	baseSql, err := schema.toSQLString(projectName, createIfNotExists, false)
 	if err != nil {
 		return "", err
@@ -200,7 +200,7 @@ func (schema TableSchema) ToSQLString(projectName string, createIfNotExists bool
 	return baseSql, nil
 }
 
-func (schema TableSchema) ToExternalSQLString(
+func (schema *TableSchema) ToExternalSQLString(
 	projectName string,
 	createIfNotExists bool,
 	serdeProperties map[string]string,
@@ -267,7 +267,7 @@ func (schema TableSchema) ToExternalSQLString(
 	return builder.String(), nil
 }
 
-func (schema TableSchema) ToArrowSchema() *arrow.Schema {
+func (schema *TableSchema) ToArrowSchema() *arrow.Schema {
 	fields := make([]arrow.Field, len(schema.Columns))
 	for i, column := range schema.Columns {
 		arrowType, _ := TypeToArrowType(column.Type)
@@ -281,3 +281,12 @@ func (schema TableSchema) ToArrowSchema() *arrow.Schema {
 	return arrow.NewSchema(fields, nil)
 }
 
+func (schema *TableSchema) FieldByName(name string) (Column, bool)  {
+	for _, c := range schema.Columns {
+		if c.Name == name {
+			return c, true
+		}
+	}
+
+	return Column{}, false
+}

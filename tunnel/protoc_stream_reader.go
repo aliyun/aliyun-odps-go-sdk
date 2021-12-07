@@ -8,19 +8,19 @@ import (
 	"math"
 )
 
-type ProtoStreamReader struct {
+type ProtocStreamReader struct {
 	inner io.Reader
 	buf   *bytes.Buffer
 }
 
-func NewProtoStreamReader(r io.Reader) *ProtoStreamReader {
-	return &ProtoStreamReader{
+func NewProtocStreamReader(r io.Reader) *ProtocStreamReader {
+	return &ProtocStreamReader{
 		inner: r,
 		buf:   bytes.NewBuffer(nil),
 	}
 }
 
-func (r *ProtoStreamReader) ReadVarint() (uint64, error) {
+func (r *ProtocStreamReader) ReadVarint() (uint64, error) {
 	b := []byte{'0'}
 	r.buf.Reset()
 
@@ -42,7 +42,7 @@ func (r *ProtoStreamReader) ReadVarint() (uint64, error) {
 	}
 }
 
-func (r *ProtoStreamReader) ReadFixed32() (uint32, error) {
+func (r *ProtocStreamReader) ReadFixed32() (uint32, error) {
 	b := []byte{'0', '0', '0', '0'}
 
 	for {
@@ -56,7 +56,7 @@ func (r *ProtoStreamReader) ReadFixed32() (uint32, error) {
 	}
 }
 
-func (r *ProtoStreamReader) ReadFixed64() (uint64, error) {
+func (r *ProtocStreamReader) ReadFixed64() (uint64, error) {
 	b := []byte{'0', '0', '0', '0', '0', '0', '0', '0'}
 
 	for {
@@ -70,7 +70,7 @@ func (r *ProtoStreamReader) ReadFixed64() (uint64, error) {
 	}
 }
 
-func (r *ProtoStreamReader) ReadBytes() ([]byte, error) {
+func (r *ProtocStreamReader) ReadBytes() ([]byte, error) {
 	m, err := r.ReadVarint()
 	if err != nil {
 		return nil, err
@@ -85,7 +85,7 @@ func (r *ProtoStreamReader) ReadBytes() ([]byte, error) {
 	return b, nil
 }
 
-func (r *ProtoStreamReader) ReadTag() (protowire.Number, protowire.Type, error) {
+func (r *ProtocStreamReader) ReadTag() (protowire.Number, protowire.Type, error) {
 	m, err := r.ReadVarint()
 	if err != nil {
 		return 0, 0, err
@@ -99,7 +99,7 @@ func (r *ProtoStreamReader) ReadTag() (protowire.Number, protowire.Type, error) 
 	return num, typ, nil
 }
 
-func (r *ProtoStreamReader) ReadBool() (bool, error) {
+func (r *ProtocStreamReader) ReadBool() (bool, error) {
 	m, err := r.ReadVarint()
 	if err != nil {
 		return false, err
@@ -108,7 +108,7 @@ func (r *ProtoStreamReader) ReadBool() (bool, error) {
 	return protowire.DecodeBool(m), nil
 }
 
-func (r *ProtoStreamReader) ReadInt32() (int32, error) {
+func (r *ProtocStreamReader) ReadInt32() (int32, error) {
 	m, err := r.ReadVarint()
 	if err != nil {
 		return 0, err
@@ -117,7 +117,7 @@ func (r *ProtoStreamReader) ReadInt32() (int32, error) {
 	return int32(m), nil
 }
 
-func (r *ProtoStreamReader) ReadSInt32() (int32, error) {
+func (r *ProtocStreamReader) ReadSInt32() (int32, error) {
 	m, err := r.ReadVarint()
 	if err != nil {
 		return 0, err
@@ -126,7 +126,7 @@ func (r *ProtoStreamReader) ReadSInt32() (int32, error) {
 	return int32(protowire.DecodeZigZag(m & math.MaxUint32)), nil
 }
 
-func (r *ProtoStreamReader) ReadUInt32() (uint32, error) {
+func (r *ProtocStreamReader) ReadUInt32() (uint32, error) {
 	m, err := r.ReadVarint()
 	if err != nil {
 		return 0, err
@@ -135,7 +135,7 @@ func (r *ProtoStreamReader) ReadUInt32() (uint32, error) {
 	return uint32(m), nil
 }
 
-func (r *ProtoStreamReader) ReadInt64() (int64, error) {
+func (r *ProtocStreamReader) ReadInt64() (int64, error) {
 	m, err := r.ReadVarint()
 	if err != nil {
 		return 0, err
@@ -144,7 +144,7 @@ func (r *ProtoStreamReader) ReadInt64() (int64, error) {
 	return int64(m), nil
 }
 
-func (r *ProtoStreamReader) ReadSInt64() (int64, error) {
+func (r *ProtocStreamReader) ReadSInt64() (int64, error) {
 	m, err := r.ReadVarint()
 	if err != nil {
 		return 0, err
@@ -153,7 +153,7 @@ func (r *ProtoStreamReader) ReadSInt64() (int64, error) {
 	return protowire.DecodeZigZag(m), nil
 }
 
-func (r *ProtoStreamReader) ReadUInt64() (uint64, error) {
+func (r *ProtocStreamReader) ReadUInt64() (uint64, error) {
 	m, err := r.ReadVarint()
 	if err != nil {
 		return 0, err
@@ -162,7 +162,7 @@ func (r *ProtoStreamReader) ReadUInt64() (uint64, error) {
 	return uint64(m), nil
 }
 
-func (r *ProtoStreamReader) ReadSFixed32() (int32, error) {
+func (r *ProtocStreamReader) ReadSFixed32() (int32, error) {
 	v, err := r.ReadFixed32()
 	if err != nil {
 		return 0, err
@@ -171,7 +171,7 @@ func (r *ProtoStreamReader) ReadSFixed32() (int32, error) {
 	return int32(v), nil
 }
 
-func (r *ProtoStreamReader) ReadFloat32() (float32, error) {
+func (r *ProtocStreamReader) ReadFloat32() (float32, error) {
 	v, err := r.ReadFixed32()
 	if err != nil {
 		return 0, err
@@ -180,7 +180,7 @@ func (r *ProtoStreamReader) ReadFloat32() (float32, error) {
 	return math.Float32frombits(v), nil
 }
 
-func (r *ProtoStreamReader) ReadSFixed64() (int64, error) {
+func (r *ProtocStreamReader) ReadSFixed64() (int64, error) {
 	v, err := r.ReadFixed64()
 	if err != nil {
 		return 0, err
@@ -189,7 +189,7 @@ func (r *ProtoStreamReader) ReadSFixed64() (int64, error) {
 	return int64(v), nil
 }
 
-func (r *ProtoStreamReader) ReadFloat64() (float64, error) {
+func (r *ProtocStreamReader) ReadFloat64() (float64, error) {
 	v, err := r.ReadFixed64()
 	if err != nil {
 		return 0, err
@@ -198,7 +198,7 @@ func (r *ProtoStreamReader) ReadFloat64() (float64, error) {
 	return math.Float64frombits(v), nil
 }
 
-func (r *ProtoStreamReader) ReadString() (string, error) {
+func (r *ProtocStreamReader) ReadString() (string, error) {
 	v, err := r.ReadBytes()
 	if err != nil {
 		return "", err
