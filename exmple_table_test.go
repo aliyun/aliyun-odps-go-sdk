@@ -5,13 +5,13 @@ import (
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
 )
 
-func ExampleTable()  {
-	table :=  odps.NewTable(odpsIns, "odps_smoke_test", "user")
+func ExampleTable() {
+	table := odps.NewTable(odpsIns, "odps_smoke_test", "user")
 	var _ = table.Load()
-	print(fmt.Errorf("%#v", table).Error())
+	print(fmt.Sprintf("%#v", table))
 	// Output:
 }
 
-func ExampleTables()  {
+func ExampleTables() {
 	// Output:
 }

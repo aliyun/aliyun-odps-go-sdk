@@ -1,7 +1,7 @@
 package tunnel
 
 import (
-	"errors"
+	"github.com/pkg/errors"
 	"io"
 )
 
@@ -42,7 +42,7 @@ func (ar *ArrowStreamReader) ReadChunk() error {
 	if ar.firstRead {
 		chunkSize, err := ar.readUint32()
 		if err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 
 		ar.chunkSize = int(chunkSize) + 4
@@ -95,7 +95,7 @@ func (ar *ArrowStreamReader) ReadChunk() error {
 	}
 
 	// err != nil and err != io.EOF
-	return err
+	return errors.WithStack(err)
 }
 
 func (ar *ArrowStreamReader) Read(dst []byte) (int, error) {
@@ -103,7 +103,7 @@ func (ar *ArrowStreamReader) Read(dst []byte) (int, error) {
 	if ar.status == readToChunkStatus {
 		err := ar.ReadChunk()
 		if err != nil {
-			return 0, err
+			return 0, errors.WithStack(err)
 		}
 	}
 
@@ -111,7 +111,7 @@ func (ar *ArrowStreamReader) Read(dst []byte) (int, error) {
 	if err == io.EOF {
 		ar.status = readToChunkStatus
 	} else if err != nil {
-		return n, err
+		return n, errors.WithStack(err)
 	}
 
 	if ar.chunk.length() == 0 && ar.eof {
@@ -122,14 +122,14 @@ func (ar *ArrowStreamReader) Read(dst []byte) (int, error) {
 }
 
 func (ar *ArrowStreamReader) Close() error {
-	return ar.inner.Close()
+	return errors.WithStack(ar.inner.Close())
 }
 
 func (ar *ArrowStreamReader) readUint32() (uint32, error) {
 	uint32Bytes := make([]byte, 4)
 	_, err := io.ReadFull(ar.inner, uint32Bytes)
 	if err != nil {
-		return 0, err
+		return 0, errors.WithStack(err)
 	}
 
 	return bytesToUint32(uint32Bytes), nil

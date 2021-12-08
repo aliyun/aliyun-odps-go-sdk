@@ -1,6 +1,9 @@
 package odps
 
-import "encoding/xml"
+import (
+	"encoding/xml"
+	"github.com/pkg/errors"
+)
 
 type Role struct {
 	odpsIns     *Odps
@@ -35,7 +38,7 @@ func (role *Role) Load() error {
 	resource := rb.Role(role.model.Name)
 	client := role.odpsIns.restClient
 
-	return client.GetWithModel(resource, nil, &role.model)
+	return errors.WithStack(client.GetWithModel(resource, nil, &role.model))
 }
 
 func (role *Role) Name() string {

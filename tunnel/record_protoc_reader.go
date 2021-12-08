@@ -1,10 +1,10 @@
 package tunnel
 
 import (
-	"errors"
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/aliyun/aliyun-odps-go-sdk/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
+	"github.com/pkg/errors"
 	"google.golang.org/protobuf/encoding/protowire"
 	"io"
 	"net/http"
@@ -50,7 +50,7 @@ LOOP:
 	for {
 		tag, _, err := r.protoReader.ReadTag()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 
 		switch tag {
@@ -58,7 +58,7 @@ LOOP:
 			crc := r.recordCrc.Value()
 			uint32V, err := r.protoReader.ReadUInt32()
 			if err != nil {
-				return nil, err
+				return nil, errors.WithStack(err)
 			}
 
 			if crc != uint32V {
@@ -70,7 +70,7 @@ LOOP:
 		case MetaCount:
 			sInt64, err := r.protoReader.ReadSInt64()
 			if err != nil {
-				return nil, err
+				return nil, errors.WithStack(err)
 			}
 
 			if sInt64 != r.count {
@@ -79,7 +79,7 @@ LOOP:
 
 			tag, _, err := r.protoReader.ReadTag()
 			if err != nil {
-				return nil, err
+				return nil, errors.WithStack(err)
 			}
 
 			if tag != MetaChecksum {
@@ -106,7 +106,7 @@ LOOP:
 			c := r.columns[columnIndex-1]
 			fv, err := r.readField(c.Type)
 			if err != nil {
-				return nil, err
+				return nil, errors.WithStack(err)
 			}
 
 			record.Append(fv)
@@ -137,8 +137,7 @@ func (r *RecordProtocReader) Iterator() <-chan data.Record {
 }
 
 func (r *RecordProtocReader) Close() error {
-	_ = r.httpRes.Body.Close()
-	return nil
+	return errors.WithStack(r.httpRes.Body.Close())
 }
 
 func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) {
@@ -148,7 +147,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 	case datatype.DOUBLE:
 		v, err := r.protoReader.ReadFloat64()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 
 		r.recordCrc.Update(v)
@@ -156,7 +155,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 	case datatype.FLOAT:
 		v, err := r.protoReader.ReadFloat32()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 
 		r.recordCrc.Update(v)
@@ -164,7 +163,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 	case datatype.BOOLEAN:
 		v, err := r.protoReader.ReadBool()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 
 		r.recordCrc.Update(v)
@@ -172,7 +171,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 	case datatype.BIGINT:
 		v, err := r.protoReader.ReadSInt64()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 
 		r.recordCrc.Update(v)
@@ -180,7 +179,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 	case datatype.IntervalYearMonth:
 		v, err := r.protoReader.ReadSInt64()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 
 		r.recordCrc.Update(v)
@@ -188,7 +187,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 	case datatype.INT:
 		v, err := r.protoReader.ReadSInt64()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 
 		r.recordCrc.Update(v)
@@ -196,7 +195,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 	case datatype.SMALLINT:
 		v, err := r.protoReader.ReadSInt64()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 
 		r.recordCrc.Update(v)
@@ -204,7 +203,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 	case datatype.TINYINT:
 		v, err := r.protoReader.ReadSInt64()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 
 		r.recordCrc.Update(v)
@@ -212,14 +211,14 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 	case datatype.STRING:
 		v, err := r.protoReader.ReadBytes()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 		r.recordCrc.Update(v)
 		fieldValue = data.String(v)
 	case datatype.VARCHAR:
 		v, err := r.protoReader.ReadBytes()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 		r.recordCrc.Update(v)
 		t := dt.(datatype.VarcharType)
@@ -227,7 +226,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 	case datatype.CHAR:
 		v, err := r.protoReader.ReadBytes()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 		r.recordCrc.Update(v)
 		t := dt.(datatype.CharType)
@@ -235,14 +234,14 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 	case datatype.BINARY:
 		v, err := r.protoReader.ReadBytes()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 		r.recordCrc.Update(v)
 		fieldValue = data.Binary(v)
 	case datatype.DATETIME:
 		v, err := r.protoReader.ReadSInt64()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 
 		r.recordCrc.Update(v)
@@ -253,7 +252,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 	case datatype.DATE:
 		v, err := r.protoReader.ReadSInt64()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 
 		r.recordCrc.Update(v)
@@ -262,11 +261,11 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 	case datatype.IntervalDayTime:
 		seconds, err := r.protoReader.ReadSInt64()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 		nanoSeconds, err := r.protoReader.ReadSInt32()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 
 		r.recordCrc.Update(seconds)
@@ -276,11 +275,11 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 	case datatype.TIMESTAMP:
 		seconds, err := r.protoReader.ReadSInt64()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 		nanoSeconds, err := r.protoReader.ReadSInt32()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 
 		r.recordCrc.Update(seconds)
@@ -290,7 +289,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 	case datatype.DECIMAL:
 		v, err := r.protoReader.ReadBytes()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 		r.recordCrc.Update(v)
 		fieldValue = data.NewDecimal(38, 18, string(v))
@@ -298,19 +297,19 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 		var err error
 		fieldValue, err = r.readArray(dt.(datatype.ArrayType).ElementType)
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 	case datatype.MAP:
 		var err error
 		fieldValue, err = r.readMap(dt.(datatype.MapType))
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 	case datatype.STRUCT:
 		var err error
 		fieldValue, err = r.readStruct(dt.(datatype.StructType))
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 	}
 
@@ -320,14 +319,14 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 func (r *RecordProtocReader) readArray(t datatype.DataType) (*data.Array, error) {
 	arraySize, err := r.protoReader.ReadUInt32()
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	arrayData := make([]data.Data, arraySize)
 
 	for i := uint32(0); i < arraySize; i++ {
 		b, err := r.protoReader.ReadBool()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 
 		if b {
@@ -335,7 +334,7 @@ func (r *RecordProtocReader) readArray(t datatype.DataType) (*data.Array, error)
 		} else {
 			arrayData[i], err = r.readField(t)
 			if err != nil {
-				return nil, err
+				return nil, errors.WithStack(err)
 			}
 		}
 	}
@@ -348,12 +347,12 @@ func (r *RecordProtocReader) readArray(t datatype.DataType) (*data.Array, error)
 func (r *RecordProtocReader) readMap(t datatype.MapType) (*data.Map, error) {
 	keys, err := r.readArray(t.KeyType)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	values, err := r.readArray(t.ValueType)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	if keys.Len() != values.Len() {
@@ -366,7 +365,7 @@ func (r *RecordProtocReader) readMap(t datatype.MapType) (*data.Map, error) {
 		value := values.Index(i)
 		err = dm.Set(key, value)
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 	}
 
@@ -380,7 +379,7 @@ func (r *RecordProtocReader) readStruct(t datatype.StructType) (*data.Struct, er
 		fn := ft.Name
 		b, err := r.protoReader.ReadBool()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 
 		if b {
@@ -388,7 +387,7 @@ func (r *RecordProtocReader) readStruct(t datatype.StructType) (*data.Struct, er
 		} else {
 			fd, err := r.readField(ft.Type)
 			if err != nil {
-				return nil, err
+				return nil, errors.WithStack(err)
 			}
 
 			sd.SetField(fn, fd)

@@ -3,6 +3,7 @@ package odps
 import (
 	"bytes"
 	"encoding/xml"
+	"github.com/pkg/errors"
 	"net/url"
 )
 
@@ -77,7 +78,7 @@ func (sc *SecurityConfig) Load() error {
 		sc.beLoaded = true
 	}
 
-	return err
+	return errors.WithStack(err)
 }
 
 func (sc *SecurityConfig) Update(supervisionToken string) error {
@@ -91,19 +92,19 @@ func (sc *SecurityConfig) Update(supervisionToken string) error {
 	bodyXml, err := xml.Marshal(sc.model)
 
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	req, err := client.NewRequestWithUrlQuery(HttpMethod.PutMethod, resource, bytes.NewReader(bodyXml), queryArgs)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	if supervisionToken != "" {
 		req.Header.Set(HttpHeaderOdpsSupervisionToken, supervisionToken)
 	}
 
-	return client.DoWithParseFunc(req, nil)
+	return errors.WithStack(client.DoWithParseFunc(req, nil))
 }
 
 func (sc *SecurityConfig) CheckPermissionUsingAcl() bool {

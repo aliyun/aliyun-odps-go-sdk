@@ -3,6 +3,7 @@ package odps
 import (
 	"encoding/json"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
+	"github.com/pkg/errors"
 )
 
 type Column struct {
@@ -30,22 +31,22 @@ func (c *Column) UnmarshalJSON(data []byte) error {
 	var cs ColumnShadow
 	err := json.Unmarshal(data, &cs)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	_type, err := datatype.ParseDataType(cs.Type)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	*c = Column{
-		Name: cs.Name,
-		Type: _type,
-		Comment: cs.Comment,
-		Label: cs.Label,
-		IsNullable: cs.IsNullable,
+		Name:            cs.Name,
+		Type:            _type,
+		Comment:         cs.Comment,
+		Label:           cs.Label,
+		IsNullable:      cs.IsNullable,
 		HasDefaultValue: cs.HasDefaultValue,
-		ExtendedLabels: cs.ExtendedLabels,
+		ExtendedLabels:  cs.ExtendedLabels,
 	}
 
 	return nil

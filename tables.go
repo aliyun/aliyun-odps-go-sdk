@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"github.com/pkg/errors"
 	"net/url"
 	"strings"
 )
@@ -64,7 +65,7 @@ func (tables *Tables) List(c chan Table, extended bool, name, owner string) erro
 	for {
 		err := client.GetWithModel(resource, queryArgs, &resModel)
 		if err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 
 		if len(resModel.Tables) == 0 {
@@ -109,7 +110,7 @@ func (tables *Tables) BatchLoadTables(tableNames []string) ([]Table, error) {
 
 	type ResModel struct {
 		XMLName xml.Name `xml:"Tables"`
-		Table []tableModel
+		Table   []tableModel
 	}
 
 	var resModel ResModel
@@ -122,7 +123,7 @@ func (tables *Tables) BatchLoadTables(tableNames []string) ([]Table, error) {
 
 	err := client.DoXmlWithModel(HttpMethod.PostMethod, resource, queryArgs, &postBodyModel, &resModel)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	ret := make([]Table, len(resModel.Table))
@@ -140,11 +141,11 @@ func (tables *Tables) BatchLoadTables(tableNames []string) ([]Table, error) {
 func (tables *Tables) Create(
 	schema TableSchema,
 	createIfNotExists bool,
-	hints, alias map[string]string) (*Instance, error)  {
+	hints, alias map[string]string) (*Instance, error) {
 
 	sql, err := schema.ToSQLString(tables.projectName, createIfNotExists)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	task := NewSqlTask("SQLCreateTableTask", sql, "", nil)
@@ -167,15 +168,15 @@ func (tables *Tables) Create(
 func (tables *Tables) CreateAndWait(
 	schema TableSchema,
 	createIfNotExists bool,
-	hints, alias map[string]string) error  {
+	hints, alias map[string]string) error {
 
 	instance, err := tables.Create(schema, createIfNotExists, hints, alias)
 
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
-	return instance.WaitForSuccess()
+	return errors.WithStack(instance.WaitForSuccess())
 }
 
 // CreateExternal 创建外部表, 表的内容在schema中， 需要提前构建schema
@@ -184,11 +185,11 @@ func (tables *Tables) CreateExternal(
 	createIfNotExists bool,
 	serdeProperties map[string]string,
 	jars []string,
-	hints, alias map[string]string) (*Instance, error)  {
+	hints, alias map[string]string) (*Instance, error) {
 
 	sql, err := schema.ToExternalSQLString(tables.projectName, createIfNotExists, serdeProperties, jars)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	task := NewSqlTask("SQLCreateExternalTableTask", sql, "", nil)
@@ -205,7 +206,8 @@ func (tables *Tables) CreateExternal(
 
 	instances := NewInstances(tables.odpsIns, tables.projectName)
 
-	return instances.CreateTask(tables.projectName, &task)
+	i, err := instances.CreateTask(tables.projectName, &task)
+	return i, errors.WithStack(err)
 }
 
 func (tables *Tables) CreateExternalAndWait(
@@ -213,15 +215,15 @@ func (tables *Tables) CreateExternalAndWait(
 	createIfNotExists bool,
 	serdeProperties map[string]string,
 	jars []string,
-	hints, alias map[string]string) error  {
+	hints, alias map[string]string) error {
 
 	instance, err := tables.CreateExternal(schema, createIfNotExists, serdeProperties, jars, hints, alias)
 
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
-	return instance.WaitForSuccess()
+	return errors.WithStack(instance.WaitForSuccess())
 }
 
 func (tables *Tables) CreateWithDataHub(
@@ -229,11 +231,11 @@ func (tables *Tables) CreateWithDataHub(
 	createIfNotExists bool,
 	shardNum,
 	hubLifecycle int,
-	) (*Instance, error)  {
+) (*Instance, error) {
 
 	sql, err := schema.toSQLString(tables.projectName, createIfNotExists, false)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	var sb strings.Builder
@@ -251,7 +253,8 @@ func (tables *Tables) CreateWithDataHub(
 
 	instances := NewInstances(tables.odpsIns, tables.projectName)
 
-	return instances.CreateTask(tables.projectName, &task)
+	i, err := instances.CreateTask(tables.projectName, &task)
+	return i, errors.WithStack(err)
 }
 
 func (tables *Tables) CreateWithDataHubAndWait(
@@ -259,14 +262,14 @@ func (tables *Tables) CreateWithDataHubAndWait(
 	createIfNotExists bool,
 	shardNum,
 	hubLifecycle int,
-) error  {
+) error {
 	instance, err := tables.CreateWithDataHub(schema, createIfNotExists, shardNum, hubLifecycle)
 
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
-	return instance.WaitForSuccess()
+	return errors.WithStack(instance.WaitForSuccess())
 }
 
 // Delete 删除表
@@ -285,14 +288,15 @@ func (tables *Tables) Delete(tableName string, ifExists bool) (*Instance, error)
 
 	sqlTask := NewSqlTask("SQLDropTableTask", sqlBuilder.String(), "", nil)
 	instances := NewInstances(tables.odpsIns, tables.projectName)
-	return instances.CreateTask(tables.projectName, &sqlTask)
+	i, err := instances.CreateTask(tables.projectName, &sqlTask)
+	return i, errors.WithStack(err)
 }
 
 func (tables *Tables) DeleteAndWait(tableName string, ifExists bool) error {
 	instance, err := tables.Delete(tableName, ifExists)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
-	return instance.WaitForSuccess()
+	return errors.WithStack(instance.WaitForSuccess())
 }

@@ -1,7 +1,7 @@
 package datatype
 
 import (
-	"errors"
+	"github.com/pkg/errors"
 	"reflect"
 )
 
@@ -68,10 +68,10 @@ func tryConvertToMapType(t reflect.Type) (DataType, error) {
 	return NewMapType(keyType, valueType), nil
 }
 
-func tryConvertToStructType(t reflect.Type) (DataType, error)  {
+func tryConvertToStructType(t reflect.Type) (DataType, error) {
 	structFields := make([]StructFieldType, t.NumField())
 
-	for i, n := 0, t.NumField(); i < n; i ++ {
+	for i, n := 0, t.NumField(); i < n; i++ {
 		field := t.Field(i)
 		fieldType, err := TryConvertToOdpsType(field.Type)
 
@@ -79,7 +79,6 @@ func tryConvertToStructType(t reflect.Type) (DataType, error)  {
 		if fieldName == "" {
 			fieldName = field.Name
 		}
-
 
 		if err != nil {
 			return nil, err

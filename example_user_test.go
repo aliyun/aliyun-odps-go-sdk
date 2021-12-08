@@ -1,12 +1,15 @@
 package odps_test
 
-import odps "github.com/aliyun/aliyun-odps-go-sdk"
+import (
+	odps "github.com/aliyun/aliyun-odps-go-sdk"
+	"log"
+)
 
-func ExampleUser()  {
+func ExampleUser() {
 	user := odps.NewUser("1372788524300720", odpsIns, "project_1")
 	err := user.Load()
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	}
 
 	// Output:

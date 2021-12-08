@@ -1,7 +1,7 @@
 package datatype
 
 import (
-	"fmt"
+	"github.com/pkg/errors"
 	"strconv"
 	"strings"
 	"unicode"
@@ -21,13 +21,13 @@ func ParseDataType(name string) (DataType, error) {
 	dataType, err := parser.parse()
 
 	if parser.hasTokenLeft() {
-		return nil, fmt.Errorf(
+		return nil, errors.Errorf(
 			"parse datatype error: %s, unexpected token: %s at: %d",
 			name, parser.peekToken(), parser.index)
 	}
 
 	if err != nil {
-		err = fmt.Errorf("parse datatype error: %s, %s", name, err.Error())
+		err = errors.Errorf("parse datatype error: %s, %s", name, err.Error())
 	}
 
 	return dataType, err
@@ -84,7 +84,7 @@ func (parser *typeParser) parse() (DataType, error) {
 	case DECIMAL:
 		return parser.parseDecimal()
 	case TypeUnknown:
-		return nil, fmt.Errorf("unknown data type: %s", token)
+		return nil, errors.Errorf("unknown data type: %s", token)
 	default:
 		return parser.newPrimitive(typeCode)
 	}
@@ -109,7 +109,7 @@ func (parser *typeParser) expect(expected string) error {
 	nextToken := parser.consumeToken()
 
 	if nextToken != expected {
-		return fmt.Errorf("expect %s, but got %s at %d", expected, nextToken, parser.index)
+		return errors.Errorf("expect %s, but got %s at %d", expected, nextToken, parser.index)
 	}
 
 	return nil
@@ -132,7 +132,7 @@ func (parser *typeParser) parserChar() (CharType, error) {
 	}
 
 	if charLength > 255 || charLength < 1 {
-		return CharType{}, fmt.Errorf("length of char is 1~255, get %d", charLength)
+		return CharType{}, errors.Errorf("length of char is 1~255, get %d", charLength)
 	}
 
 	err = parser.expect(")")
@@ -156,7 +156,7 @@ func (parser *typeParser) parserVarchar() (VarcharType, error) {
 	}
 
 	if charLength > 65535 || charLength < 1 {
-		return VarcharType{}, fmt.Errorf("length of varchar is 1~255, get %d", charLength)
+		return VarcharType{}, errors.Errorf("length of varchar is 1~255, get %d", charLength)
 	}
 
 	err = parser.expect(")")
@@ -298,7 +298,7 @@ LOOP:
 		case ">":
 			break LOOP
 		default:
-			return StructType{}, fmt.Errorf("unexpected token %s at %d", nextToken, parser.index)
+			return StructType{}, errors.Errorf("unexpected token %s at %d", nextToken, parser.index)
 		}
 	}
 

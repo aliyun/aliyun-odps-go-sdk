@@ -3,7 +3,7 @@ package odps
 import (
 	"encoding/json"
 	"encoding/xml"
-	"fmt"
+	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -110,14 +110,14 @@ func (instance *Instance) Load() error {
 
 		decoder := xml.NewDecoder(res.Body)
 		if err := decoder.Decode(&resModel); err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 
 		instance.status = resModel.Status
 		return nil
 	})
 
-	return err
+	return errors.WithStack(err)
 }
 
 func (instance *Instance) Terminate() error {
@@ -130,7 +130,8 @@ func (instance *Instance) Terminate() error {
 	}
 
 	client := instance.odpsIns.restClient
-	return client.DoXmlWithParseFunc("PUT", instance.resourceUrl, nil, &bodyModel, nil)
+	err := client.DoXmlWithParseFunc("PUT", instance.resourceUrl, nil, &bodyModel, nil)
+	return errors.WithStack(err)
 }
 
 // GetTasks 绝大部分时候返回一个Task(名字与提交的task名字相同)，返回多个task的情况我还没有遇到过
@@ -148,7 +149,7 @@ func (instance *Instance) GetTasks() ([]TaskInInstance, error) {
 
 	err := client.GetWithModel(instance.resourceUrl, urlQuery, &resModel)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return resModel.Tasks, nil
@@ -169,7 +170,7 @@ func (instance *Instance) GetTaskProgress(taskName string) ([]TaskProgressStage,
 
 	err := client.GetWithModel(instance.resourceUrl, queryArgs, &resModel)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return resModel.Stages, nil
@@ -186,10 +187,10 @@ func (instance *Instance) GetTaskDetail(taskName string) ([]byte, error) {
 	err := client.GetWithParseFunc(instance.resourceUrl, queryArgs, func(res *http.Response) error {
 		var err error
 		body, err = ioutil.ReadAll(res.Body)
-		return err
+		return errors.WithStack(err)
 	})
 
-	return body, err
+	return body, errors.WithStack(err)
 }
 
 func (instance *Instance) GetTaskSummary(taskName string) (*TaskSummary, error) {
@@ -209,11 +210,11 @@ func (instance *Instance) GetTaskSummary(taskName string) (*TaskSummary, error) 
 
 	err := client.GetWithParseFunc(instance.resourceUrl, queryArgs, func(res *http.Response) error {
 		decoder := json.NewDecoder(res.Body)
-		return decoder.Decode(&resModel)
+		return errors.WithStack(decoder.Decode(&resModel))
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	taskSummary := TaskSummary{
@@ -221,7 +222,7 @@ func (instance *Instance) GetTaskSummary(taskName string) (*TaskSummary, error) 
 		Summary:     resModel.Instance.Summary,
 	}
 
-	return &taskSummary, err
+	return &taskSummary, errors.WithStack(err)
 }
 
 func (instance *Instance) GetTaskQuotaJson(taskName string) (string, error) {
@@ -235,11 +236,11 @@ func (instance *Instance) GetTaskQuotaJson(taskName string) (string, error) {
 	err := client.GetWithParseFunc(instance.resourceUrl, queryArgs, func(res *http.Response) error {
 		var err error
 		body, err = ioutil.ReadAll(res.Body)
-		return err
+		return errors.WithStack(err)
 	})
 
 	if err != nil {
-		return "", err
+		return "", errors.WithStack(err)
 	}
 
 	return string(body), nil
@@ -256,11 +257,11 @@ func (instance *Instance) GetCachedInfo() (string, error) {
 	err := client.GetWithParseFunc(instance.resourceUrl, queryArgs, func(res *http.Response) error {
 		var err error
 		body, err = ioutil.ReadAll(res.Body)
-		return err
+		return errors.WithStack(err)
 	})
 
 	if err != nil {
-		return "", err
+		return "", errors.WithStack(err)
 	}
 
 	return string(body), nil
@@ -294,12 +295,12 @@ func (instance *Instance) WaitForSuccess() error {
 	for {
 		err := instance.Load()
 		if err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 
 		tasks, err := instance.GetTasks()
 		if err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 
 		success := true
@@ -307,7 +308,7 @@ func (instance *Instance) WaitForSuccess() error {
 		for _, task := range tasks {
 			switch task.Status {
 			case TaskFailed, TaskCancelled, TaskSuspended:
-				return fmt.Errorf("get task %s with status %s", task.Name, task.Status)
+				return errors.Errorf("get task %s with status %s", task.Name, task.Status)
 			case TaskSuccess:
 			case TaskRunning, TaskWaiting:
 				success = false
@@ -337,7 +338,7 @@ func (instance *Instance) GetResult() ([]TaskResult, error) {
 	var resModel ResModel
 	err := client.GetWithModel(instance.resourceUrl, queryArgs, &resModel)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return resModel.Tasks, nil
@@ -347,7 +348,7 @@ func (status *InstanceStatus) UnmarshalXML(d *xml.Decoder, start xml.StartElemen
 	var s string
 
 	if err := d.DecodeElement(&s, &start); err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	*status = InstancesStatusFromStr(s)
@@ -357,5 +358,5 @@ func (status *InstanceStatus) UnmarshalXML(d *xml.Decoder, start xml.StartElemen
 
 func (status *InstanceStatus) MarshalXML(d *xml.Encoder, start xml.StartElement) error {
 	s := status.String()
-	return d.EncodeElement(s, start)
+	return errors.WithStack(d.EncodeElement(s, start))
 }

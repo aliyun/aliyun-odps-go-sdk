@@ -5,6 +5,7 @@ import (
 	"github.com/fetchadd/arrow"
 	"github.com/fetchadd/arrow/array"
 	"github.com/fetchadd/arrow/ipc"
+	"github.com/pkg/errors"
 )
 
 type RecordArrowWriter struct {
@@ -33,12 +34,12 @@ func (writer *RecordArrowWriter) GetHttpError() error {
 	rOrE := <-writer.resChan
 
 	if rOrE.err != nil {
-		return rOrE.err
+		return errors.WithStack(rOrE.err)
 	}
 
 	res := rOrE.res
 	if res.StatusCode/100 != 2 {
-		return odps.NewHttpNotOk(res)
+		return errors.WithStack(odps.NewHttpNotOk(res))
 	}
 
 	return nil
@@ -49,12 +50,12 @@ func (writer *RecordArrowWriter) Close() error {
 	err2 := writer.httpWriter.Close()
 
 	if err1 != nil {
-		return err1
+		return errors.WithStack(err1)
 	}
 
 	if err2 != nil {
-		return err2
+		return errors.WithStack(err2)
 	}
 
-	return writer.GetHttpError()
+	return errors.WithStack(writer.GetHttpError())
 }

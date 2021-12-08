@@ -2,6 +2,7 @@ package odps
 
 import (
 	"encoding/xml"
+	"github.com/pkg/errors"
 	"strings"
 )
 
@@ -69,7 +70,7 @@ func (status *TaskStatus) UnmarshalXML(d *xml.Decoder, start xml.StartElement) e
 	var s string
 
 	if err := d.DecodeElement(&s, &start); err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	*status = TaskStatusFromStr(s)
@@ -79,7 +80,7 @@ func (status *TaskStatus) UnmarshalXML(d *xml.Decoder, start xml.StartElement) e
 
 func (status *TaskStatus) MarshalXML(d *xml.Encoder, start xml.StartElement) error {
 	s := status.String()
-	return d.EncodeElement(s, start)
+	return errors.WithStack(d.EncodeElement(s, start))
 }
 
 type TaskProgressStage struct {

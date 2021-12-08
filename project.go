@@ -3,6 +3,7 @@ package odps
 import (
 	"encoding/xml"
 	"fmt"
+	"github.com/pkg/errors"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -29,7 +30,6 @@ const (
 	// ProjectExternalExternal 项目类型，映射到Odps的外部项目，例如hive
 	ProjectExternalExternal = "external"
 )
-
 
 type Project struct {
 	model         projectModel
@@ -117,7 +117,7 @@ func (p *Project) _loadFromOdps(params optionalParams) (*projectModel, error) {
 	parseFunc := func(res *http.Response) error {
 		decoder := xml.NewDecoder(res.Body)
 		if err := decoder.Decode(&model); err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 
 		header := res.Header
@@ -140,7 +140,7 @@ func (p *Project) _loadFromOdps(params optionalParams) (*projectModel, error) {
 	}
 
 	if err := client.GetWithParseFunc(resource, urlQuery, parseFunc); err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return &model, nil
@@ -158,7 +158,7 @@ func (p *Project) Load() error {
 			}
 		}
 
-		return err
+		return errors.WithStack(err)
 	}
 
 	p.exists = true
@@ -205,7 +205,7 @@ func (p *Project) GetAllProperties() (Properties, error) {
 
 	model, err := p._loadFromOdps(optionalParams{withAllProperties: true})
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	p.allProperties = model.Properties
@@ -223,7 +223,7 @@ func (p *Project) GetDefaultCluster() (string, error) {
 
 	model, err := p._loadFromOdps(optionalParams{usedByGroupApi: true})
 	if err != nil {
-		return "", err
+		return "", errors.WithStack(err)
 	}
 
 	p.model.DefaultCluster = model.DefaultCluster
@@ -242,7 +242,7 @@ func (p *Project) GetClusters() ([]Cluster, error) {
 
 	model, err := p._loadFromOdps(optionalParams{usedByGroupApi: true})
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	p.model.DefaultCluster = model.DefaultCluster
@@ -260,7 +260,7 @@ func (p *Project) GetExtendedProperties() (Properties, error) {
 
 	model, err := p._loadFromOdps(optionalParams{extendedProperties: true})
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	p.model.ExtendedProperties = model.ExtendedProperties
@@ -295,7 +295,7 @@ func (p *Project) GetTunnelEndpoint() (string, error) {
 	queryArgs.Set("service", "")
 	req, err := client.NewRequestWithUrlQuery(HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
-		return "", err
+		return "", errors.WithStack(err)
 	}
 
 	schema := req.URL.Scheme
@@ -303,12 +303,11 @@ func (p *Project) GetTunnelEndpoint() (string, error) {
 	err = client.DoWithParseFunc(req, func(res *http.Response) error {
 		b, err := ioutil.ReadAll(res.Body)
 		if err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 		tunnelEndpoint = string(b)
 		return nil
 	})
 
-	return fmt.Sprintf("%s://%s", schema, tunnelEndpoint), err
+	return fmt.Sprintf("%s://%s", schema, tunnelEndpoint), errors.WithStack(err)
 }
-

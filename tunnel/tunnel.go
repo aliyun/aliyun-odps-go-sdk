@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
+	"github.com/pkg/errors"
 	"time"
 )
 
@@ -40,7 +41,7 @@ func NewTunnel(odpsIns *odps.Odps, endpoint string) Tunnel {
 func NewTunnelFromProject(project odps.Project) (Tunnel, error) {
 	endpoint, err := project.GetTunnelEndpoint()
 	if err != nil {
-		return Tunnel{}, nil
+		return Tunnel{}, errors.WithStack(err)
 	}
 
 	tunnel := Tunnel{
@@ -72,29 +73,35 @@ func (t *Tunnel) SetTcpConnectionTimeout(tcpConnectionTimeout time.Duration) {
 }
 
 func (t *Tunnel) CreateUploadSession(projectName, tableName string, opts ...Option) (*UploadSession, error) {
-	return CreateUploadSession(projectName, tableName, t.getRestClient(), opts...)
+	session, err := CreateUploadSession(projectName, tableName, t.getRestClient(), opts...)
+
+	return session, errors.WithStack(err)
 }
 
 func (t *Tunnel) AttachToExistedUploadSession(
 	projectName, tableName, sessionId string,
 	opts ...Option) (*UploadSession, error) {
-	return AttachToExistedUploadSession(sessionId, projectName, tableName, t.getRestClient(), opts...)
+	session, err := AttachToExistedUploadSession(sessionId, projectName, tableName, t.getRestClient(), opts...)
+	return session, errors.WithStack(err)
 }
 
 func (t *Tunnel) CreateDownloadSession(projectName, tableName string, opts ...Option) (*DownloadSession, error) {
-	return CreateDownloadSession(projectName, tableName, t.getRestClient(), opts...)
+	session, err := CreateDownloadSession(projectName, tableName, t.getRestClient(), opts...)
+	return session, errors.WithStack(err)
 }
 
 func (t *Tunnel) CreateInstanceResultDownloadSession(
 	projectName, instanceId string, opts ...InstanceOption,
 ) (*InstanceResultDownloadSession, error) {
-	return CreateInstanceResultDownloadSession(projectName, instanceId, t.getRestClient(), opts...)
+	session, err := CreateInstanceResultDownloadSession(projectName, instanceId, t.getRestClient(), opts...)
+	return session, errors.WithStack(err)
 }
 
 func (t *Tunnel) AttachToExistedDownloadSession(
 	projectName, tableName, sessionId string,
 	opts ...Option) (*DownloadSession, error) {
-	return AttachToExistedDownloadSession(sessionId, projectName, tableName, t.getRestClient(), opts...)
+	session, err := AttachToExistedDownloadSession(sessionId, projectName, tableName, t.getRestClient(), opts...)
+	return session, errors.WithStack(err)
 }
 
 func (t *Tunnel) getRestClient() odps.RestClient {

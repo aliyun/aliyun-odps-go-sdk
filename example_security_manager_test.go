@@ -3,13 +3,14 @@ package odps_test
 import (
 	"fmt"
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
+	"log"
 )
 
 func ExampleSecurityManager_GetSecurityConfig() {
 	sm := odps.NewSecurityManager(odpsIns, "project_1")
 	sc, err := sm.GetSecurityConfig(true)
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(fmt.Sprintf("%+v", sc))
 	}
@@ -24,7 +25,7 @@ func ExampleSecurityManager_CheckPermissionV1() {
 
 	r, err := sm.CheckPermissionV1(p)
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(fmt.Sprintf("%v", r))
 	}
@@ -38,7 +39,7 @@ func ExampleSecurityManager_CheckPermissionV0() {
 
 	r, err := sm.CheckPermissionV0(odps.ObjectTypeTable, "sale_detail", odps.ActionTypeAll, nil)
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(fmt.Sprintf("%v", r))
 	}
@@ -50,7 +51,7 @@ func ExampleSecurityManager_GetPolicy() {
 	sm := odps.NewSecurityManager(odpsIns, "project_1")
 	policy, err := sm.GetPolicy()
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(policy)
 	}
@@ -62,7 +63,7 @@ func ExampleSecurityManager_ListUsers() {
 	sm := odps.NewSecurityManager(odpsIns, "project_1")
 	users, err := sm.ListUsers()
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		for _, user := range users {
 			println(fmt.Sprintf("id=%s, name=%s", user.ID(), user.DisplayName()))
@@ -76,7 +77,7 @@ func ExampleSecurityManager_RunQuery() {
 	sm := odps.NewSecurityManager(odpsIns, "project_1")
 	result, err := sm.RunQuery("show grants for aliyun$odpstest1@aliyun.com;", true, "")
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(fmt.Sprintf("ok: %s", result))
 	}

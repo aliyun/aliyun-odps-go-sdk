@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"github.com/pkg/errors"
 	"net/url"
 	"strconv"
 	"strings"
@@ -87,15 +88,15 @@ func (t *Table) Load() error {
 
 	err := client.GetWithModel(resource, nil, &t.model)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	err = json.Unmarshal([]byte(t.model.Schema), &t.tableSchema)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
-	return t.LoadExtendedInfo()
+	return errors.WithStack(t.LoadExtendedInfo())
 }
 
 func (t *Table) LoadExtendedInfo() error {
@@ -108,17 +109,17 @@ func (t *Table) LoadExtendedInfo() error {
 	var model tableModel
 	err := client.GetWithModel(resource, urlQuery, &model)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
-	return json.Unmarshal([]byte(model.Schema), &t.tableSchema)
+	return errors.WithStack(json.Unmarshal([]byte(model.Schema), &t.tableSchema))
 }
 
 func (t *Table) Name() string {
 	return t.model.Name
 }
 
-func (t *Table) ResourceUrl() string  {
+func (t *Table) ResourceUrl() string {
 	rb := ResourceBuilder{projectName: t.ProjectName()}
 	return rb.Table(t.Name())
 }
@@ -298,7 +299,7 @@ func (t *Table) ShardInfoJson() string {
 func (t *Table) GetSchema() (*TableSchema, error) {
 	err := json.Unmarshal([]byte(t.model.Schema), &t.tableSchema)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return &t.tableSchema, nil
@@ -315,16 +316,17 @@ func (t *Table) SchemaJson() string {
 func (t *Table) ExecSql(taskName, sql string) (*Instance, error) {
 	task := NewSqlTask(taskName, sql, "", nil)
 	instances := NewInstances(t.odpsIns, t.ProjectName())
-	return instances.CreateTask(t.ProjectName(), &task)
+	i, err := instances.CreateTask(t.ProjectName(), &task)
+	return i, errors.WithStack(err)
 }
 
 func (t *Table) ExecSqlAndWait(taskName, sql string) error {
 	instance, err := t.ExecSql(taskName, sql)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
-	return instance.WaitForSuccess()
+	return errors.WithStack(instance.WaitForSuccess())
 }
 
 // AddPartition Example: AddPartition(true, "region='10026, name='abc'")
@@ -339,15 +341,16 @@ func (t *Table) AddPartition(ifNotExists bool, partitionKey string) (*Instance, 
 	sb.WriteString(partitionKey)
 	sb.WriteString("\n);")
 
-	return t.ExecSql("SQLAddPartitionTask", sb.String())
+	i, err := t.ExecSql("SQLAddPartitionTask", sb.String())
+	return i, errors.WithStack(err)
 }
 
 func (t *Table) AddPartitionAndWait(ifNotExists bool, partitionKey string) error {
 	instance, err := t.AddPartition(ifNotExists, partitionKey)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
-	return instance.WaitForSuccess()
+	return errors.WithStack(instance.WaitForSuccess())
 }
 
 // DeletePartition Example: DeletePartition(true, "region='10026, name='abc'")
@@ -362,7 +365,7 @@ func (t *Table) DeletePartition(ifExists bool, partitionKey string) error {
 	sb.WriteString(partitionKey)
 	sb.WriteString("\n);")
 
-	return t.ExecSqlAndWait("SQLDropPartitionTask", sb.String())
+	return errors.WithStack(t.ExecSqlAndWait("SQLDropPartitionTask", sb.String()))
 }
 
 // GetPartitions partitionKey格式形如"region='10026, name='abc'"
@@ -402,7 +405,7 @@ func (t *Table) GetPartitions(c chan Partition, partitionKey string) error {
 	for {
 		err := client.GetWithModel(resource, queryArgs, &resModel)
 		if err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 
 		if len(resModel.Partitions) == 0 {
@@ -417,9 +420,9 @@ func (t *Table) GetPartitions(c chan Partition, partitionKey string) error {
 				kv[c.Name] = c.Value
 			}
 
-			pModel.CreateTime = GMTTime(time.Unix(p.CreationTime,  0))
+			pModel.CreateTime = GMTTime(time.Unix(p.CreationTime, 0))
 			pModel.LastDDLTime = GMTTime(time.Unix(p.LastDDLTime, 0))
-			pModel.LastModifiedTime = GMTTime(time.Unix(p.LastModifiedTime , 0))
+			pModel.LastModifiedTime = GMTTime(time.Unix(p.LastModifiedTime, 0))
 			pModel.PartitionSize = p.PartitionSize
 			pModel.PartitionRecordNum = p.PartitionRecordCount
 
@@ -460,34 +463,33 @@ func (t *Table) Read(partition string, columns []string, limit int, timezone str
 
 	req, err := client.NewRequestWithUrlQuery(HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	if timezone != "" {
 		req.Header.Set(HttpHeaderSqlTimezone, timezone)
 	}
 
-
 	res, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return csv.NewReader(res.Body), nil
 }
 
-func (t *Table) CreateShards(shardCount int) error  {
+func (t *Table) CreateShards(shardCount int) error {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("alter table %s.%s", t.ProjectName(), t.Name()))
 	sb.WriteString(fmt.Sprintf("\ninto %d shards;", shardCount))
-	return t.ExecSqlAndWait("SQLCreateShardsTask", sb.String())
+	return errors.WithStack(t.ExecSqlAndWait("SQLCreateShardsTask", sb.String()))
 }
 
 func (t *TableType) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 	var s string
 
 	if err := d.DecodeElement(&s, &start); err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	*t = TableTypeFromStr(s)
@@ -497,5 +499,5 @@ func (t *TableType) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 
 func (t TableType) MarshalXML(d *xml.Encoder, start xml.StartElement) error {
 	s := t.String()
-	return d.EncodeElement(s, start)
+	return errors.WithStack(d.EncodeElement(s, start))
 }

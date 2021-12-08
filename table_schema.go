@@ -2,9 +2,9 @@ package odps
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"github.com/fetchadd/arrow"
+	"github.com/pkg/errors"
 	"html/template"
 	"strings"
 )
@@ -188,7 +188,7 @@ func (schema *TableSchema) toSQLString(projectName string, createIfNotExists, is
 func (schema *TableSchema) ToSQLString(projectName string, createIfNotExists bool) (string, error) {
 	baseSql, err := schema.toSQLString(projectName, createIfNotExists, false)
 	if err != nil {
-		return "", err
+		return "", errors.WithStack(err)
 	}
 
 	if schema.Lifecycle > 0 {
@@ -217,7 +217,7 @@ func (schema *TableSchema) ToExternalSQLString(
 	baseSql, err := schema.toSQLString(projectName, createIfNotExists, true)
 
 	if err != nil {
-		return "", err
+		return "", errors.WithStack(err)
 	}
 
 	var builder strings.Builder
@@ -271,9 +271,9 @@ func (schema *TableSchema) ToArrowSchema() *arrow.Schema {
 	fields := make([]arrow.Field, len(schema.Columns))
 	for i, column := range schema.Columns {
 		arrowType, _ := TypeToArrowType(column.Type)
-		fields[i] = arrow.Field {
-			Name: column.Name,
-			Type: arrowType,
+		fields[i] = arrow.Field{
+			Name:     column.Name,
+			Type:     arrowType,
 			Nullable: column.IsNullable,
 		}
 	}
@@ -281,7 +281,7 @@ func (schema *TableSchema) ToArrowSchema() *arrow.Schema {
 	return arrow.NewSchema(fields, nil)
 }
 
-func (schema *TableSchema) FieldByName(name string) (Column, bool)  {
+func (schema *TableSchema) FieldByName(name string) (Column, bool) {
 	for _, c := range schema.Columns {
 		if c.Name == name {
 			return c, true

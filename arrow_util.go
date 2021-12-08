@@ -1,9 +1,9 @@
 package odps
 
 import (
-	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
 	"github.com/fetchadd/arrow"
+	"github.com/pkg/errors"
 )
 
 // TypeToArrowType odps数据类型转换为arrow数据类型
@@ -100,5 +100,5 @@ func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error) {
 		return arrow.MapOf(keyType, valueType), nil
 	}
 
-	return arrow.Null, fmt.Errorf("unknown odps data type: %s", odpsType.Name())
+	return arrow.Null, errors.Errorf("unknown odps data type: %s", odpsType.Name())
 }

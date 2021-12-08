@@ -64,7 +64,7 @@ func ExampleTableSchema_ToSQLString() {
 	)
 
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(externalSql)
 	}
@@ -75,7 +75,7 @@ func ExampleTable_Load() {
 	table := odps.NewTable(odpsIns, "project_1", "has_struct")
 	err := table.Load()
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		schema := table.Schema()
 		println(fmt.Sprintf("%+v", schema.Columns))
@@ -88,12 +88,12 @@ func ExampleTable_AddPartition() {
 	table := odps.NewTable(odpsIns, "project_1", "sale_detail")
 	instance, err := table.AddPartition(true, "sale_date='202111',region='hangzhou'")
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	}
 
 	err = instance.WaitForSuccess()
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	}
 
 	results := instance.TaskResults()
@@ -112,7 +112,7 @@ func ExampleTable_GetPartitions() {
 		err := table.GetPartitions(c, "")
 
 		if err != nil {
-			println(err.Error())
+			log.Fatalf("%+v", err)
 		}
 	}()
 
@@ -133,16 +133,16 @@ func ExampleTable_ExecSql() {
 	//instance, err := table.ExecSql("SelectSale_detail", "select * from sale_detail;")
 	instance, err := table.ExecSql("Select_has_struct", "select * from has_struct;")
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		err = instance.WaitForSuccess()
 		if err != nil {
-			println(err.Error())
+			log.Fatalf("%+v", err)
 		}
 
 		results, err := instance.GetResult()
 		if err != nil {
-			println(err.Error())
+			log.Fatalf("%+v", err)
 		} else if len(results) > 0 {
 			println(fmt.Sprintf("%+v", results[0]))
 		}
@@ -153,12 +153,12 @@ func ExampleTable_ExecSql() {
 
 func ExampleTable_Read() {
 	table := odps.NewTable(odpsIns, "project_1", "sale_detail")
-	columns := []string {
+	columns := []string{
 		"shop_name", "customer_id", "total_price", "sale_date", "region",
 	}
 	reader, err := table.Read("", columns, -1, "")
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		for {
 			record, err := reader.Read()

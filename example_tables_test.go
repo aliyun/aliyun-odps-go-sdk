@@ -4,6 +4,7 @@ import (
 	"fmt"
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
+	"log"
 )
 
 func ExampleTables_List() {
@@ -13,7 +14,7 @@ func ExampleTables_List() {
 	go func() {
 		err := tables.List(c, true, "", "")
 		if err != nil {
-			println(err.Error())
+			log.Fatalf("%+v", err)
 		}
 	}()
 
@@ -26,7 +27,7 @@ func ExampleTables_List() {
 
 func ExampleTables_BatchLoadTables() {
 	tablesIns := odps.NewTables(odpsIns)
-	tableNames := []string {
+	tableNames := []string{
 		"jet_mr_input",
 		"jet_smode_test",
 		"odps_smoke_table",
@@ -35,25 +36,24 @@ func ExampleTables_BatchLoadTables() {
 
 	tables, err := tablesIns.BatchLoadTables(tableNames)
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		for _, table := range tables {
 			println(fmt.Sprintf("%s, %s, %s", table.Name(), table.TableID(), table.Type()))
 		}
 
-		schema, err := tables[len(tables) - 1].GetSchema()
+		schema, err := tables[len(tables)-1].GetSchema()
 		if err != nil {
-			println(err.Error())
+			log.Fatalf("%+v", err)
 		} else {
 			for _, c := range schema.Columns {
-				println(fmt.Sprintf("%s, %s, %t, %s",  c.Name, c.Type, c.IsNullable, c.Comment))
+				println(fmt.Sprintf("%s, %s, %t, %s", c.Name, c.Type, c.IsNullable, c.Comment))
 			}
 		}
 	}
 
 	// Output:
 }
-
 
 func ExampleTables_Create() {
 	c1 := odps.Column{
@@ -99,11 +99,11 @@ func ExampleTables_Create() {
 	tables := odps.NewTables(odpsIns, "project_1")
 	instance, err := tables.Create(schema, true, hints, nil)
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		err := instance.WaitForSuccess()
 		if err != nil {
-			println(err.Error())
+			log.Fatalf("%+v", err)
 		}
 	}
 
@@ -115,7 +115,7 @@ func ExampleTables_DeleteAndWait() {
 	tables := odps.NewTables(odpsIns, "project_1")
 	err := tables.DeleteAndWait("user1", false)
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	}
 
 	// Output:

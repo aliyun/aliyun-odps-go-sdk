@@ -3,14 +3,14 @@ package odps_test
 import (
 	"fmt"
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
+	"log"
 	"time"
 )
-
 
 func ExampleProjects_List() {
 	// TODO remove the OUTPUT before publish
 
-	filter :=  odps.ProjectFilter{
+	filter := odps.ProjectFilter{
 		Name: "p",
 	}
 	c := make(chan odps.Project)
@@ -20,7 +20,7 @@ func ExampleProjects_List() {
 	go func() {
 		err := projects.List(c, filter)
 		if err != nil {
-			println(err.Error())
+			log.Fatalf("%+v", err)
 		}
 	}()
 
@@ -42,7 +42,7 @@ func ExampleProjects_Exists() {
 	// Output:
 }
 
-func ExampleProject()  {
+func ExampleProject() {
 	// TODO remove the OUTPUT before publish
 
 	projects := odpsIns.Projects()
@@ -83,7 +83,7 @@ func ExampleProject_GetTunnelEndpoint() {
 	project := odpsIns.DefaultProject()
 	tunnelEndpoint, err := project.GetTunnelEndpoint()
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(tunnelEndpoint)
 	}

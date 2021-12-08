@@ -2,9 +2,9 @@ package tunnel
 
 import (
 	"encoding/json"
-	"fmt"
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/fetchadd/arrow"
+	"github.com/pkg/errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -100,12 +100,12 @@ func CreateUploadSession(
 
 	req, err := session.newInitiationRequest()
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	err = session.loadInformation(req)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return &session, nil
@@ -132,7 +132,7 @@ func AttachToExistedUploadSession(
 
 	err := session.Load()
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return &session, nil
@@ -166,7 +166,7 @@ func (u *UploadSession) ResourceUrl() string {
 func (u *UploadSession) OpenRecordWriter(blockId int) (*RecordArrowWriter, error) {
 	conn, err := u.newUploadConnection(blockId, u.UseArrow)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	writer := newRecordArrowWriter(conn, u.arrowSchema)
@@ -176,21 +176,21 @@ func (u *UploadSession) OpenRecordWriter(blockId int) (*RecordArrowWriter, error
 func (u *UploadSession) Load() error {
 	req, err := u.newLoadRequest()
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
-	return u.loadInformation(req)
+	return errors.WithStack(u.loadInformation(req))
 }
 
 func (u *UploadSession) Commit(blockIds []int) error {
 	err := u.Load()
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	errMsgFmt := "blocks server got are %v, blocks uploaded are %v"
 	if len(u.blockIds) != len(blockIds) {
-		return fmt.Errorf(errMsgFmt, u.blockIds, blockIds)
+		return errors.Errorf(errMsgFmt, u.blockIds, blockIds)
 	}
 
 	for _, idWanted := range blockIds {
@@ -204,7 +204,7 @@ func (u *UploadSession) Commit(blockIds []int) error {
 		}
 
 		if !found {
-			return fmt.Errorf(errMsgFmt, u.blockIds, blockIds)
+			return errors.Errorf(errMsgFmt, u.blockIds, blockIds)
 		}
 	}
 
@@ -216,15 +216,15 @@ func (u *UploadSession) Commit(blockIds []int) error {
 
 	req, err := u.RestClient.NewRequestWithUrlQuery(odps.HttpMethod.PostMethod, u.ResourceUrl(), nil, queryArgs)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	Retry(func() error {
 		_, err = u.RestClient.Do(req)
-		return err
+		return errors.WithStack(err)
 	})
 
-	return err
+	return errors.WithStack(err)
 }
 
 func (u *UploadSession) loadInformation(req *http.Request) error {
@@ -249,22 +249,22 @@ func (u *UploadSession) loadInformation(req *http.Request) error {
 	var resModel ResModel
 	err := u.RestClient.DoWithParseFunc(req, func(res *http.Response) error {
 		if res.StatusCode/100 != 2 {
-			return odps.NewHttpNotOk(res)
+			return errors.WithStack(odps.NewHttpNotOk(res))
 		}
 
 		u.shouldTransformDate = res.Header.Get(odps.HttpHeaderOdpsDateTransFrom) == "true"
 
 		decoder := json.NewDecoder(res.Body)
-		return decoder.Decode(&resModel)
+		return errors.WithStack(decoder.Decode(&resModel))
 	})
 
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	tableSchema, err := resModel.Schema.toTableSchema(u.TableName)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	u.Id = resModel.UploadID
@@ -295,7 +295,7 @@ func (u *UploadSession) newInitiationRequest() (*http.Request, error) {
 
 	req, err := u.RestClient.NewRequestWithUrlQuery(odps.HttpMethod.PostMethod, resource, nil, queryArgs)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	addCommonSessionHttpHeader(req.Header)
@@ -313,7 +313,7 @@ func (u *UploadSession) newLoadRequest() (*http.Request, error) {
 
 	req, err := u.RestClient.NewRequestWithUrlQuery(odps.HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	addCommonSessionHttpHeader(req.Header)
@@ -343,7 +343,7 @@ func (u *UploadSession) newUploadConnection(blockId int, useArrow bool) (*httpCo
 	req.Header.Set(odps.HttpHeaderContentType, "application/octet-stream")
 	addCommonSessionHttpHeader(req.Header)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	if u.Compressor != nil {

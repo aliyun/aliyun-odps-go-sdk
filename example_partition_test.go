@@ -3,6 +3,7 @@ package odps_test
 import (
 	"fmt"
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
+	"log"
 )
 
 func ExamplePartition_Load() {
@@ -13,7 +14,7 @@ func ExamplePartition_Load() {
 	partition := odps.NewPartition(odpsIns, "project_1", "sale_detail", kv)
 	err := partition.Load()
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(fmt.Sprintf("Name: %s", partition.Name()))
 		println(fmt.Sprintf("Record number: %d", partition.RecordNum()))
@@ -31,7 +32,7 @@ func ExamplePartition_LoadExtended() {
 	partition := odps.NewPartition(odpsIns, "project_1", "sale_detail", kv)
 	err := partition.LoadExtended()
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(fmt.Sprintf("Name: %s", partition.Name()))
 		println(fmt.Sprintf("File number: %d", partition.FileNumEx()))
@@ -41,4 +42,3 @@ func ExamplePartition_LoadExtended() {
 
 	// Output:
 }
-

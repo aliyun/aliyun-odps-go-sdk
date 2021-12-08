@@ -2,9 +2,9 @@ package odps
 
 import (
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/pkg/errors"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -35,7 +35,8 @@ func NewInstances(odpsIns *Odps, projectName ...string) Instances {
 }
 
 func (instances Instances) CreateTask(projectName string, task Task) (*Instance, error) {
-	return instances.CreateTaskWithPriority(projectName, task, DefaultJobPriority)
+	i, err := instances.CreateTaskWithPriority(projectName, task, DefaultJobPriority)
+	return i, errors.WithStack(err)
 }
 
 func (instances Instances) CreateTaskWithPriority(projectName string, task Task, jobPriority int) (*Instance, error) {
@@ -93,11 +94,11 @@ func (instances Instances) CreateTaskWithPriority(projectName string, task Task,
 		}
 
 		decoder := xml.NewDecoder(res.Body)
-		return decoder.Decode(&resModel)
+		return errors.WithStack(decoder.Decode(&resModel))
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	instance := NewInstance(instances.odpsIns, projectName, instanceId)
@@ -141,7 +142,7 @@ func (instances Instances) List(c chan Instance, filter ...InstancesFilter) erro
 		err := client.GetWithModel(resources, queryArgs, &resModel)
 
 		if err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 
 		if len(resModel.Instances) == 0 {
@@ -197,7 +198,7 @@ func (instances Instances) ListInstancesQueued(c chan string, filter ...Instance
 		err := client.GetWithModel(resources, queryArgs, &resModel)
 
 		if err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 
 		if resModel.Content == "" {

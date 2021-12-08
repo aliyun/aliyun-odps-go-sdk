@@ -3,6 +3,7 @@ package tunnel
 import (
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
+	"github.com/pkg/errors"
 	"net/http"
 	"time"
 )
@@ -27,7 +28,7 @@ type schemaResModel struct {
 	PartitionKeys []columnResModel `json:"partitionKeys"`
 }
 
-func (s *schemaResModel) toTableSchema(tableName string) (odps.TableSchema, error)  {
+func (s *schemaResModel) toTableSchema(tableName string) (odps.TableSchema, error) {
 	tableSchema := odps.TableSchema{
 		TableName:     tableName,
 		IsVirtualView: s.IsVirtualView,
@@ -39,7 +40,7 @@ func (s *schemaResModel) toTableSchema(tableName string) (odps.TableSchema, erro
 	toOdpsColumn := func(rawColumn columnResModel) (odps.Column, error) {
 		_type, err := datatype.ParseDataType(rawColumn.Type)
 		if err != nil {
-			return odps.Column{}, err
+			return odps.Column{}, errors.WithStack(err)
 		}
 
 		column := odps.Column{
@@ -56,7 +57,7 @@ func (s *schemaResModel) toTableSchema(tableName string) (odps.TableSchema, erro
 	for i, rawColumn := range s.Columns {
 		column, err := toOdpsColumn(rawColumn)
 		if err != nil {
-			return odps.TableSchema{}, err
+			return odps.TableSchema{}, errors.WithStack(err)
 		}
 
 		tableSchema.Columns[i] = column
@@ -65,7 +66,7 @@ func (s *schemaResModel) toTableSchema(tableName string) (odps.TableSchema, erro
 	for i, rawColumn := range s.PartitionKeys {
 		column, err := toOdpsColumn(rawColumn)
 		if err != nil {
-			return odps.TableSchema{}, err
+			return odps.TableSchema{}, errors.WithStack(err)
 		}
 
 		tableSchema.PartitionColumns[i] = column
@@ -81,10 +82,10 @@ func min(x, y int) int {
 	return y
 }
 
-func Retry(f func() error)  {
+func Retry(f func() error) {
 	sleepTime := int64(1)
 
-	for i := 0; i < 3; i ++ {
+	for i := 0; i < 3; i++ {
 		err := f()
 		if err == nil {
 			break

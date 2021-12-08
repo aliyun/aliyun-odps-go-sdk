@@ -15,5 +15,6 @@ replace github.com/fetchadd/arrow => /Users/apple/IdeaProjects/go-arrow-7
 require (
 	github.com/fetchadd/arrow v0.0.0-00010101000000-000000000000
 	github.com/golang/snappy v0.0.3
+	github.com/pkg/errors v0.9.1
 	google.golang.org/protobuf v1.27.1
 )

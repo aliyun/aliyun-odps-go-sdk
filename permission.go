@@ -1,6 +1,9 @@
 package odps
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"github.com/pkg/errors"
+)
 
 type Permission struct {
 	ProjectName string
@@ -21,12 +24,12 @@ func NewPermission(
 	objectName string,
 	actionType PermissionActionType) Permission {
 
-	return Permission {
+	return Permission{
 		ProjectName: projectName,
-		ObjectType: objectType,
-		ObjectName: objectName,
-		ActionType: actionType,
-		Params: make(map[string]string),
+		ObjectType:  objectType,
+		ObjectName:  objectName,
+		ActionType:  actionType,
+		Params:      make(map[string]string),
 	}
 }
 
@@ -45,7 +48,8 @@ func (perm Permission) MarshalJSON() ([]byte, error) {
 	}
 
 	r := []map[string]string{m}
-	return json.Marshal(r)
+	b, err := json.Marshal(r)
+	return b, errors.WithStack(err)
 }
 
 func (perm *Permission) Resource() string {

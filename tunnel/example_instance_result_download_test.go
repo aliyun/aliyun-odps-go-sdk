@@ -3,6 +3,7 @@ package tunnel_test
 import (
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/aliyun/aliyun-odps-go-sdk/tunnel"
+	"log"
 )
 
 func Example_tunnel_download_instance_result() {
@@ -15,25 +16,25 @@ func Example_tunnel_download_instance_result() {
 	project := odpsIns.DefaultProject()
 	tunnelIns, err := tunnel.NewTunnelFromProject(project)
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 		return
 	}
 
 	ins, err := odpsIns.RunSQl("select * from data_type_demo;")
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 		return
 	}
 
 	err = ins.WaitForSuccess()
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 		return
 	}
 
 	session, err := tunnelIns.CreateInstanceResultDownloadSession(projectName, ins.Id())
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 		return
 	}
 
@@ -42,9 +43,10 @@ func Example_tunnel_download_instance_result() {
 	//}
 
 	// set columnNames=nil for get all the columns
-	reader, err := session.OpenRecordReader(0, 100, 100, nil)
+	reader, err := session.OpenRecordReader(0, 100, 0, nil)
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
+		return
 	}
 
 	// 用read()逐个读取

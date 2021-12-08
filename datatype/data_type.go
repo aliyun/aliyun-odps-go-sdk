@@ -2,6 +2,7 @@ package datatype
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
 	"sort"
 	"strconv"
 	"strings"
@@ -130,7 +131,7 @@ func TypeCodeFromStr(s string) TypeID {
 func (t *TypeID) UnmarshalJSON(b []byte) error {
 	unquoted, err := strconv.Unquote(string(b))
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	*t = TypeCodeFromStr(unquoted)
@@ -200,7 +201,7 @@ type PrimitiveType struct {
 	TypeCode TypeID
 }
 
-func NewPrimitiveType(code TypeID) PrimitiveType  {
+func NewPrimitiveType(code TypeID) PrimitiveType {
 	return PrimitiveType{
 		TypeCode: code,
 	}
@@ -263,7 +264,7 @@ type DecimalType struct {
 	Scale     int32
 }
 
-func NewDecimalType(precision, scale int32) DecimalType  {
+func NewDecimalType(precision, scale int32) DecimalType {
 	return DecimalType{precision, scale}
 }
 
@@ -283,7 +284,7 @@ type ArrayType struct {
 	ElementType DataType
 }
 
-func NewArrayType(elementType DataType) ArrayType  {
+func NewArrayType(elementType DataType) ArrayType {
 	return ArrayType{elementType}
 }
 
@@ -393,7 +394,7 @@ func (s StructFields) Less(i, j int) bool {
 	return strings.Compare(s[i].Name, s[j].Name) < 0
 }
 
-func IsTypeEqual(t1, t2 DataType) bool  {
+func IsTypeEqual(t1, t2 DataType) bool {
 	switch t1.ID() {
 	case ARRAY, MAP:
 		if IsNullType(t2) {
@@ -450,10 +451,9 @@ func IsTypeEqual(t1, t2 DataType) bool  {
 	return true
 }
 
-
 var TinyIntType = PrimitiveType{TINYINT}
 var SmallIntType = PrimitiveType{SMALLINT}
-var IntType  = PrimitiveType{INT}
+var IntType = PrimitiveType{INT}
 var BigIntType = PrimitiveType{BIGINT}
 var DoubleType = PrimitiveType{DOUBLE}
 var BooleanType = PrimitiveType{BOOLEAN}
@@ -461,12 +461,12 @@ var DateType = PrimitiveType{DATE}
 var DateTimeType = PrimitiveType{DATETIME}
 var TimestampType = PrimitiveType{TIMESTAMP}
 var StringType = PrimitiveType{STRING}
-var FloatType =  PrimitiveType{FLOAT}
+var FloatType = PrimitiveType{FLOAT}
 var BinaryType = PrimitiveType{BINARY}
 var IntervalDayTimeType = PrimitiveType{IntervalDayTime}
 var IntervalYearMonthType = PrimitiveType{IntervalYearMonth}
 var NullType = PrimitiveType{NULL}
 
-func IsNullType(t DataType) bool  {
+func IsNullType(t DataType) bool {
 	return t.ID() == NULL
 }

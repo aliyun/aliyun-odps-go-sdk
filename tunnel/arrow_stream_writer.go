@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"github.com/pkg/errors"
 	"io"
 )
 
@@ -29,7 +30,7 @@ func (aw *ArrowStreamWriter) Write(data []byte) (int, error) {
 	if aw.firstWrite {
 		err := aw.writeUint32(DefaultChunkSize)
 		if err != nil {
-			return 0, err
+			return 0, errors.WithStack(err)
 		}
 
 		aw.firstWrite = false
@@ -49,7 +50,7 @@ func (aw *ArrowStreamWriter) Write(data []byte) (int, error) {
 
 		_, err := aw.writeAll(bytesToWrite)
 		if err != nil {
-			return 0, err
+			return 0, errors.WithStack(err)
 		}
 
 		if aw.chunkIsFull() {
@@ -57,7 +58,7 @@ func (aw *ArrowStreamWriter) Write(data []byte) (int, error) {
 			err = aw.writeUint32(crc)
 			aw.chunkCrc.Reset()
 			if err != nil {
-				return 0, err
+				return 0, errors.WithStack(err)
 			}
 			aw.currentChunkLength = 0
 		}
@@ -74,10 +75,10 @@ func (aw *ArrowStreamWriter) Close() error {
 	err2 := aw.inner.Close()
 
 	if err1 != nil {
-		return err1
+		return errors.WithStack(err1)
 	}
 
-	return err2
+	return errors.WithStack(err2)
 }
 
 func (aw *ArrowStreamWriter) chunkIsFull() bool {
@@ -92,7 +93,7 @@ func (aw *ArrowStreamWriter) writeUint32(crcValue uint32) error {
 	b := uint32ToBytes(crcValue)
 	var _, err = aw.writeAll(b)
 
-	return err
+	return errors.WithStack(err)
 }
 
 func (aw *ArrowStreamWriter) writeAll(b []byte) (int, error) {
@@ -103,7 +104,7 @@ func (aw *ArrowStreamWriter) writeAll(b []byte) (int, error) {
 		hasWrite += n
 
 		if err != nil {
-			return hasWrite, err
+			return hasWrite, errors.WithStack(err)
 		}
 	}
 

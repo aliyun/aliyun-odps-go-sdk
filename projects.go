@@ -2,7 +2,7 @@ package odps
 
 import (
 	"encoding/xml"
-	"errors"
+	"github.com/pkg/errors"
 	"net/url"
 )
 
@@ -39,9 +39,9 @@ func (p *Projects) List(c chan Project, filter ...ProjectFilter) error {
 	var resModel ResModel
 
 	for {
-		err := client.GetWithModel(resource, queryArgs, &resModel);
+		err := client.GetWithModel(resource, queryArgs, &resModel)
 		if err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 
 		if len(resModel.Projects) == 0 {
@@ -77,11 +77,11 @@ func (p *Projects) Get(projectName string) Project {
 func (p *Projects) Exists(projectName string) (bool, error) {
 	project := p.Get(projectName)
 
-	if ! project.HasBeLoaded() {
+	if !project.HasBeLoaded() {
 		err := project.Load()
 
 		if err != nil {
-			return false, err
+			return false, errors.WithStack(err)
 		}
 	}
 
@@ -133,4 +133,3 @@ func (f *ProjectFilter) fillQueryParams(params url.Values) {
 		params.Set("group", f.Group)
 	}
 }
-

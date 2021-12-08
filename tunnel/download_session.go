@@ -5,6 +5,7 @@ import (
 	"fmt"
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/fetchadd/arrow"
+	"github.com/pkg/errors"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -80,12 +81,12 @@ func CreateDownloadSession(
 
 	req, err := session.newInitiationRequest()
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	err = session.loadInformation(req)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return &session, nil
@@ -114,12 +115,12 @@ func AttachToExistedDownloadSession(
 
 	req, err := session.newLoadRequest()
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	err = session.loadInformation(req)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return &session, nil
@@ -169,7 +170,7 @@ func (ds *DownloadSession) OpenRecordReader(start, count int, columnNames []stri
 		for _, columnName := range columnNames {
 			fs, ok := ds.arrowSchema.FieldsByName(columnName)
 			if !ok {
-				return nil, fmt.Errorf("no column names %s in table %s", columnName, ds.TableName)
+				return nil, errors.Errorf("no column names %s in table %s", columnName, ds.TableName)
 			}
 
 			arrowFields = append(arrowFields, fs...)
@@ -180,7 +181,7 @@ func (ds *DownloadSession) OpenRecordReader(start, count int, columnNames []stri
 
 	res, err := ds.newDownloadConnection(start, count, columnNames)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	reader := newRecordArrowReader(res, arrowSchema)
@@ -206,7 +207,7 @@ func (ds *DownloadSession) newInitiationRequest() (*http.Request, error) {
 
 	req, err := ds.RestClient.NewRequestWithUrlQuery(odps.HttpMethod.PostMethod, resource, nil, queryArgs)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	addCommonSessionHttpHeader(req.Header)
@@ -227,7 +228,7 @@ func (ds *DownloadSession) newLoadRequest() (*http.Request, error) {
 	}
 	req, err := ds.RestClient.NewRequestWithUrlQuery(odps.HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	addCommonSessionHttpHeader(req.Header)
@@ -256,12 +257,12 @@ func (ds *DownloadSession) loadInformation(req *http.Request) error {
 	})
 
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	tableSchema, err := resModel.Schema.toTableSchema(ds.TableName)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	ds.Id = resModel.DownloadID
@@ -300,7 +301,7 @@ func (ds *DownloadSession) newDownloadConnection(start, count int, columnNames [
 	)
 
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	if ds.Compressor != nil {
@@ -311,7 +312,7 @@ func (ds *DownloadSession) newDownloadConnection(start, count int, columnNames [
 
 	res, err := ds.RestClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	if res.StatusCode/100 != 2 {
@@ -359,10 +360,3 @@ func (status DownLoadStatus) String() string {
 		return "UNKNOWN"
 	}
 }
-
-// TODO
-// [ ] create Download session, init or create from existed
-// arrow_chunk_reader
-// [ ] 创建conn
-//
-// record_arrow_reader

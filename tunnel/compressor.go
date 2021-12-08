@@ -4,6 +4,7 @@ import (
 	"compress/flate"
 	"compress/zlib"
 	"github.com/golang/snappy"
+	"github.com/pkg/errors"
 	"io"
 	"strings"
 )
@@ -116,10 +117,10 @@ func (r readCloser) Close() error {
 	err2 := r.closer.Close()
 
 	if err1 != nil {
-		return err1
+		return errors.WithStack(err1)
 	}
 
-	return err2
+	return errors.WithStack(err2)
 }
 
 type writeCloser struct {
@@ -136,10 +137,10 @@ func (w writeCloser) Close() error {
 	err2 := w.closer.Close()
 
 	if err1 != nil {
-		return err1
+		return errors.WithStack(err1)
 	}
 
-	return err2
+	return errors.WithStack(err2)
 }
 
 func WrapByCompressor(rc io.ReadCloser, contentEncoding string) io.ReadCloser {

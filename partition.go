@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"github.com/pkg/errors"
 	"net/url"
 	"strings"
 	"time"
@@ -79,13 +80,13 @@ func (p *Partition) Load() error {
 	var resModel ResModel
 	err := client.GetWithModel(resource, queryArgs, &resModel)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	var model partitionModel
 	err = json.Unmarshal([]byte(resModel.Schema), &model)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	p.model = model
@@ -111,13 +112,13 @@ func (p *Partition) LoadExtended() error {
 	var resModel ResModel
 	err := client.GetWithModel(resource, queryArgs, &resModel)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	var model partitionExtendedModel
 	err = json.Unmarshal([]byte(resModel.Schema), &model)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	p.extendedModel = model

@@ -1,6 +1,9 @@
 package odps
 
-import "time"
+import (
+	"github.com/pkg/errors"
+	"time"
+)
 
 type Odps struct {
 	defaultProject string
@@ -63,5 +66,6 @@ func (odps *Odps) Project(name string) Project {
 func (odps *Odps) RunSQl(sql string) (*Instance, error) {
 	task := NewSqlTask("execute_sql", sql, "", nil)
 	Instances := NewInstances(odps, odps.defaultProject)
-	return Instances.CreateTask(odps.defaultProject, &task)
+	i, err := Instances.CreateTask(odps.defaultProject, &task)
+	return i, errors.WithStack(err)
 }

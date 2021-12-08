@@ -6,6 +6,8 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/tunnel"
 	"github.com/fetchadd/arrow/array"
 	"github.com/fetchadd/arrow/memory"
+	"github.com/pkg/errors"
+	"log"
 	"os"
 	"time"
 )
@@ -36,7 +38,7 @@ func Example_tunnel_upload_arrow() {
 		tunnel.SessionCfg.WithDefaultDeflateCompressor(),
 	)
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 		return
 	}
 	schema := session.ArrowSchema()
@@ -70,7 +72,7 @@ func Example_tunnel_upload_arrow() {
 	writeBlock := func(blockId int, data SaleDetailData) error {
 		recordWriter, err := session.OpenRecordWriter(blockId)
 		if err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 
 		pool := memory.NewGoAllocator()
@@ -98,10 +100,10 @@ func Example_tunnel_upload_arrow() {
 
 		err = recordWriter.WriteArrowRecord(record)
 		if err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 
-		return recordWriter.Close()
+		return errors.WithStack(recordWriter.Close())
 	}
 
 	wait := make(chan error, len(rawData))
@@ -120,14 +122,14 @@ func Example_tunnel_upload_arrow() {
 	for i, n := 0, len(rawData); i < n; i++ {
 		e := <-wait
 		if e != nil {
-			println(e.Error())
+			log.Fatalf("%+v", err)
 			return
 		}
 	}
 
 	err = session.Commit(blockIds)
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 		return
 	}
 
@@ -140,7 +142,7 @@ func Example_tunnel_download_arrow_simple() {
 		"upload_sample_arrow",
 	)
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 		return
 	}
 
@@ -149,7 +151,7 @@ func Example_tunnel_download_arrow_simple() {
 
 	reader, err := session.OpenRecordReader(0, 2, []string{"payload"})
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 		return
 	}
 
@@ -165,7 +167,7 @@ func Example_tunnel_download_arrow_simple() {
 
 	err = reader.Close()
 	if err != nil {
-		println(err)
+		log.Fatalf("%+v", err)
 	}
 
 	// Output:
@@ -175,9 +177,10 @@ func Example_tunnel_download_arrow_with_partition() {
 	session, err := tunnelIns.CreateDownloadSession(
 		"test_new_console_gcc",
 		"sale_detail",
+		tunnel.SessionCfg.WithPartitionKey("sale_date='202111',region='hangzhou'"),
 	)
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 		return
 	}
 
@@ -189,7 +192,7 @@ func Example_tunnel_download_arrow_with_partition() {
 		[]string{"shop_name", "total_price"})
 
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 		return
 	}
 
@@ -205,7 +208,7 @@ func Example_tunnel_download_arrow_with_partition() {
 
 	err = reader.Close()
 	if err != nil {
-		println(err)
+		log.Fatalf("%+v", err)
 	}
 
 	// Output:

@@ -4,16 +4,17 @@ import (
 	"github.com/fetchadd/arrow"
 	"github.com/fetchadd/arrow/array"
 	"github.com/fetchadd/arrow/ipc"
+	"github.com/pkg/errors"
 	"net/http"
 )
 
 type RecordArrowReader struct {
-	httpRes *http.Response
+	httpRes           *http.Response
 	recordBatchReader *ipc.RecordBatchReader
 	arrowReader       *ArrowStreamReader
 }
 
-func newRecordArrowReader(res *http.Response, schema *arrow.Schema) RecordArrowReader  {
+func newRecordArrowReader(res *http.Response, schema *arrow.Schema) RecordArrowReader {
 	httpReader := NewArrowStreamReader(res.Body)
 
 	return RecordArrowReader{
@@ -48,14 +49,11 @@ func (r *RecordArrowReader) Iterator() <-chan array.Record {
 }
 
 func (r *RecordArrowReader) Read() (array.Record, error) {
-	return r.recordBatchReader.Read()
+	record, err := r.recordBatchReader.Read()
+	return record, errors.WithStack(err)
 }
 
 func (r *RecordArrowReader) Close() error {
 	r.recordBatchReader.Release()
-	return r.arrowReader.Close()
+	return errors.WithStack(r.arrowReader.Close())
 }
-
-
-
-

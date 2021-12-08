@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"encoding/xml"
+	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -40,13 +41,13 @@ func (sm *SecurityManager) GetSecurityConfig(withoutExceptionPolicy bool) (Secur
 	sm.securityConfig.withoutExceptionPolicy = withoutExceptionPolicy
 	err := sm.securityConfig.Load()
 
-	return sm.securityConfig, err
+	return sm.securityConfig, errors.WithStack(err)
 }
 
 func (sm *SecurityManager) SetSecurityConfig(config SecurityConfig, supervisionToken string) error {
 	err := config.Update(supervisionToken)
 	sm.securityConfig = config
-	return err
+	return errors.WithStack(err)
 }
 
 func (sm *SecurityManager) CheckPermissionV1(p Permission) (*PermissionCheckResult, error) {
@@ -61,7 +62,7 @@ func (sm *SecurityManager) CheckPermissionV1(p Permission) (*PermissionCheckResu
 
 	body, err := json.Marshal(p)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	req, err := client.NewRequest(HttpMethod.PostMethod, resource, bytes.NewReader(body))
@@ -70,7 +71,7 @@ func (sm *SecurityManager) CheckPermissionV1(p Permission) (*PermissionCheckResu
 	err = client.DoWithModel(req, &resModel)
 
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return &resModel.PermissionCheckResult, nil
@@ -104,7 +105,7 @@ func (sm *SecurityManager) CheckPermissionV0(
 	var resModel ResModel
 	err := client.GetWithModel(resource, queryArgs, &resModel)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return &resModel.PermissionCheckResult, nil
@@ -119,10 +120,10 @@ func (sm *SecurityManager) getPolicy(resource, policyType string) ([]byte, error
 	err := client.GetWithParseFunc(resource, queryArgs, func(res *http.Response) error {
 		var err error
 		body, err = ioutil.ReadAll(res.Body)
-		return err
+		return errors.WithStack(err)
 	})
 
-	return body, err
+	return body, errors.WithStack(err)
 }
 
 func (sm *SecurityManager) setPolicy(resource, policyType string, policy string) error {
@@ -132,14 +133,14 @@ func (sm *SecurityManager) setPolicy(resource, policyType string, policy string)
 	req, err := client.NewRequestWithUrlQuery(HttpMethod.PutMethod, resource, strings.NewReader(policy), queryArgs)
 
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	if policyType == "security_policy" {
 		req.Header.Set(HttpHeaderContentType, "application/json")
 	}
 
-	return client.DoWithParseFunc(req, nil)
+	return errors.WithStack(client.DoWithParseFunc(req, nil))
 }
 
 func (sm *SecurityManager) GetPolicy() ([]byte, error) {
@@ -186,7 +187,7 @@ func (sm *SecurityManager) ListUsers() ([]User, error) {
 
 	err := client.GetWithModel(resource, nil, &resModel)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	users := make([]User, len(resModel.User))
@@ -213,7 +214,7 @@ func (sm *SecurityManager) ListRoles() ([]Role, error) {
 
 	err := client.GetWithModel(resource, nil, &resModel)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	roles := make([]Role, len(resModel.Role))
@@ -245,7 +246,7 @@ func (sm *SecurityManager) listRolesForUser(userIdOrName, _type string) ([]Role,
 
 	err := client.GetWithModel(resource, nil, &resModel)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	roles := make([]Role, len(resModel.Role))
@@ -283,7 +284,7 @@ func (sm *SecurityManager) ListUsersForRole(roleName string) ([]User, error) {
 
 	err := client.GetWithModel(resource, queryArgs, &resModel)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	users := make([]User, len(resModel.User))
@@ -313,7 +314,7 @@ func (sm *SecurityManager) RunQuery(query string, jsonOutput bool, supervisionTo
 	}
 
 	reqBody := ReqBody{
-		Query: query,
+		Query:                query,
 		ResponseInJsonFormat: jsonOutput,
 	}
 	var resModel ResModel
@@ -321,30 +322,30 @@ func (sm *SecurityManager) RunQuery(query string, jsonOutput bool, supervisionTo
 
 	err := client.DoXmlWithParseRes(HttpMethod.PostMethod, resource, nil, reqBody, func(res *http.Response) error {
 		if res.StatusCode < 200 || res.StatusCode >= 300 {
-			return NewHttpNotOk(res)
+			return errors.WithStack(NewHttpNotOk(res))
 		}
 
 		isAsync = res.StatusCode != 200
 		decoder := xml.NewDecoder(res.Body)
-		return decoder.Decode(&resModel)
+		return errors.WithStack(decoder.Decode(&resModel))
 	})
 
 	if httpNodeOk, ok := err.(HttpNotOk); ok {
-		return string(httpNodeOk.Body), err
+		return string(httpNodeOk.Body), errors.WithStack(err)
 	}
 
 	if err != nil {
-		return "", err
+		return "", errors.WithStack(err)
 	}
 
-	if ! isAsync {
+	if !isAsync {
 		return resModel.Result, nil
 	}
 
 	authResource := rb.AuthorizationId(resModel.Result)
 	var resModel1 ResModel
 	err = client.GetWithModel(authResource, nil, &resModel1)
-	return resModel1.Result, err
+	return resModel1.Result, errors.WithStack(err)
 }
 
 func (sm *SecurityManager) GenerateAuthorizationToken(policy string) (string, error) {
@@ -356,7 +357,7 @@ func (sm *SecurityManager) GenerateAuthorizationToken(policy string) (string, er
 	queryArgs.Set("sign_bearer_token", "")
 	req, err := client.NewRequest(HttpMethod.PostMethod, resource, strings.NewReader(policy))
 	if err != nil {
-		return "", err
+		return "", errors.WithStack(err)
 	}
 	req.Header.Set(HttpHeaderContentType, "application/json")
 
@@ -368,7 +369,7 @@ func (sm *SecurityManager) GenerateAuthorizationToken(policy string) (string, er
 
 	err = client.DoWithModel(req, &resModel)
 	if err != nil {
-		return "", err
+		return "", errors.WithStack(err)
 	}
 
 	return resModel.Result, nil

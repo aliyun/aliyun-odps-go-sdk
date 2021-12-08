@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
+	"github.com/pkg/errors"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -49,12 +50,12 @@ func CreateInstanceResultDownloadSession(
 
 	req, err := session.newInitiationRequest()
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	err = session.loadInformation(req)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return &session, nil
@@ -84,12 +85,12 @@ func AttachToExistedIRDownloadSession(
 
 	req, err := session.newLoadRequest()
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	err = session.loadInformation(req)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return &session, nil
@@ -127,7 +128,7 @@ func (is *InstanceResultDownloadSession) OpenRecordReader(
 		for i, columnName := range columnNames {
 			c, ok := is.schema.FieldByName(columnName)
 			if !ok {
-				return nil, fmt.Errorf("no column names %s in table", columnName)
+				return nil, errors.Errorf("no column names %s in table", columnName)
 			}
 
 			columns[i] = c
@@ -138,7 +139,7 @@ func (is *InstanceResultDownloadSession) OpenRecordReader(
 
 	res, err := is.newDownloadConnection(start, count, sizeLimit, columnNames)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	reader := newRecordProtocReader(res, columns, is.shouldTransformDate)
@@ -165,7 +166,7 @@ func (is *InstanceResultDownloadSession) newInitiationRequest() (*http.Request, 
 
 	req, err := is.RestClient.NewRequestWithUrlQuery(odps.HttpMethod.PostMethod, resource, nil, queryArgs)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	addCommonSessionHttpHeader(req.Header)
@@ -179,7 +180,7 @@ func (is *InstanceResultDownloadSession) newLoadRequest() (*http.Request, error)
 
 	req, err := is.RestClient.NewRequestWithUrlQuery(odps.HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	addCommonSessionHttpHeader(req.Header)
@@ -199,21 +200,21 @@ func (is *InstanceResultDownloadSession) loadInformation(req *http.Request) erro
 	var resModel ResModel
 	err := is.RestClient.DoWithParseFunc(req, func(res *http.Response) error {
 		if res.StatusCode/100 != 2 {
-			return odps.NewHttpNotOk(res)
+			return errors.WithStack(odps.NewHttpNotOk(res))
 		}
 
 		is.shouldTransformDate = res.Header.Get(odps.HttpHeaderOdpsDateTransFrom) == "true"
 		decoder := json.NewDecoder(res.Body)
-		return decoder.Decode(&resModel)
+		return errors.WithStack(decoder.Decode(&resModel))
 	})
 
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	tableSchema, err := resModel.Schema.toTableSchema("")
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	is.Id = resModel.DownloadID
@@ -264,7 +265,7 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 	)
 
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	if is.Compressor != nil {
@@ -277,15 +278,15 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 
 	Retry(func() error {
 		res, err = is.RestClient.Do(req)
-		return err
+		return errors.WithStack(err)
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	if res.StatusCode/100 != 2 {
-		return res, odps.NewHttpNotOk(res)
+		return res, errors.WithStack(odps.NewHttpNotOk(res))
 	}
 
 	contentEncoding := res.Header.Get("Content-Encoding")

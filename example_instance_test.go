@@ -3,6 +3,7 @@ package odps_test
 import (
 	"fmt"
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
+	"log"
 	"time"
 )
 
@@ -14,7 +15,7 @@ func ExampleInstances_List() {
 	go func() {
 		err := instances.List(c)
 		if err != nil {
-			println(err.Error())
+			log.Fatalf("%+v", err)
 		}
 	}()
 
@@ -33,7 +34,7 @@ func ExampleInstances_ListInstancesQueued() {
 	go func() {
 		err := instances.ListInstancesQueued(c)
 		if err != nil {
-			println(err.Error())
+			log.Fatalf("%+v", err)
 		}
 	}()
 
@@ -50,21 +51,21 @@ func ExampleInstances_CreateTask() {
 	instance, err := instances.CreateTask("odps_smoke_test", &sqlTask)
 
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(instance.Id())
 	}
 
 	err = instance.Load()
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(fmt.Sprintf("%s, %s, %s", instance.StartTime(), instance.EndTime(), instance.Status()))
 	}
 
 	body, err := instance.GetTaskDetail("hello")
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(body)
 	}
@@ -74,7 +75,7 @@ Loop:
 		tasks, err := instance.GetTasks()
 		task := tasks[0]
 		if err != nil {
-			println(err.Error())
+			log.Fatalf("%+v", err)
 			break
 		} else {
 			println(fmt.Sprintf("%s, %s, %s, %s", task.StartTime, task.EndTime, task.Status, task.Name))
@@ -90,7 +91,7 @@ Loop:
 
 	err = instance.Load()
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(fmt.Sprintf("%s, %s, %s", instance.StartTime(), instance.EndTime(), instance.Status()))
 	}
@@ -104,19 +105,19 @@ func ExampleInstance_Terminate() {
 	instance, err := instances.CreateTask("odps_smoke_test", &sqlTask)
 
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(instance.Id())
 	}
 
 	err = instance.Terminate()
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	}
 
 	err = instance.Load()
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(fmt.Sprintf("%s, %s, %s", instance.StartTime(), instance.EndTime(), instance.Status()))
 	}
@@ -130,14 +131,14 @@ func ExampleInstance_GetTaskProgress() {
 	instance, err := instances.CreateTask("odps_smoke_test", &sqlTask)
 
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(instance.Id())
 	}
 
 	body, err := instance.GetTaskDetail("hello")
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(body)
 	}
@@ -145,7 +146,7 @@ func ExampleInstance_GetTaskProgress() {
 	for i := 0; i < 5; i++ {
 		progress, err := instance.GetTaskProgress("hello")
 		if err != nil {
-			println(err.Error())
+			log.Fatalf("%+v", err)
 		}
 
 		for _, stage := range progress {
@@ -165,14 +166,14 @@ func ExampleInstance_GetTaskSummary() {
 	instance, err := instances.CreateTask("odps_smoke_test", &sqlTask)
 
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(instance.Id())
 	}
 
 	taskSummary, err := instance.GetTaskSummary("hello1")
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(fmt.Sprintf("%s\n%s\n", taskSummary.JsonSummary, taskSummary.Summary))
 	}
@@ -180,21 +181,20 @@ func ExampleInstance_GetTaskSummary() {
 	// Output:
 }
 
-
 func ExampleInstance_GetQueueingInfo() {
 	instances := odps.NewInstances(odpsIns)
 	sqlTask := odps.NewSqlTask("hello1", "select * from user;", "", nil)
 	instance, err := instances.CreateTask("odps_smoke_test", &sqlTask)
 
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(instance.Id())
 	}
 
 	i, err := instance.GetCachedInfo()
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	} else {
 		println(fmt.Sprintf("%+v", i))
 	}
