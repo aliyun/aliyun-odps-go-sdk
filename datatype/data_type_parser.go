@@ -1,7 +1,6 @@
 package datatype
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -16,19 +15,19 @@ type typeParser struct {
 func ParseDataType(name string) (DataType, error) {
 	parser := typeParser{
 		tokens: tokenize(name),
-		index: 0,
+		index:  0,
 	}
 
 	dataType, err := parser.parse()
 
 	if parser.hasTokenLeft() {
-		return nil, errors.New(fmt.Sprintf(
+		return nil, fmt.Errorf(
 			"parse datatype error: %s, unexpected token: %s at: %d",
-			name, parser.peekToken(), parser.index))
+			name, parser.peekToken(), parser.index)
 	}
 
 	if err != nil {
-		err = errors.New(fmt.Sprintf("parse datatype error: %s, %s", name, err.Error()))
+		err = fmt.Errorf("parse datatype error: %s, %s", name, err.Error())
 	}
 
 	return dataType, err
@@ -85,13 +84,13 @@ func (parser *typeParser) parse() (DataType, error) {
 	case DECIMAL:
 		return parser.parseDecimal()
 	case TypeUnknown:
-		return nil, errors.New("unknown data type: " + token)
+		return nil, fmt.Errorf("unknown data type: %s", token)
 	default:
 		return parser.newPrimitive(typeCode)
 	}
 }
 
-func (parser *typeParser)consumeToken() string {
+func (parser *typeParser) consumeToken() string {
 	token := parser.tokens[parser.index]
 	parser.index += 1
 
@@ -106,11 +105,11 @@ func (parser *typeParser) peekToken() string {
 	return ""
 }
 
-func (parser *typeParser) expect(expected string) error  {
+func (parser *typeParser) expect(expected string) error {
 	nextToken := parser.consumeToken()
 
 	if nextToken != expected {
-		return errors.New(fmt.Sprintf("expect %s, but got %s at %d", expected, nextToken, parser.index))
+		return fmt.Errorf("expect %s, but got %s at %d", expected, nextToken, parser.index)
 	}
 
 	return nil
@@ -133,7 +132,7 @@ func (parser *typeParser) parserChar() (CharType, error) {
 	}
 
 	if charLength > 255 || charLength < 1 {
-		return CharType{}, errors.New(fmt.Sprintf("length of char is 1~255, get %d", charLength))
+		return CharType{}, fmt.Errorf("length of char is 1~255, get %d", charLength)
 	}
 
 	err = parser.expect(")")
@@ -157,7 +156,7 @@ func (parser *typeParser) parserVarchar() (VarcharType, error) {
 	}
 
 	if charLength > 65535 || charLength < 1 {
-		return VarcharType{}, errors.New(fmt.Sprintf("length of varchar is 1~255, get %d", charLength))
+		return VarcharType{}, fmt.Errorf("length of varchar is 1~255, get %d", charLength)
 	}
 
 	err = parser.expect(")")
@@ -168,7 +167,7 @@ func (parser *typeParser) parserVarchar() (VarcharType, error) {
 	return VarcharType{Length: charLength}, nil
 }
 
-func (parser *typeParser) parseDecimal() (DecimalType, error)  {
+func (parser *typeParser) parseDecimal() (DecimalType, error) {
 	if parser.peekToken() == "" {
 		return NewDecimalType(38, 18), nil
 	}
@@ -202,7 +201,7 @@ func (parser *typeParser) parseDecimal() (DecimalType, error)  {
 
 	decimal := DecimalType{
 		Precision: int32(precision),
-		Scale: int32(scale),
+		Scale:     int32(scale),
 	}
 
 	return decimal, nil
@@ -224,7 +223,7 @@ func (parser *typeParser) parseArray() (ArrayType, error) {
 		return ArrayType{}, err
 	}
 
-	arrayType := ArrayType {
+	arrayType := ArrayType{
 		ElementType: dataType,
 	}
 
@@ -258,7 +257,7 @@ func (parser *typeParser) parseMap() (MapType, error) {
 	}
 
 	mapType := MapType{
-		KeyType: keyType,
+		KeyType:   keyType,
 		ValueType: valueType,
 	}
 
@@ -299,7 +298,7 @@ LOOP:
 		case ">":
 			break LOOP
 		default:
-			return StructType{}, errors.New(fmt.Sprintf("unexpected token %s at %d", nextToken, parser.index))
+			return StructType{}, fmt.Errorf("unexpected token %s at %d", nextToken, parser.index)
 		}
 	}
 
@@ -315,6 +314,6 @@ LOOP:
 	return structType, nil
 }
 
-func (parser *typeParser) hasTokenLeft() bool  {
+func (parser *typeParser) hasTokenLeft() bool {
 	return parser.index < len(parser.tokens)
 }

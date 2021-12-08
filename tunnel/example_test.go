@@ -20,7 +20,7 @@ func init() {
 	tunnelEndpoint := os.Getenv("tunnel_odps_endpoint")
 
 	account := odps.NewAliyunAccount(accessId, accessKey)
-	odpsIns = odps.NewOdps(&account, odpsEndpoint)
+	odpsIns = odps.NewOdps(account, odpsEndpoint)
 	tunnelIns = tunnel.NewTunnel(odpsIns, tunnelEndpoint)
 }
 

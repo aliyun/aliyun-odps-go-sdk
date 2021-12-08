@@ -32,19 +32,19 @@ type Tunnel struct {
 
 func NewTunnel(odpsIns *odps.Odps, endpoint string) Tunnel {
 	return Tunnel{
-		odpsIns: odpsIns,
+		odpsIns:  odpsIns,
 		endpoint: endpoint,
 	}
 }
 
-func NewTunnelFromProject(project odps.Project) (Tunnel, error)  {
+func NewTunnelFromProject(project odps.Project) (Tunnel, error) {
 	endpoint, err := project.GetTunnelEndpoint()
 	if err != nil {
 		return Tunnel{}, nil
 	}
 
-	tunnel := Tunnel {
-		odpsIns: project.OdpsIns(),
+	tunnel := Tunnel{
+		odpsIns:  project.OdpsIns(),
 		endpoint: endpoint,
 	}
 
@@ -98,7 +98,7 @@ func (t *Tunnel) AttachToExistedDownloadSession(
 }
 
 func (t *Tunnel) getRestClient() odps.RestClient {
-	client := odps.NewOdpsHttpClient(t.odpsIns.Account(), t.endpoint)
+	client := odps.NewOdpsRestClient(t.odpsIns.Account(), t.endpoint)
 	client.HttpTimeout = t.HttpTimeout()
 	client.TcpConnectionTimeout = t.TcpConnectionTimeout()
 

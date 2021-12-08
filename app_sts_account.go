@@ -11,8 +11,8 @@ type AppStsAccount struct {
 	AliyunAccount
 }
 
-func NewAppStsAccount(accessId, accessKey, stsToken string) AppStsAccount {
-	return AppStsAccount{
+func NewAppStsAccount(accessId, accessKey, stsToken string) *AppStsAccount {
+	return &AppStsAccount{
 		stsToken: stsToken,
 		AliyunAccount: AliyunAccount{
 			accessKey: accessKey,

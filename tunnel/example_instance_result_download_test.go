@@ -3,13 +3,12 @@ package tunnel_test
 import (
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/aliyun/aliyun-odps-go-sdk/tunnel"
-	"io"
 )
 
-func Example_tunnel_download_instance_result()  {
+func Example_tunnel_download_instance_result() {
 	var account = odps.AliyunAccountFromEnv()
 	var endpoint = odps.LoadEndpointFromEnv()
-	var odpsIns = odps.NewOdps(&account, endpoint)
+	var odpsIns = odps.NewOdps(account, endpoint)
 
 	projectName := "project_1"
 	odpsIns.SetDefaultProjectName(projectName)
@@ -20,7 +19,7 @@ func Example_tunnel_download_instance_result()  {
 		return
 	}
 
-	ins, err := odpsIns.RunSQlTask("select * from data_type_demo;")
+	ins, err := odpsIns.RunSQl("select * from data_type_demo;")
 	if err != nil {
 		println(err.Error())
 		return
@@ -38,23 +37,34 @@ func Example_tunnel_download_instance_result()  {
 		return
 	}
 
-	columnNames := []string {
-		"ti", "si", "i", "bi", "b", "f", "d", "dc", "vc", "c", "s", "da", "dat", "t", "bl",
-	}
+	//columnNames := []string {
+	//	"ti", "si", "i", "bi", "b", "f", "d", "dc", "vc", "c", "s", "da", "dat", "t", "bl",
+	//}
 
-	reader, err := session.OpenRecordReader(0, 100, 100, columnNames)
+	// set columnNames=nil for get all the columns
+	reader, err := session.OpenRecordReader(0, 100, 100, nil)
 	if err != nil {
 		println(err.Error())
 	}
 
-	record, err := reader.Read()
-	if err != nil && err != io.EOF {
-		println(err.Error())
-	} else {
-		for i, n := 0, record.Len(); i < n; i ++ {
+	// 用read()逐个读取
+	//record, err := reader.Read()
+	//if err != nil && err != io.EOF {
+	//	println(err.Error())
+	//} else {
+	//	for i, n := 0, record.Len(); i < n; i ++ {
+	//		f := record.Get(i)
+	//		println(f.String())
+	//	}
+	//}
+
+	// 或用iterator遍历读取
+	for record := range reader.Iterator() {
+		for i, n := 0, record.Len(); i < n; i++ {
 			f := record.Get(i)
 			println(f.String())
 		}
 	}
+
 	// Output:
 }

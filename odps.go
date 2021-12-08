@@ -1,5 +1,7 @@
 package odps
 
+import "time"
+
 type Odps struct {
 	defaultProject string
 
@@ -11,8 +13,8 @@ type Odps struct {
 
 func NewOdps(account Account, endpoint string) *Odps {
 	ins := Odps{
-		account: account,
-		restClient: NewOdpsHttpClient(account, endpoint),
+		account:    account,
+		restClient: NewOdpsRestClient(account, endpoint),
 	}
 
 	ins.projects = NewProjects(&ins)
@@ -26,6 +28,14 @@ func (odps *Odps) Account() Account {
 
 func (odps *Odps) RestClient() RestClient {
 	return odps.restClient
+}
+
+func (odps *Odps) SetTcpConnectTimeout(t time.Duration) {
+	odps.restClient.TcpConnectionTimeout = t
+}
+
+func (odps *Odps) SetHttpTimeout(t time.Duration) {
+	odps.restClient.HttpTimeout = t
 }
 
 func (odps *Odps) DefaultProject() Project {
@@ -50,7 +60,7 @@ func (odps *Odps) Project(name string) Project {
 	return NewProject(name, odps)
 }
 
-func (odps *Odps) RunSQlTask(sql string) (*Instance, error) {
+func (odps *Odps) RunSQl(sql string) (*Instance, error) {
 	task := NewSqlTask("execute_sql", sql, "", nil)
 	Instances := NewInstances(odps, odps.defaultProject)
 	return Instances.CreateTask(odps.defaultProject, &task)

@@ -2,7 +2,6 @@ package tunnel
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/fetchadd/arrow"
@@ -191,7 +190,7 @@ func (u *UploadSession) Commit(blockIds []int) error {
 
 	errMsgFmt := "blocks server got are %v, blocks uploaded are %v"
 	if len(u.blockIds) != len(blockIds) {
-		return errors.New(fmt.Sprintf(errMsgFmt, u.blockIds, blockIds))
+		return fmt.Errorf(errMsgFmt, u.blockIds, blockIds)
 	}
 
 	for _, idWanted := range blockIds {
@@ -205,7 +204,7 @@ func (u *UploadSession) Commit(blockIds []int) error {
 		}
 
 		if !found {
-			return errors.New(fmt.Sprintf(errMsgFmt, u.blockIds, blockIds))
+			return fmt.Errorf(errMsgFmt, u.blockIds, blockIds)
 		}
 	}
 

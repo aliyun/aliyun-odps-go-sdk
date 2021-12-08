@@ -2,7 +2,6 @@ package tunnel
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"net/http"
@@ -120,16 +119,21 @@ func (is *InstanceResultDownloadSession) ResourceUrl() string {
 func (is *InstanceResultDownloadSession) OpenRecordReader(
 	start, count, sizeLimit int,
 	columnNames []string,
-	) (*RecordProtocReader, error) {
+) (*RecordProtocReader, error) {
 
-	columns := make([]odps.Column, len(columnNames))
-	for i, columnName := range columnNames {
-		c, ok := is.schema.FieldByName(columnName)
-		if ! ok {
-			return nil, errors.New(fmt.Sprintf("no column names %s in table", columnName))
+	var columns []odps.Column
+	if len(columnNames) > 0 {
+		columns = make([]odps.Column, len(columnNames))
+		for i, columnName := range columnNames {
+			c, ok := is.schema.FieldByName(columnName)
+			if !ok {
+				return nil, fmt.Errorf("no column names %s in table", columnName)
+			}
+
+			columns[i] = c
 		}
-
-		columns[i] = c
+	} else {
+		columns = is.schema.Columns
 	}
 
 	res, err := is.newDownloadConnection(start, count, sizeLimit, columnNames)
@@ -137,7 +141,7 @@ func (is *InstanceResultDownloadSession) OpenRecordReader(
 		return nil, err
 	}
 
-	reader := newRecordProtocReader(res, columns)
+	reader := newRecordProtocReader(res, columns, is.shouldTransformDate)
 	return &reader, nil
 }
 
@@ -223,7 +227,7 @@ func (is *InstanceResultDownloadSession) loadInformation(req *http.Request) erro
 func (is *InstanceResultDownloadSession) newDownloadConnection(
 	start, count, sizeLimit int,
 	columnNames []string,
-	) (*http.Response, error) {
+) (*http.Response, error) {
 	queryArgs := make(url.Values, 6)
 
 	if len(columnNames) > 0 {
@@ -269,7 +273,7 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 
 	addCommonSessionHttpHeader(req.Header)
 
-	var res * http.Response
+	var res *http.Response
 
 	Retry(func() error {
 		res, err = is.RestClient.Do(req)

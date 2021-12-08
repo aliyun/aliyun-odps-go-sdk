@@ -1,21 +1,19 @@
 package data
 
 import (
-	"errors"
 	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
 	"strings"
 )
 
-
-type CharOverflowError struct{
-	maxLen int
+type CharOverflowError struct {
+	maxLen  int
 	realLen int
 }
 
 type Char struct {
 	length int
-	data  string
+	data   string
 }
 
 type VarChar struct {
@@ -37,7 +35,7 @@ func (c Char) Type() datatype.DataType {
 
 func NewChar(length int, data string) (*Char, error) {
 	if length > 255 {
-		return nil, errors.New(fmt.Sprintf("max length of char is 255, not %d is given", length))
+		return nil, fmt.Errorf("max length of char is 255, not %d is given", length)
 	}
 
 	if len(data) > length {
@@ -57,7 +55,7 @@ func (c *Char) String() string {
 
 func NewVarChar(length int, data string) (*VarChar, error) {
 	if length > 65536 {
-		return nil, errors.New(fmt.Sprintf("max length of char is 65536, not %d is given", length))
+		return nil, fmt.Errorf("max length of char is 65536, not %d is given", length)
 	}
 
 	if len(data) > length {

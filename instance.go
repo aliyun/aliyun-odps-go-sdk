@@ -3,7 +3,6 @@ package odps
 import (
 	"encoding/json"
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -151,7 +150,6 @@ func (instance *Instance) GetTasks() ([]TaskInInstance, error) {
 	if err != nil {
 		return nil, err
 	}
-
 
 	return resModel.Tasks, nil
 }
@@ -309,7 +307,7 @@ func (instance *Instance) WaitForSuccess() error {
 		for _, task := range tasks {
 			switch task.Status {
 			case TaskFailed, TaskCancelled, TaskSuspended:
-				return errors.New(fmt.Sprintf("get task %s with status %s", task.Name, task.Status))
+				return fmt.Errorf("get task %s with status %s", task.Name, task.Status)
 			case TaskSuccess:
 			case TaskRunning, TaskWaiting:
 				success = false

@@ -7,14 +7,13 @@ import (
 	"strings"
 )
 
-
 type Struct struct {
-	_type datatype.StructType
-	data map[string]Data
+	_type   datatype.StructType
+	data    map[string]Data
 	typeMap map[string]datatype.DataType
 }
 
-func NewStruct(t datatype.StructType) *Struct  {
+func NewStruct(t datatype.StructType) *Struct {
 	typeMap := make(map[string]datatype.DataType)
 
 	for _, f := range t.Fields {
@@ -22,17 +21,17 @@ func NewStruct(t datatype.StructType) *Struct  {
 	}
 
 	return &Struct{
-		_type: t,
-		data: make(map[string]Data),
+		_type:   t,
+		data:    make(map[string]Data),
 		typeMap: typeMap,
 	}
 }
 
-func (s *Struct) Type() datatype.DataType  {
+func (s *Struct) Type() datatype.DataType {
 	return s._type
 }
 
-func (s *Struct) String() string  {
+func (s *Struct) String() string {
 	var sb strings.Builder
 	sb.WriteString("struct<")
 	n := len(s.data) - 1
@@ -53,7 +52,7 @@ func (s *Struct) String() string  {
 	return sb.String()
 }
 
-func (s *Struct) GetField(fieldName string) Data  {
+func (s *Struct) GetField(fieldName string) Data {
 	return s.data[fieldName]
 }
 
@@ -61,10 +60,9 @@ func (s *Struct) SetField(fieldName string, d Data) {
 	s.data[fieldName] = d
 }
 
-func (s *Struct) FiledType(fieldName string) datatype.DataType  {
+func (s *Struct) FiledType(fieldName string) datatype.DataType {
 	return s.typeMap[fieldName]
 }
-
 
 func (s *Struct) Encode(data interface{}) error {
 	d, err := TryConvertToOdps(data)
@@ -72,8 +70,8 @@ func (s *Struct) Encode(data interface{}) error {
 		return err
 	}
 
-	if ! datatype.IsTypeEqual(s._type, d.Type()) {
-		return errors.New(fmt.Sprintf("types of the two struct is not equal, %s, %s", d.Type().Name(), s._type.Name()))
+	if !datatype.IsTypeEqual(s._type, d.Type()) {
+		return fmt.Errorf("types of the two struct is not equal, %s, %s", d.Type().Name(), s._type.Name())
 	}
 
 	return nil

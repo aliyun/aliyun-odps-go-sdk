@@ -2,7 +2,6 @@ package tunnel
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/fetchadd/arrow"
@@ -164,24 +163,27 @@ func (ds *DownloadSession) ResourceUrl() string {
 }
 
 func (ds *DownloadSession) OpenRecordReader(start, count int, columnNames []string) (*RecordArrowReader, error) {
-	arrowFields := make([]arrow.Field, 0, len(columnNames))
-	for _, columnName := range columnNames {
-		fs, ok := ds.arrowSchema.FieldsByName(columnName)
-		if !ok {
-			return nil, errors.New(fmt.Sprintf("no column names %s in table %s", columnName, ds.TableName))
+	arrowSchema := ds.arrowSchema
+	if len(columnNames) > 0 {
+		arrowFields := make([]arrow.Field, 0, len(columnNames))
+		for _, columnName := range columnNames {
+			fs, ok := ds.arrowSchema.FieldsByName(columnName)
+			if !ok {
+				return nil, fmt.Errorf("no column names %s in table %s", columnName, ds.TableName)
+			}
+
+			arrowFields = append(arrowFields, fs...)
 		}
 
-		arrowFields = append(arrowFields, fs...)
+		arrowSchema = arrow.NewSchema(arrowFields, nil)
 	}
-
-	schema := arrow.NewSchema(arrowFields, nil)
 
 	res, err := ds.newDownloadConnection(start, count, columnNames)
 	if err != nil {
 		return nil, err
 	}
 
-	reader := newRecordArrowReader(res, schema)
+	reader := newRecordArrowReader(res, arrowSchema)
 	return &reader, nil
 }
 
@@ -318,7 +320,7 @@ func (ds *DownloadSession) newDownloadConnection(start, count int, columnNames [
 
 	contentEncoding := res.Header.Get("Content-Encoding")
 	if contentEncoding != "" {
-		 res.Body = WrapByCompressor(res.Body, contentEncoding)
+		res.Body = WrapByCompressor(res.Body, contentEncoding)
 	}
 
 	return res, nil

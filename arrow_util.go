@@ -1,7 +1,7 @@
 package odps
 
 import (
-	"errors"
+	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
 	"github.com/fetchadd/arrow"
 )
@@ -29,7 +29,7 @@ import (
 //*      struct              |  struct
 //*      array               |  list
 //*      map                 |  map
-func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error)  {
+func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error) {
 	switch odpsType.ID() {
 	case datatype.BOOLEAN:
 		return arrow.FixedWidthTypes.Boolean, nil
@@ -63,7 +63,7 @@ func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error)  {
 		decimal, _ := odpsType.(datatype.DecimalType)
 		return &arrow.Decimal128Type{
 			Precision: decimal.Precision,
-			Scale: decimal.Scale,
+			Scale:     decimal.Scale,
 		}, nil
 	case datatype.STRUCT:
 		structType, _ := odpsType.(datatype.StructType)
@@ -100,5 +100,5 @@ func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error)  {
 		return arrow.MapOf(keyType, valueType), nil
 	}
 
-	return arrow.Null, errors.New("unknown odps data type: " + odpsType.Name())
+	return arrow.Null, fmt.Errorf("unknown odps data type: %s", odpsType.Name())
 }

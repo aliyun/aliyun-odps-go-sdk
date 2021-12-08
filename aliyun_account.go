@@ -14,14 +14,14 @@ type AliyunAccount struct {
 	accessKey string
 }
 
-func NewAliyunAccount(accessId string, accessKey string) AliyunAccount {
-	return AliyunAccount{
+func NewAliyunAccount(accessId string, accessKey string) *AliyunAccount {
+	return &AliyunAccount{
 		accessId:  accessId,
 		accessKey: accessKey,
 	}
 }
 
-func AliyunAccountFromEnv() AliyunAccount {
+func AliyunAccountFromEnv() *AliyunAccount {
 	account := AliyunAccount{}
 
 	if accessId, found := os.LookupEnv("odps_accessId"); found {
@@ -32,7 +32,7 @@ func AliyunAccountFromEnv() AliyunAccount {
 		account.accessKey = accessKey
 	}
 
-	return account
+	return &account
 }
 
 func (account *AliyunAccount) AccessId() string {

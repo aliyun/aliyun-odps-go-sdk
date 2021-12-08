@@ -33,7 +33,7 @@ type RestClient struct {
 	endpoint       string
 }
 
-func NewOdpsHttpClient(a Account, endpoint string) RestClient {
+func NewOdpsRestClient(a Account, endpoint string) RestClient {
 	var client = RestClient{
 		Account:              a,
 		endpoint:             endpoint,
@@ -41,20 +41,6 @@ func NewOdpsHttpClient(a Account, endpoint string) RestClient {
 		TcpConnectionTimeout: DefaultTcpConnectionTimeout * time.Second,
 		DisableCompression:   true,
 	}
-
-	//var _ = client.client()
-
-	return client
-}
-
-func NewOdpsHttpClientWithTimeout(a Account, endpoint string, timeout time.Duration) RestClient {
-	var client = RestClient{
-		Account:  a,
-		endpoint: endpoint,
-	}
-
-	var c = client.client()
-	c.Timeout = timeout
 
 	return client
 }
@@ -83,8 +69,8 @@ func (client *RestClient) client() *http.Client {
 			Timeout:   client.TcpConnectionTimeout,
 			KeepAlive: 30 * time.Second,
 		}).DialContext,
-		ForceAttemptHTTP2: false,
-		DisableKeepAlives: true,
+		ForceAttemptHTTP2:  false,
+		DisableKeepAlives:  true,
 		DisableCompression: client.DisableCompression,
 	}
 

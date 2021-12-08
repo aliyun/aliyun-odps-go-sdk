@@ -4,9 +4,9 @@ import odps "github.com/aliyun/aliyun-odps-go-sdk"
 
 var account = odps.AliyunAccountFromEnv()
 var endpoint = odps.LoadEndpointFromEnv()
-var odpsIns = odps.NewOdps(&account, endpoint)
+var odpsIns = odps.NewOdps(account, endpoint)
 
-func init()  {
+func init() {
 	if account.AccessId() == "" {
 		panic("account environments are not set")
 	}

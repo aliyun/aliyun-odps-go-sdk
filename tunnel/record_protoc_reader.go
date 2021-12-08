@@ -19,21 +19,23 @@ const (
 )
 
 type RecordProtocReader struct {
-	httpRes     *http.Response
-	protoReader *ProtocStreamReader
-	columns     []odps.Column
-	recordCrc   Crc32CheckSum
-	crcOfCrc    Crc32CheckSum // crc of record crc
-	count       int64
+	httpRes             *http.Response
+	protoReader         *ProtocStreamReader
+	columns             []odps.Column
+	shouldTransformDate bool
+	recordCrc           Crc32CheckSum
+	crcOfCrc            Crc32CheckSum // crc of record crc
+	count               int64
 }
 
-func newRecordProtocReader(httpRes *http.Response, columns []odps.Column) RecordProtocReader {
+func newRecordProtocReader(httpRes *http.Response, columns []odps.Column, shouldTransformDate bool) RecordProtocReader {
 	return RecordProtocReader{
-		httpRes:     httpRes,
-		protoReader: NewProtocStreamReader(httpRes.Body),
-		columns:     columns,
-		recordCrc:   NewCrc32CheckSum(),
-		crcOfCrc:    NewCrc32CheckSum(),
+		httpRes:             httpRes,
+		protoReader:         NewProtocStreamReader(httpRes.Body),
+		columns:             columns,
+		shouldTransformDate: shouldTransformDate,
+		recordCrc:           NewCrc32CheckSum(),
+		crcOfCrc:            NewCrc32CheckSum(),
 	}
 }
 
@@ -115,7 +117,7 @@ LOOP:
 	return record, nil
 }
 
-func (r *RecordProtocReader) Iterator() <- chan data.Record {
+func (r *RecordProtocReader) Iterator() <-chan data.Record {
 	records := make(chan data.Record)
 
 	go func() {

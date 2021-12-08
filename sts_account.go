@@ -7,12 +7,12 @@ type StsAccount struct {
 	AliyunAccount
 }
 
-func NewStsAccount(accessId, accessKey, stsToken string) StsAccount {
-	return StsAccount {
+func NewStsAccount(accessId, accessKey, stsToken string) *StsAccount {
+	return &StsAccount{
 		stsToken: stsToken,
 		AliyunAccount: AliyunAccount{
 			accessKey: accessKey,
-			accessId: accessId,
+			accessId:  accessId,
 		},
 	}
 }
