@@ -2,7 +2,6 @@ package tunnel
 
 import (
 	"bytes"
-	"fmt"
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/aliyun/aliyun-odps-go-sdk/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
@@ -32,7 +31,6 @@ var simpleTypeProtocData = []byte{
 	0xf8, 0xff, 0xff, 0x7f, 0xc0, 0x8f, 0xfa, 0xf1, 0x0b,
 }
 
-
 func TestProtocReadStructType(t *testing.T) {
 	br := bytes.NewReader(structTypeProtocData)
 
@@ -60,21 +58,21 @@ func TestProtocReadStructType(t *testing.T) {
 	}
 
 	if record.Len() != 1 {
-		t.Fatal(fmt.Sprintf("record has one column, but get %d", record.Len()))
+		t.Fatalf("record has one column, but get %d", record.Len())
 	}
 
 	s := record[0].(*data.Struct)
 	structStr := "struct<x:11,y:hello,z:struct<a:100,b:1970-01-01>>"
 
 	if s.String() != structStr {
-		t.Fatal(fmt.Sprintf("expected %s, but get %s", structStr, s.String()))
+		t.Fatalf("expected %s, but get %s", structStr, s.String())
 	}
 
-	expected := []struct{
-		name string
+	expected := []struct {
+		name  string
 		value string
 		typ   datatype.DataType
-	} {
+	}{
 		{"x", "11", datatype.IntType},
 		{"y", "hello", datatype.NewVarcharType(256)},
 		{"z", "struct<a:100,b:1970-01-01>", st.FieldType("z")},
@@ -88,23 +86,23 @@ func TestProtocReadStructType(t *testing.T) {
 	a := z.GetField("a")
 	b := z.GetField("b")
 
-	fields := []data.Data {x, y, z, a, b}
-	for i, n := 0, len(expected); i < n; i ++ {
+	fields := []data.Data{x, y, z, a, b}
+	for i, n := 0, len(expected); i < n; i++ {
 		fv := fields[i].String()
 		ft := fields[i].Type()
 
 		if expected[i].value != fv {
-			t.Fatal(fmt.Sprintf(
+			t.Fatalf(
 				"expect value is %s, but get %s for %s",
 				expected[i].value, fv, expected[i].name,
-			))
+			)
 		}
 
-		if ! datatype.IsTypeEqual(expected[i].typ, ft) {
-			t.Fatal(fmt.Sprintf(
+		if !datatype.IsTypeEqual(expected[i].typ, ft) {
+			t.Fatalf(
 				"expect type is %s, but get %s for %s",
 				expected[i].typ, ft, expected[i].name,
-			))
+			)
 		}
 	}
 }
@@ -187,19 +185,19 @@ func TestProtocReadSimpleType(t *testing.T) {
 		value string
 		typ   datatype.DataType
 	}{
-		{"1", datatype.TinyIntType},                                       // 1
-		{"32767", datatype.SmallIntType},                                  // 2
+		{"1", datatype.TinyIntType},                                        // 1
+		{"32767", datatype.SmallIntType},                                   // 2
 		{"100", datatype.IntType},                                          // 3
-		{"100000000000", datatype.BigIntType},                             // 4
+		{"100000000000", datatype.BigIntType},                              // 4
 		{"unhex('FA34E10293CB42848573A4E39937F479')", datatype.BinaryType}, // 5
 		{"3.1415926E7", datatype.FloatType},                                // 6
 		{"3.14159261E7", datatype.DoubleType},                              // 7
-		{"3.5", datatype.NewDecimalType(38, 18)},          // 8
-		{"hello", datatype.NewVarcharType(1000)},                    // 9
-		{"world", datatype.NewCharType(100)},                        // 10
+		{"3.5", datatype.NewDecimalType(38, 18)},                           // 8
+		{"hello", datatype.NewVarcharType(1000)},                           // 9
+		{"world", datatype.NewCharType(100)},                               // 10
 		{"alibaba", datatype.StringType},                                   // 11
-		{"2017-11-11", datatype.DateType},                                   // 12
-		{"2017-11-11 00:00:00", datatype.DateTimeType},                      // 13
+		{"2017-11-11", datatype.DateType},                                  // 12
+		{"2017-11-11 00:00:00", datatype.DateTimeType},                     // 13
 		{"2017-11-11 00:00:00.123", datatype.TimestampType},                // 14
 		{"true", datatype.BooleanType},                                     // 15
 	}
@@ -210,7 +208,7 @@ func TestProtocReadSimpleType(t *testing.T) {
 		t.Fatal(err)
 	} else {
 		if record.Len() != len(columns) {
-			t.Fatal(fmt.Sprintf("expected %d columns, but get %d", len(columns), record.Len()))
+			t.Fatalf("expected %d columns, but get %d", len(columns), record.Len())
 		}
 
 		for i, n := 0, record.Len(); i < n; i++ {
@@ -219,17 +217,18 @@ func TestProtocReadSimpleType(t *testing.T) {
 			expectedStr := expected[i].value
 
 			if i != 5 && i != 6 && got.String() != expected[i].value {
-				t.Fatal(fmt.Sprintf(
+				t.Fatalf(
 					"%dth column should be %s, but get %s",
-					i+1, expectedStr, gotStr),
+					i+1, expectedStr, gotStr,
 				)
 			}
 
 			if !datatype.IsTypeEqual(got.Type(), expected[i].typ) {
-				t.Fatal(fmt.Sprintf(
+				t.Fatalf(
 					"%dth column's type should be %s, but get %s",
-					i+1, expected[i].typ, got.Type()),
+					i+1, expected[i].typ, got.Type(),
 				)
+
 			}
 		}
 	}
