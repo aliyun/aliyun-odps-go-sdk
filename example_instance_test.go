@@ -76,7 +76,6 @@ Loop:
 		task := tasks[0]
 		if err != nil {
 			log.Fatalf("%+v", err)
-			break
 		} else {
 			println(fmt.Sprintf("%s, %s, %s, %s", task.StartTime, task.EndTime, task.Status, task.Name))
 		}
@@ -181,7 +180,7 @@ func ExampleInstance_GetTaskSummary() {
 	// Output:
 }
 
-func ExampleInstance_GetQueueingInfo() {
+func ExampleInstance_GetCachedInfo() {
 	instances := odps.NewInstances(odpsIns)
 	sqlTask := odps.NewSqlTask("hello1", "select * from user;", "", nil)
 	instance, err := instances.CreateTask("odps_smoke_test", &sqlTask)

@@ -1,48 +1,33 @@
 package data
 
 import (
-	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
 	"github.com/pkg/errors"
+	"reflect"
 	"strings"
 )
 
-type MapKeyTypeErr struct {
-	mapType datatype.MapType
-	keyType datatype.DataType
-}
-
-func (m MapKeyTypeErr) Error() string {
-	return fmt.Sprintf("try to set key of %s type to %s", m.keyType, m.mapType)
-}
-
-type MapValueTypeErr struct {
-	mapType   datatype.MapType
-	valueType datatype.DataType
-}
-
-func (m MapValueTypeErr) Error() string {
-	return fmt.Sprintf("try to set value of %s type to %s", m.valueType, m.mapType)
-}
-
 type Map struct {
-	_type datatype.MapType
-	data  map[Data]Data
+	typ  *datatype.MapType
+	data map[Data]Data
 }
 
-func (m *Map) SetValue(data map[Data]Data) {
-	m.data = data
-}
-
-func NewMap(t datatype.MapType) *Map {
+func NewMap() *Map {
 	return &Map{
-		_type: t,
-		data:  make(map[Data]Data),
+		typ:  nil,
+		data: make(map[Data]Data),
+	}
+}
+
+func NewMapWithType(typ *datatype.MapType) *Map {
+	return &Map{
+		typ:  typ,
+		data: make(map[Data]Data),
 	}
 }
 
 func (m *Map) Type() datatype.DataType {
-	return m._type
+	return *m.typ
 }
 
 func (m *Map) String() string {
@@ -69,20 +54,64 @@ func (m *Map) String() string {
 }
 
 func (m *Map) Sql() string {
-	return m.String()
-}
-
-func (m *Map) Value() map[Data]Data {
-	return m.data
-}
-
-func (m *Map) Set(key Data, value Data) error {
-	if !datatype.IsTypeEqual(key.Type(), m._type.KeyType) {
-		return MapKeyTypeErr{keyType: key.Type(), mapType: m._type}
+	i, n := 0, len(m.data)
+	if n == 0 {
+		return "map()"
 	}
 
-	if !datatype.IsTypeEqual(value.Type(), m._type.ValueType) {
-		return MapValueTypeErr{valueType: key.Type(), mapType: m._type}
+	sb := strings.Builder{}
+
+	for key, value := range m.data {
+		sb.WriteString(key.Sql())
+		sb.WriteString(", ")
+		sb.WriteString(value.Sql())
+
+		i += 1
+		if i < n {
+			sb.WriteString(", ")
+		}
+	}
+
+	sb.WriteString(")")
+	return sb.String()
+}
+
+func (m *Map) Set(keyI interface{}, valueI interface{}) error {
+	key, err := TryConvertGoToOdpsData(keyI)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	value, err := TryConvertGoToOdpsData(valueI)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	m.data[key] = value
+	return nil
+}
+
+func (m *Map) SafeSet(keyI Data, valueI Data) error {
+	if m.typ == nil {
+		return errors.New("element type of Map has not be set")
+	}
+
+	key, err := TryConvertGoToOdpsData(keyI)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	value, err := TryConvertGoToOdpsData(valueI)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	if !datatype.IsTypeEqual(key.Type(), m.typ.KeyType) {
+		return errors.Errorf("fail to set key of type %s to %s", key.Type(), *m.typ)
+	}
+
+	if !datatype.IsTypeEqual(value.Type(), m.typ.ValueType) {
+		return errors.Errorf("fail to set key of type %s to %s", value.Type(), *m.typ)
 	}
 
 	m.data[key] = value
@@ -91,4 +120,52 @@ func (m *Map) Set(key Data, value Data) error {
 
 func (m *Map) Scan(value interface{}) error {
 	return errors.WithStack(tryConvertType(value, m))
+}
+
+func (m *Map) TypeInfer() (datatype.DataType, error) {
+	if len(m.data) == 0 {
+		return nil, errors.Errorf("cannot infer type for empty map")
+	}
+
+	i := 0
+	var keyT, valueT datatype.DataType
+
+	for key, value := range m.data {
+		if i == 0 {
+			keyT = key.Type()
+			valueT = value.Type()
+			continue
+		}
+
+		if !datatype.IsTypeEqual(keyT, key.Type()) {
+			return nil, errors.Errorf("key type is not the same in array, find %s, %s types", keyT, key.Type())
+		}
+
+		if !datatype.IsTypeEqual(valueT, value.Type()) {
+			return nil, errors.Errorf("value type is not the same in array, find %s, %s types", valueT, value.Type())
+		}
+
+		i += 1
+	}
+
+	return datatype.NewMapType(keyT, valueT), nil
+}
+
+func MapFromGoMap(m interface{}) (*Map, error) {
+	mt := reflect.TypeOf(m)
+	if mt.Kind() != reflect.Map {
+		return nil, errors.Errorf("%s is not a map", mt.Name())
+	}
+
+	mm, err := TryConvertGoToOdpsData(m)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	ret, _ := mm.(*Map)
+	return ret, nil
+}
+
+func (m *Map) ToGoMap() map[Data]Data {
+	return m.data
 }

@@ -214,7 +214,8 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 			return nil, errors.WithStack(err)
 		}
 		r.recordCrc.Update(v)
-		fieldValue = data.String(v)
+		s := data.String(v)
+		fieldValue = &s
 	case datatype.VARCHAR:
 		v, err := r.protoReader.ReadBytes()
 		if err != nil {
@@ -339,8 +340,9 @@ func (r *RecordProtocReader) readArray(t datatype.DataType) (*data.Array, error)
 		}
 	}
 
-	array := data.NewArray(datatype.NewArrayType(t))
-	_ = array.AddValue(arrayData...)
+	at := t.(datatype.ArrayType)
+	array := data.NewArrayWithType(&at)
+	array.UnSafeAppend(arrayData...)
 	return array, nil
 }
 
@@ -359,21 +361,18 @@ func (r *RecordProtocReader) readMap(t datatype.MapType) (*data.Map, error) {
 		return nil, errors.New("failed to read map")
 	}
 
-	dm := data.NewMap(t)
+	dm := data.NewMapWithType(&t)
 	for i, n := 0, keys.Len(); i < n; i++ {
 		key := keys.Index(i)
 		value := values.Index(i)
-		err = dm.Set(key, value)
-		if err != nil {
-			return nil, errors.WithStack(err)
-		}
+		dm.Set(key, value)
 	}
 
 	return dm, nil
 }
 
 func (r *RecordProtocReader) readStruct(t datatype.StructType) (*data.Struct, error) {
-	sd := data.NewStruct(t)
+	sd := data.NewStructWithTyp(&t)
 
 	for _, ft := range t.Fields {
 		fn := ft.Name

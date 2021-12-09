@@ -395,6 +395,10 @@ func (s StructFields) Less(i, j int) bool {
 }
 
 func IsTypeEqual(t1, t2 DataType) bool {
+	if t1 == nil || t2 == nil {
+		return false
+	}
+
 	switch t1.ID() {
 	case ARRAY, MAP:
 		if IsNullType(t2) {

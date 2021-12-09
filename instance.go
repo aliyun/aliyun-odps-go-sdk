@@ -308,7 +308,16 @@ func (instance *Instance) WaitForSuccess() error {
 		for _, task := range tasks {
 			switch task.Status {
 			case TaskFailed, TaskCancelled, TaskSuspended:
-				return errors.Errorf("get task %s with status %s", task.Name, task.Status)
+				results, err := instance.GetResult()
+				if err != nil {
+					return errors.Wrapf(err, "get task %s with status %s", task.Name, task.Status)
+				}
+
+				if len(results) <= 0 {
+					return errors.Errorf("get task %s with status %s", task.Name, task.Status)
+				}
+
+				return errors.New(results[0].Result)
 			case TaskSuccess:
 			case TaskRunning, TaskWaiting:
 				success = false

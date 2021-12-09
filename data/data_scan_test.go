@@ -1,22 +1,20 @@
 package data
 
 import (
-	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
 	"testing"
 )
 
-func TestTypeConvert(t *testing.T) {
+func TestDataScan(t *testing.T) {
 	decimal, _ := DecimalFromStr("100.23")
-	array := NewArray(datatype.NewArrayType(datatype.IntType))
-	_ = array.AddValue(Int(1), Int(2))
-	m := NewMap(datatype.NewMapType(datatype.StringType, datatype.StringType))
+	array := NewArray()
+	array.Append(Int(1), Int(2))
+
+	m := NewMap()
 	sa := String("a")
 	sb := String("b")
-	_ = m.Set(&sa, &sb)
-	st := NewStruct(datatype.NewStructType(
-		datatype.NewStructFieldType("a", datatype.FloatType),
-		datatype.NewStructFieldType("b", datatype.DateType),
-	))
+	m.Set(&sa, &sb)
+
+	st := NewStruct()
 
 	d, _ := NewDate("2021-12-08")
 	st.SetField("a", Float(10.23))

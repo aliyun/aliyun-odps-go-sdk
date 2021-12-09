@@ -11,4 +11,5 @@ func init() {
 		panic("account environments are not set")
 	}
 	odpsIns.SetDefaultProjectName("odps_smoke_test")
+	//odpsIns.SetDefaultProjectName("project_1")
 }

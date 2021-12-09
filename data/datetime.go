@@ -17,11 +17,7 @@ type Date time.Time
 type DateTime time.Time
 type Timestamp time.Time
 
-// TODO 仔细查看存入odps和从odps取出的时间有没有差异
-
-func (d Date) Type() datatype.DataType {
-	return datatype.DateType
-}
+// TODO 仔细查看存入odps和从odps取出的时间有没有差异, 注意时区问题
 
 func NewDate(s string) (Date, error) {
 	t, err := time.Parse(DateFormat, s)
@@ -32,8 +28,8 @@ func NewDate(s string) (Date, error) {
 	return Date(t), nil
 }
 
-func (d Date) Value() string {
-	return d.String()
+func (d Date) Type() datatype.DataType {
+	return datatype.DateType
 }
 
 func (d Date) Time() time.Time {
@@ -46,7 +42,7 @@ func (d Date) String() string {
 }
 
 func (d Date) Sql() string {
-	return fmt.Sprintf("date'%s", d.String())
+	return fmt.Sprintf("date'%s'", d.String())
 }
 
 func (d *Date) Scan(value interface{}) error {
@@ -66,10 +62,6 @@ func (d DateTime) Type() datatype.DataType {
 	return datatype.DateTimeType
 }
 
-func (d DateTime) Value() string {
-	return d.String()
-}
-
 func (d DateTime) Time() time.Time {
 	return time.Time(d)
 }
@@ -80,15 +72,11 @@ func (d DateTime) String() string {
 }
 
 func (d DateTime) Sql() string {
-	return fmt.Sprintf("datetime'%s", d.String())
+	return fmt.Sprintf("datetime'%s'", d.String())
 }
 
 func (d *DateTime) Scan(value interface{}) error {
 	return errors.WithStack(tryConvertType(value, d))
-}
-
-func (t Timestamp) Type() datatype.DataType {
-	return datatype.TimestampType
 }
 
 func NewTimestamp(s string) (Timestamp, error) {
@@ -100,8 +88,8 @@ func NewTimestamp(s string) (Timestamp, error) {
 	return Timestamp(t), nil
 }
 
-func (t Timestamp) Value() string {
-	return t.String()
+func (t Timestamp) Type() datatype.DataType {
+	return datatype.TimestampType
 }
 
 func (t Timestamp) Time() time.Time {
@@ -114,7 +102,7 @@ func (t Timestamp) String() string {
 }
 
 func (t Timestamp) Sql() string {
-	return fmt.Sprintf("timestamp'%s", t.String())
+	return fmt.Sprintf("timestamp'%s'", t.String())
 }
 
 func (t *Timestamp) Scan(value interface{}) error {

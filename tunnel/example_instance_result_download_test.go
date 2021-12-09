@@ -17,25 +17,21 @@ func Example_tunnel_download_instance_result() {
 	tunnelIns, err := tunnel.NewTunnelFromProject(project)
 	if err != nil {
 		log.Fatalf("%+v", err)
-		return
 	}
 
 	ins, err := odpsIns.RunSQl("select * from data_type_demo;")
 	if err != nil {
 		log.Fatalf("%+v", err)
-		return
 	}
 
 	err = ins.WaitForSuccess()
 	if err != nil {
 		log.Fatalf("%+v", err)
-		return
 	}
 
 	session, err := tunnelIns.CreateInstanceResultDownloadSession(projectName, ins.Id())
 	if err != nil {
 		log.Fatalf("%+v", err)
-		return
 	}
 
 	//columnNames := []string {
@@ -46,7 +42,6 @@ func Example_tunnel_download_instance_result() {
 	reader, err := session.OpenRecordReader(0, 100, 0, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
-		return
 	}
 
 	// 用read()逐个读取

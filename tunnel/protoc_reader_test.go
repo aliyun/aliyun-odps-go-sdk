@@ -5,6 +5,7 @@ import (
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/aliyun/aliyun-odps-go-sdk/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
+	"strings"
 	"testing"
 )
 
@@ -216,7 +217,7 @@ func TestProtocReadSimpleType(t *testing.T) {
 			gotStr := got.String()
 			expectedStr := expected[i].value
 
-			if i != 5 && i != 6 && got.String() != expected[i].value {
+			if i != 5 && i != 6 && strings.TrimSpace(got.String()) != expected[i].value {
 				t.Fatalf(
 					"%dth column should be %s, but get %s",
 					i+1, expectedStr, gotStr,

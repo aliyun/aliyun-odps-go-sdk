@@ -1,54 +1,32 @@
 package data
 
 import (
-	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
 	"github.com/pkg/errors"
 	"strings"
 )
 
-type ArrayElementError struct {
-	arrayType datatype.ArrayType
-	got       datatype.DataType
-}
-
-func (a ArrayElementError) Error() string {
-	return fmt.Sprintf("try to add %s to %s", a.got.Name(), a.arrayType.Name())
-}
-
 type Array struct {
-	_type datatype.ArrayType
-	data  []Data
+	typ  *datatype.ArrayType // 考虑到很多数据都会用到同一个类型，所以多个数据用指针指向相同的类型，
+	data []Data
 }
 
-func (a *Array) AddValue(data ...Data) error {
-	et := a._type.ElementType
-
-	for _, d := range data {
-		if data == nil {
-			a.data = append(a.data, nil)
-			continue
-		}
-
-		if !datatype.IsTypeEqual(et, d.Type()) {
-			return ArrayElementError{
-				arrayType: a._type,
-				got:       d.Type(),
-			}
-		}
-
-		a.data = append(a.data, d)
+func NewArray() *Array {
+	return &Array{
+		typ:  nil,
+		data: make([]Data, 0),
 	}
+}
 
-	return nil
+func NewArrayWithType(typ *datatype.ArrayType) *Array {
+	return &Array{
+		typ:  typ,
+		data: make([]Data, 0),
+	}
 }
 
 func (a *Array) Type() datatype.DataType {
-	return a._type
-}
-
-func (a *Array) Value() []Data {
-	return a.data
+	return *a.typ
 }
 
 func (a *Array) String() string {
@@ -75,7 +53,72 @@ func (a *Array) String() string {
 }
 
 func (a *Array) Sql() string {
-	return a.String()
+	n := len(a.data)
+
+	if n == 0 {
+		return "array()"
+	}
+
+	sb := strings.Builder{}
+	sb.WriteString("array(")
+
+	for i, d := range a.data {
+		sb.WriteString(d.Sql())
+
+		if i+1 < n {
+			sb.WriteString(", ")
+		}
+	}
+
+	sb.WriteString(")")
+
+	return sb.String()
+}
+
+func (a *Array) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, a))
+}
+
+func (a *Array) SetType(typ *datatype.ArrayType) {
+	a.typ = typ
+}
+
+func (a *Array) UnSafeAppend(data ...Data) {
+	a.data = append(a.data, data...)
+}
+
+func (a *Array) Append(data ...interface{}) error {
+	for _, d := range data {
+		o, err := TryConvertGoToOdpsData(d)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		a.data = append(a.data, o)
+	}
+
+	return nil
+}
+
+func (a *Array) SafeAppend(data ...interface{}) error {
+	if a.typ == nil {
+		return errors.New("element type of Array has not be set")
+	}
+
+	for _, d := range data {
+		o, err := TryConvertGoToOdpsData(d)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		if !datatype.IsTypeEqual(o.Type(), a.typ.ElementType) {
+			return errors.Errorf("expect %s element type for array, but get %s", a.typ.ElementType, o.Type())
+		}
+
+		a.data = append(a.data, o)
+	}
+
+	return nil
 }
 
 func (a *Array) Len() int {
@@ -86,12 +129,31 @@ func (a *Array) Index(i int) Data {
 	return a.data[i]
 }
 
-func (a *Array) Scan(value interface{}) error {
-	return errors.WithStack(tryConvertType(value, a))
+func (a *Array) TypeInfer() (datatype.DataType, error) {
+	if len(a.data) == 0 {
+		return nil, errors.Errorf("cannot infer type for empty array")
+	}
+
+	et := a.data[0].Type()
+	for _, e := range a.data[1:] {
+		if !datatype.IsTypeEqual(e.Type(), et) {
+			return nil, errors.Errorf("element type is not the same in array, find %s, %s types", et, e.Type())
+		}
+	}
+
+	return datatype.NewArrayType(et), nil
 }
 
-func NewArray(_type datatype.ArrayType) *Array {
-	return &Array{
-		_type: _type,
+func ArrayFromSlice(data ...interface{}) (*Array, error) {
+	a := NewArray()
+	err := a.Append(data...)
+	if err != nil {
+		return nil, errors.WithStack(err)
 	}
+
+	return a, nil
+}
+
+func (a *Array) ToSlice() []Data {
+	return a.data
 }
