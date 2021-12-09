@@ -54,6 +54,10 @@ func (c *Char) String() string {
 	return strings.TrimSpace(c.data)
 }
 
+func (c *Char) Sql() string {
+	return fmt.Sprintf("cast('%s' as char(%d))", c.data, c.length)
+}
+
 func (c *Char) Scan(value interface{}) error {
 	return errors.WithStack(tryConvertType(value, c))
 }
@@ -80,6 +84,10 @@ func (v *VarChar) Value() string {
 
 func (v *VarChar) String() string {
 	return v.data
+}
+
+func (v *VarChar) Sql() string {
+	return fmt.Sprintf("cast('%s' as varchar(%d))", v.data, v.length)
 }
 
 func (v *VarChar) Scan(value interface{}) error {

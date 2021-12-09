@@ -23,6 +23,10 @@ func (b Bool) String() string {
 	return fmt.Sprintf("%t", bool(b))
 }
 
+func (b Bool) Sql() string {
+	return fmt.Sprintf("%t", bool(b))
+}
+
 func (b *Bool) Scan(value interface{}) error {
 	return errors.WithStack(tryConvertType(value, b))
 }
@@ -33,6 +37,10 @@ func (t TinyInt) Type() datatype.DataType {
 
 func (t TinyInt) String() string {
 	return fmt.Sprintf("%d", t)
+}
+
+func (t TinyInt) Sql() string {
+	return fmt.Sprintf("%dY", t)
 }
 
 func (t *TinyInt) Scan(value interface{}) error {
@@ -47,11 +55,19 @@ func (s SmallInt) String() string {
 	return fmt.Sprintf("%d", s)
 }
 
+func (s SmallInt) Sql() string {
+	return fmt.Sprintf("%ds", s)
+}
+
 func (i Int) Type() datatype.DataType {
 	return datatype.IntType
 }
 
 func (i Int) String() string {
+	return fmt.Sprintf("%d", i)
+}
+
+func (i Int) Sql() string {
 	return fmt.Sprintf("%d", i)
 }
 
@@ -67,6 +83,10 @@ func (b BigInt) String() string {
 	return fmt.Sprintf("%d", b)
 }
 
+func (b BigInt) Sql() string {
+	return fmt.Sprintf("%dL", b)
+}
+
 func (b *BigInt) Scan(value interface{}) error {
 	return errors.WithStack(tryConvertType(value, b))
 }
@@ -77,6 +97,10 @@ func (f Float) Type() datatype.DataType {
 
 func (f Float) String() string {
 	return fmt.Sprintf("%E", float32(f))
+}
+
+func (f Float) Sql() string {
+	return fmt.Sprintf("cast(%E as float)", float32(f))
 }
 
 func (f *Float) Scan(value interface{}) error {
@@ -91,20 +115,24 @@ func (d Double) String() string {
 	return fmt.Sprintf("%E", float64(d))
 }
 
+func (d Double) Sql() string {
+	return fmt.Sprintf("%E", float64(d))
+}
+
 func (d *Double) Scan(value interface{}) error {
 	return errors.WithStack(tryConvertType(value, d))
 }
 
-func (s String) Type() datatype.DataType {
+func (s *String) Type() datatype.DataType {
 	return datatype.StringType
 }
 
-func (s String) Value() Data {
-	return s
+func (s *String) String() string {
+	return *((*string)(s))
 }
 
-func (s String) String() string {
-	return string(s)
+func (s *String) Sql() string {
+	return *((*string)(s))
 }
 
 func (s *String) Scan(value interface{}) error {

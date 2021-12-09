@@ -10,7 +10,9 @@ func TestTypeConvert(t *testing.T) {
 	array := NewArray(datatype.NewArrayType(datatype.IntType))
 	_ = array.AddValue(Int(1), Int(2))
 	m := NewMap(datatype.NewMapType(datatype.StringType, datatype.StringType))
-	_ = m.Set(String("a"), String("b"))
+	sa := String("a")
+	sb := String("b")
+	_ = m.Set(&sa, &sb)
 	st := NewStruct(datatype.NewStructType(
 		datatype.NewStructFieldType("a", datatype.FloatType),
 		datatype.NewStructFieldType("b", datatype.DateType),

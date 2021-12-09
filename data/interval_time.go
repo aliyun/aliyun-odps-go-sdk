@@ -64,6 +64,10 @@ func (i IntervalDayTime) String() string {
 	return fmt.Sprintf("%d days, %d ms", i.Days(), i.MillisecondsFraction())
 }
 
+func (i IntervalDayTime) Sql() string {
+	return i.String()
+}
+
 func (i *IntervalDayTime) Scan(value interface{}) error {
 	return errors.WithStack(tryConvertType(value, i))
 }
@@ -74,6 +78,10 @@ func (i IntervalYearMonth) Type() datatype.DataType {
 
 func (i IntervalYearMonth) String() string {
 	return fmt.Sprintf("%d months", int32(i))
+}
+
+func (i IntervalYearMonth) Sql() string {
+	return i.String()
 }
 
 func (i *IntervalYearMonth) Scan(value interface{}) error {

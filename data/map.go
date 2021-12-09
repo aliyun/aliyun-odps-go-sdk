@@ -68,6 +68,10 @@ func (m *Map) String() string {
 	return sb.String()
 }
 
+func (m *Map) Sql() string {
+	return m.String()
+}
+
 func (m *Map) Value() map[Data]Data {
 	return m.data
 }

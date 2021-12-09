@@ -43,7 +43,28 @@ func (s *Struct) String() string {
 		sb.WriteString(fieldValue.String())
 
 		if i < n {
-			sb.WriteString(",")
+			sb.WriteString(", ")
+		}
+	}
+
+	sb.WriteString(">")
+
+	return sb.String()
+}
+
+func (s *Struct) Sql() string {
+	var sb strings.Builder
+	sb.WriteString("named_struct<")
+	n := len(s.data) - 1
+	for i, fieldType := range s._type.Fields {
+		fieldName := fieldType.Name
+		fieldValue := s.data[fieldName]
+		sb.WriteString(fieldName)
+		sb.WriteString(", ")
+		sb.WriteString(fieldValue.String())
+
+		if i < n {
+			sb.WriteString(", ")
 		}
 	}
 

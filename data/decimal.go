@@ -79,6 +79,10 @@ func (d *Decimal) String() string {
 	return fmt.Sprintf("%s", d.value)
 }
 
+func (d *Decimal) Sql() string {
+	return fmt.Sprintf("%sBD", d.value)
+}
+
 func (d *Decimal) Scan(value interface{}) error {
 	return errors.WithStack(tryConvertType(value, d))
 }

@@ -74,6 +74,10 @@ func (a *Array) String() string {
 	return sb.String()
 }
 
+func (a *Array) Sql() string {
+	return a.String()
+}
+
 func (a *Array) Len() int {
 	return len(a.data)
 }

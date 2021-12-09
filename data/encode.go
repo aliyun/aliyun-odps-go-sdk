@@ -38,7 +38,8 @@ func tryConvertToOdps(v reflect.Value) (Data, error) {
 	case reflect.Float64:
 		return Double(v.Interface().(float64)), nil
 	case reflect.String:
-		return String(v.Interface().(string)), nil
+		s := String(v.Interface().(string))
+		return &s, nil
 	case reflect.Slice:
 		return tryConvertToArray(v)
 	case reflect.Map:
@@ -64,7 +65,7 @@ func tryConvertToOdps(v reflect.Value) (Data, error) {
 	return nil, CannotConvertToOdpsDataError
 }
 
-func tryConvertToArray(v reflect.Value) (Data, error)  {
+func tryConvertToArray(v reflect.Value) (Data, error) {
 	if v.Len() == 0 {
 		return Null, nil
 	}
@@ -76,7 +77,7 @@ func tryConvertToArray(v reflect.Value) (Data, error)  {
 	dataOfArray[0] = elem0
 	at := datatype.NewArrayType(elem0.Type())
 
-	for i, n := 1, v.Len(); i < n; i ++ {
+	for i, n := 1, v.Len(); i < n; i++ {
 		elem, err := tryConvertToOdps(v.Index(i))
 		if err != nil {
 			return nil, err
@@ -112,7 +113,7 @@ func tryConvertToMap(v reflect.Value) (Data, error) {
 	mt := datatype.NewMapType(keyData.Type(), valueData.Type())
 	m := NewMap(mt)
 
-	for i, n := 1, v.Len(); i < n; i ++ {
+	for i, n := 1, v.Len(); i < n; i++ {
 		keyData, err := tryConvertToOdps(key)
 		if err != nil {
 			return nil, err
@@ -132,7 +133,7 @@ func tryConvertToMap(v reflect.Value) (Data, error) {
 	return m, nil
 }
 
-func tryConvertToStruct(v reflect.Value) (Data, error)  {
+func tryConvertToStruct(v reflect.Value) (Data, error) {
 	fields := make([]datatype.StructFieldType, v.NumField())
 	structData := Struct{
 		data: make(map[string]Data, v.NumField()),
@@ -144,7 +145,7 @@ func tryConvertToStruct(v reflect.Value) (Data, error)  {
 		v = v.Elem()
 	}
 
-	for i, n := 0, v.NumField(); i < n; i ++ {
+	for i, n := 0, v.NumField(); i < n; i++ {
 		fv := v.Field(i)
 		f := t.Field(i)
 
@@ -165,4 +166,3 @@ func tryConvertToStruct(v reflect.Value) (Data, error)  {
 	structData._type = datatype.NewStructType(fields...)
 	return &structData, nil
 }
-

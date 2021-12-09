@@ -16,6 +16,10 @@ func (n NullData) String() string {
 	return "NULL"
 }
 
+func (n NullData) Sql() string {
+	return "NULL"
+}
+
 func (n NullData) Scan(interface{}) error {
 	return nil
 }
