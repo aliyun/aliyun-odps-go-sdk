@@ -132,7 +132,7 @@ func (s *String) String() string {
 }
 
 func (s *String) Sql() string {
-	return *((*string)(s))
+	return fmt.Sprintf("'%s'", *((*string)(s)))
 }
 
 func (s *String) Scan(value interface{}) error {

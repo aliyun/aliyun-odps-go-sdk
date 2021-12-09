@@ -68,12 +68,14 @@ func (s *Struct) String() string {
 
 func (s *Struct) Sql() string {
 	var sb strings.Builder
-	sb.WriteString("named_struct<")
+	sb.WriteString("named_struct(")
 	n := len(s.fields) - 1
 
 	for i, field := range s.fields {
+		sb.WriteString("'")
 		sb.WriteString(field.Name)
-		sb.WriteString(":")
+		sb.WriteString("'")
+		sb.WriteString(", ")
 		sb.WriteString(field.Value.Sql())
 
 		if i < n {
@@ -81,7 +83,7 @@ func (s *Struct) Sql() string {
 		}
 	}
 
-	sb.WriteString(">")
+	sb.WriteString(")")
 
 	return sb.String()
 }
