@@ -2,6 +2,7 @@ package sqldriver
 
 import (
 	"errors"
+	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"net/url"
 	"strconv"
 	"time"
@@ -15,14 +16,14 @@ type Config struct {
 	AccessKey        string
 	StsToken         string
 	Endpoint         string
-	Params           map[string]string
+	ProjectName      string
 	ConnectTimeout   time.Duration
 	OperationTimeout time.Duration
 }
 
 func NewConfig() *Config {
-	return &Config {
-		ConnectTimeout: 30,
+	return &Config{
+		ConnectTimeout:   30 * time.Second,
 		OperationTimeout: 0,
 	}
 }
@@ -51,18 +52,17 @@ func ParseDSN(dsn string) (*Config, error) {
 		return nil, errors.New("project name is not set")
 	}
 
-	endpoint := (
-		&url.URL {
-			Scheme: u.Scheme,
-			Host:   u.Host,
-			Path:   u.Path,
-		}).String()
+	endpoint := (&url.URL{
+		Scheme: u.Scheme,
+		Host:   u.Host,
+		Path:   u.Path,
+	}).String()
 
 	config := NewConfig()
-
 	config.AccessId = accessId
 	config.AccessKey = accessKey
-	config.Endpoint =  endpoint
+	config.Endpoint = endpoint
+	config.ProjectName = projectName
 
 	var connTimeout, opTimeout string
 
@@ -90,4 +90,51 @@ func ParseDSN(dsn string) (*Config, error) {
 	}
 
 	return config, nil
+}
+
+func (c *Config) GenAccount() odps.Account {
+	var account odps.Account
+
+	if c.StsToken == "" {
+		account = odps.NewAliyunAccount(c.AccessId, c.AccessKey)
+	} else {
+		account = odps.NewStsAccount(c.AccessId, c.AccessKey, c.StsToken)
+	}
+
+	return account
+}
+
+func (c *Config) GenRestClient() odps.RestClient {
+	account := c.GenAccount()
+	client := odps.NewOdpsRestClient(account, c.Endpoint)
+	client.TcpConnectionTimeout = c.ConnectTimeout
+	client.HttpTimeout = c.OperationTimeout
+
+	return client
+}
+
+func (c *Config) GenOdps() *odps.Odps {
+	account := c.GenAccount()
+	odpsIns := odps.NewOdps(account, c.Endpoint)
+	odpsIns.SetTcpConnectTimeout(c.ConnectTimeout)
+	odpsIns.SetHttpTimeout(c.OperationTimeout)
+	odpsIns.SetDefaultProjectName(c.ProjectName)
+
+	return odpsIns
+}
+
+func (c *Config) FormatDsn() string {
+	u, _ := url.Parse(c.Endpoint)
+
+	dsn := url.URL{
+		Scheme: u.Scheme,
+		Host:   u.Host,
+		Path:   u.Path,
+	}
+	values := make(url.Values)
+	values.Set("project", c.ProjectName)
+	dsn.RawQuery = values.Encode()
+	dsn.User = url.UserPassword(c.AccessId, c.AccessKey)
+
+	return dsn.String()
 }
