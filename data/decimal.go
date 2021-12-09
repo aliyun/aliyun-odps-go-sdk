@@ -1,9 +1,9 @@
 package data
 
 import (
-	"errors"
 	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
+	"github.com/pkg/errors"
 	"strconv"
 	"strings"
 )
@@ -71,11 +71,14 @@ func DecimalFromStr(value string) (*Decimal, error) {
 	return &d, nil
 }
 
-
 func (d *Decimal) Type() datatype.DataType {
 	return datatype.NewDecimalType(int32(d.precision), int32(d.scale))
 }
 
 func (d *Decimal) String() string {
 	return fmt.Sprintf("%s", d.value)
+}
+
+func (d *Decimal) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, d))
 }

@@ -1,9 +1,9 @@
 package data
 
 import (
-	"errors"
 	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
+	"github.com/pkg/errors"
 	"strings"
 )
 
@@ -50,6 +50,10 @@ func (s *Struct) String() string {
 	sb.WriteString(">")
 
 	return sb.String()
+}
+
+func (s *Struct) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, s))
 }
 
 func (s *Struct) GetField(fieldName string) Data {

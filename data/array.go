@@ -3,12 +3,13 @@ package data
 import (
 	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
+	"github.com/pkg/errors"
 	"strings"
 )
 
 type ArrayElementError struct {
 	arrayType datatype.ArrayType
-	got datatype.DataType
+	got       datatype.DataType
 }
 
 func (a ArrayElementError) Error() string {
@@ -29,10 +30,10 @@ func (a *Array) AddValue(data ...Data) error {
 			continue
 		}
 
-		if ! datatype.IsTypeEqual(et, d.Type()) {
+		if !datatype.IsTypeEqual(et, d.Type()) {
 			return ArrayElementError{
 				arrayType: a._type,
-				got: d.Type(),
+				got:       d.Type(),
 			}
 		}
 
@@ -63,7 +64,7 @@ func (a *Array) String() string {
 	for i, d := range a.data {
 		sb.WriteString(d.String())
 
-		if i + 1 < n {
+		if i+1 < n {
 			sb.WriteString(", ")
 		}
 	}
@@ -73,16 +74,20 @@ func (a *Array) String() string {
 	return sb.String()
 }
 
-func (a *Array) Len() int  {
+func (a *Array) Len() int {
 	return len(a.data)
 }
 
-func (a *Array) Index(i int) Data  {
+func (a *Array) Index(i int) Data {
 	return a.data[i]
 }
 
+func (a *Array) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, a))
+}
+
 func NewArray(_type datatype.ArrayType) *Array {
-	return &Array {
+	return &Array{
 		_type: _type,
 	}
 }

@@ -2,6 +2,7 @@ package data
 
 import (
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
+	"github.com/pkg/errors"
 	"time"
 )
 
@@ -43,6 +44,10 @@ func (d Date) String() string {
 	return t.Format(DateFormat)
 }
 
+func (d *Date) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, d))
+}
+
 func (d DateTime) Type() datatype.DataType {
 	return datatype.DateTimeType
 }
@@ -69,6 +74,10 @@ func (d DateTime) String() string {
 	return t.Format(DateTimeFormat)
 }
 
+func (d *DateTime) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, d))
+}
+
 func (t Timestamp) Type() datatype.DataType {
 	return datatype.TimestampType
 }
@@ -93,4 +102,8 @@ func (t Timestamp) Time() time.Time {
 func (t Timestamp) String() string {
 	ts := time.Time(t)
 	return ts.Format(TimeStampFormat)
+}
+
+func (t *Timestamp) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, t))
 }

@@ -3,6 +3,7 @@ package data
 import (
 	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
+	"github.com/pkg/errors"
 	"strings"
 )
 
@@ -16,7 +17,7 @@ func (m MapKeyTypeErr) Error() string {
 }
 
 type MapValueTypeErr struct {
-	mapType datatype.MapType
+	mapType   datatype.MapType
 	valueType datatype.DataType
 }
 
@@ -33,14 +34,14 @@ func (m *Map) SetValue(data map[Data]Data) {
 	m.data = data
 }
 
-func NewMap(t datatype.MapType) *Map  {
-	return &Map {
+func NewMap(t datatype.MapType) *Map {
+	return &Map{
 		_type: t,
-		data: make(map[Data]Data),
+		data:  make(map[Data]Data),
 	}
 }
 
-func (m *Map) Type() datatype.DataType  {
+func (m *Map) Type() datatype.DataType {
 	return m._type
 }
 
@@ -72,14 +73,18 @@ func (m *Map) Value() map[Data]Data {
 }
 
 func (m *Map) Set(key Data, value Data) error {
-	if ! datatype.IsTypeEqual(key.Type(), m._type.KeyType) {
+	if !datatype.IsTypeEqual(key.Type(), m._type.KeyType) {
 		return MapKeyTypeErr{keyType: key.Type(), mapType: m._type}
 	}
 
-	if ! datatype.IsTypeEqual(value.Type(), m._type.ValueType) {
+	if !datatype.IsTypeEqual(value.Type(), m._type.ValueType) {
 		return MapValueTypeErr{valueType: key.Type(), mapType: m._type}
 	}
 
 	m.data[key] = value
 	return nil
+}
+
+func (m *Map) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, m))
 }

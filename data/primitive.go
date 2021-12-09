@@ -3,6 +3,7 @@ package data
 import (
 	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
+	"github.com/pkg/errors"
 )
 
 type Bool bool
@@ -14,7 +15,6 @@ type Float float32
 type Double float64
 type String string
 
-
 func (b Bool) Type() datatype.DataType {
 	return datatype.BooleanType
 }
@@ -23,12 +23,20 @@ func (b Bool) String() string {
 	return fmt.Sprintf("%t", bool(b))
 }
 
+func (b *Bool) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, b))
+}
+
 func (t TinyInt) Type() datatype.DataType {
 	return datatype.TinyIntType
 }
 
 func (t TinyInt) String() string {
 	return fmt.Sprintf("%d", t)
+}
+
+func (t *TinyInt) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, t))
 }
 
 func (s SmallInt) Type() datatype.DataType {
@@ -44,7 +52,11 @@ func (i Int) Type() datatype.DataType {
 }
 
 func (i Int) String() string {
-	return fmt.Sprintf(  "%d", i)
+	return fmt.Sprintf("%d", i)
+}
+
+func (i *Int) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, i))
 }
 
 func (b BigInt) Type() datatype.DataType {
@@ -55,6 +67,10 @@ func (b BigInt) String() string {
 	return fmt.Sprintf("%d", b)
 }
 
+func (b *BigInt) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, b))
+}
+
 func (f Float) Type() datatype.DataType {
 	return datatype.FloatType
 }
@@ -63,12 +79,20 @@ func (f Float) String() string {
 	return fmt.Sprintf("%E", float32(f))
 }
 
+func (f *Float) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, f))
+}
+
 func (d Double) Type() datatype.DataType {
 	return datatype.DoubleType
 }
 
 func (d Double) String() string {
 	return fmt.Sprintf("%E", float64(d))
+}
+
+func (d *Double) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, d))
 }
 
 func (s String) Type() datatype.DataType {
@@ -83,3 +107,6 @@ func (s String) String() string {
 	return string(s)
 }
 
+func (s *String) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, s))
+}

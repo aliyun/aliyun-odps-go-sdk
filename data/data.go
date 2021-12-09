@@ -8,5 +8,5 @@ import (
 type Data interface {
 	Type() datatype.DataType
 	fmt.Stringer
+	// TODO to sql方法
 }
-

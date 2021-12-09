@@ -3,6 +3,7 @@ package data
 import (
 	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
+	"github.com/pkg/errors"
 	"strings"
 )
 
@@ -53,6 +54,10 @@ func (c *Char) String() string {
 	return strings.TrimSpace(c.data)
 }
 
+func (c *Char) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, c))
+}
+
 func NewVarChar(length int, data string) (*VarChar, error) {
 	if length > 65536 {
 		return nil, fmt.Errorf("max length of char is 65536, not %d is given", length)
@@ -75,4 +80,8 @@ func (v *VarChar) Value() string {
 
 func (v *VarChar) String() string {
 	return v.data
+}
+
+func (v *VarChar) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, v))
 }

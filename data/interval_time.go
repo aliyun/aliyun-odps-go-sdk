@@ -3,6 +3,7 @@ package data
 import (
 	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
+	"github.com/pkg/errors"
 	"time"
 )
 
@@ -12,7 +13,6 @@ type IntervalDayTime struct {
 }
 
 type IntervalYearMonth int32
-
 
 func NewIntervalDayTime(totalSeconds int32, nanos int32) IntervalDayTime {
 	const NanosPerSecond = int32(time.Second)
@@ -31,7 +31,6 @@ func NewIntervalDayTime(totalSeconds int32, nanos int32) IntervalDayTime {
 func (i IntervalDayTime) Type() datatype.DataType {
 	return datatype.IntervalDayTimeType
 }
-
 
 func (i IntervalDayTime) Days() int32 {
 	return i.totalSeconds / (24 * 3600)
@@ -65,6 +64,10 @@ func (i IntervalDayTime) String() string {
 	return fmt.Sprintf("%d days, %d ms", i.Days(), i.MillisecondsFraction())
 }
 
+func (i *IntervalDayTime) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, i))
+}
+
 func (i IntervalYearMonth) Type() datatype.DataType {
 	return datatype.IntervalYearMonthType
 }
@@ -73,3 +76,6 @@ func (i IntervalYearMonth) String() string {
 	return fmt.Sprintf("%d months", int32(i))
 }
 
+func (i *IntervalYearMonth) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, i))
+}
