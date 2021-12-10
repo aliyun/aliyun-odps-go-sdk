@@ -127,6 +127,18 @@ func (c *connection) exec(query string) (driver.Result, error) {
 }
 
 func namedArgQueryToSql(query string, args []driver.NamedValue) (string, error) {
+	if len(args) == 0 {
+		return query, nil
+	}
+
+	if args[0].Name == "" {
+		values := make([]driver.Value, len(args))
+		for i, arg := range args {
+			values[i] = arg.Value
+		}
+		return positionArgQueryToSql(query, values)
+	}
+
 	namedArgQuery := NewNamedArgQuery(query)
 	for _, arg := range args {
 		namedArgQuery.SetArg(arg.Name, arg.Value)

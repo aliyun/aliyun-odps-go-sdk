@@ -4,8 +4,10 @@ import (
 	"database/sql"
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/aliyun/aliyun-odps-go-sdk/data"
+	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 	"log"
+	"time"
 )
 
 func Example() {
@@ -84,7 +86,7 @@ func ExampleStructField() {
 	// Output:
 }
 
-func ExampleExecSql() {
+func ExampleInsert() {
 	var account = odps.AliyunAccountFromEnv()
 	var endpoint = odps.LoadEndpointFromEnv()
 
@@ -100,9 +102,56 @@ func ExampleExecSql() {
 		log.Fatalf("%+v", err)
 	}
 
-	date, _ := data.NewDate("2021-12-09")
+	type SimpleStruct struct {
+		A int32
+		B struct {
+			B1 string
+		}
+	}
 
-	_, err = db.Exec("insert into has_date values (@date);", sql.Named("date", date.Sql()))
+	simpleStruct := SimpleStruct{
+		A: 10,
+		B: struct{ B1 string }{B1: time.Now().Format("2006-01-02 15:04:05")},
+	}
+
+	odpsStruct, err := data.StructFromGoStruct(simpleStruct)
+
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	_, err = db.Exec("insert into simple_struct values (?);", sql.Named("", odpsStruct.Sql()))
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	// Output:
+}
+
+func ExampleCreateTable() {
+	var account = odps.AliyunAccountFromEnv()
+	var endpoint = odps.LoadEndpointFromEnv()
+
+	config := sqldriver.NewConfig()
+	config.Endpoint = endpoint
+	config.AccessId = account.AccessId()
+	config.AccessKey = account.AccessKey()
+	config.ProjectName = "project_1"
+
+	dsn := config.FormatDsn()
+	db, err := sql.Open("odps", dsn)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	structType := datatype.NewStructType(
+		datatype.NewStructFieldType("A", datatype.IntType),
+		datatype.NewStructFieldType("B", datatype.NewStructType(
+			datatype.NewStructFieldType("B1", datatype.StringType),
+		)),
+	)
+
+	_, err = db.Exec("create table simple_struct (struct_field @f);", sql.Named("f", structType.String()))
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
