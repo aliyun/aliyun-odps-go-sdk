@@ -8,17 +8,12 @@ import (
 )
 
 func ExampleProjects_List() {
-	// TODO remove the OUTPUT before publish
-
-	filter := odps.ProjectFilter{
-		Name: "p",
-	}
 	c := make(chan odps.Project)
 
 	projects := odpsIns.Projects()
 
 	go func() {
-		err := projects.List(c, filter)
+		err := projects.List(c, odps.ProjectFilter.WithNamePrefix("p"))
 		if err != nil {
 			log.Fatalf("%+v", err)
 		}

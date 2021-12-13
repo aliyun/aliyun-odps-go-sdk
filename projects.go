@@ -17,13 +17,13 @@ func NewProjects(odps *Odps) Projects {
 }
 
 // List 获取全部的Project, filter可以忽略或提供一个，提供多个时，只会使用第一个
-func (p *Projects) List(c chan Project, filter ...ProjectFilter) error {
+func (p *Projects) List(c chan Project, filters ...PFilterFunc) error {
 	defer close(c)
 
 	queryArgs := make(url.Values)
 
-	if filter != nil {
-		filter[0].fillQueryParams(queryArgs)
+	for _, filter := range filters {
+		filter(queryArgs)
 	}
 
 	client := p.odpsIns.restClient
@@ -102,34 +102,46 @@ func (p *Projects) UpdateProject(projectName string) error {
 	return errors.New("unimplemented")
 }
 
-// ProjectFilter 查询所有所有项目(接口:/projects)的过滤条件
-type ProjectFilter struct {
+var ProjectFilter = struct {
+	WithNamePrefix func(string) PFilterFunc
+	WithOwner      func(string) PFilterFunc
+	WithUser       func(string) PFilterFunc
+	WithGroup      func(string) PFilterFunc
+}{
 	// 指定projects的名字前缀作为查询条件
-	Name string
+	WithNamePrefix: withProjectNamePrefix,
 	// 指定projects的所有者作为查询条件，不能与user同时使用，不支持分页
-	Owner string
+	WithOwner: withProjectOwner,
 	// 指定projects的加入用户名作为查询条件，不能与owner同时使用，不支持分页。
-	User string
+	WithUser: withUserInProject,
 	// 指定projects的group name作为查询条件。
-	Group string
+	WithGroup: withProjectGroup,
 	// MaxItems貌似不起作用
 	// MaxItems int
 }
 
-func (f *ProjectFilter) fillQueryParams(params url.Values) {
-	if f.Name != "" {
-		params.Set("name", f.Name)
-	}
+type PFilterFunc func(url.Values)
 
-	if f.Owner != "" {
-		params.Set("owner", f.Owner)
+func withProjectNamePrefix(name string) PFilterFunc {
+	return func(values url.Values) {
+		values.Set("name", name)
 	}
+}
 
-	if f.User != "" {
-		params.Set("user", f.User)
+func withProjectOwner(owner string) PFilterFunc {
+	return func(values url.Values) {
+		values.Set("owner", owner)
 	}
+}
 
-	if f.Group != "" {
-		params.Set("group", f.Group)
+func withUserInProject(user string) PFilterFunc {
+	return func(values url.Values) {
+		values.Set("user", user)
+	}
+}
+
+func withProjectGroup(group string) PFilterFunc {
+	return func(values url.Values) {
+		values.Set("group", group)
 	}
 }
