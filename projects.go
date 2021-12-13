@@ -16,10 +16,8 @@ func NewProjects(odps *Odps) Projects {
 	}
 }
 
-// List 获取全部的Project, filter可以忽略或提供一个，提供多个时，只会使用第一个
-func (p *Projects) List(c chan Project, filters ...PFilterFunc) error {
-	defer close(c)
-
+// List 获取全部的Project
+func (p *Projects) List(filters ...PFilterFunc) ([]Project, error) {
 	queryArgs := make(url.Values)
 
 	for _, filter := range filters {
@@ -36,12 +34,14 @@ func (p *Projects) List(c chan Project, filters ...PFilterFunc) error {
 		MaxItems int
 		Projects []projectModel `xml:"Project"`
 	}
+
 	var resModel ResModel
+	var projects []Project
 
 	for {
 		err := client.GetWithModel(resource, queryArgs, &resModel)
 		if err != nil {
-			return errors.WithStack(err)
+			return projects, errors.WithStack(err)
 		}
 
 		if len(resModel.Projects) == 0 {
@@ -52,7 +52,7 @@ func (p *Projects) List(c chan Project, filters ...PFilterFunc) error {
 			project := NewProject(projectModel.Name, p.odpsIns)
 			project.model = projectModel
 
-			c <- project
+			projects = append(projects, project)
 		}
 
 		if resModel.Marker != "" {
@@ -63,7 +63,7 @@ func (p *Projects) List(c chan Project, filters ...PFilterFunc) error {
 		}
 	}
 
-	return nil
+	return projects, nil
 }
 
 func (p *Projects) GetDefaultProject() Project {

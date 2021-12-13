@@ -8,23 +8,30 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
 // TODO 将status转换为enum
 
-const (
-	// ProjectStatusAvailable 项目状态, 正常
-	ProjectStatusAvailable = "AVAILABLE"
-	// ProjectStatusReadOnly 项目状态，只读
-	ProjectStatusReadOnly = "READONLY"
-	// ProjectStatusDeleting 项目状态，删除
-	ProjectStatusDeleting = "DELETING"
-	// ProjectStatusFrozen 项目状态，冻结
-	ProjectStatusFrozen = "FROZEN"
-	// ProjectStatusUnKnown 项目状态，未知，正常情况下不会出现这个状态
-	ProjectStatusUnKnown = "UNKNOWN"
+type ProjectStatus int
 
+const (
+	_ = iota
+
+	// ProjectStatusAvailable 项目状态, 正常
+	ProjectStatusAvailable
+	// ProjectStatusReadOnly 项目状态，只读
+	ProjectStatusReadOnly
+	// ProjectStatusDeleting 项目状态，删除
+	ProjectStatusDeleting
+	// ProjectStatusFrozen 项目状态，冻结
+	ProjectStatusFrozen
+	// ProjectStatusUnKnown 项目状态，未知，正常情况下不会出现这个状态
+	ProjectStatusUnKnown
+)
+
+const (
 	// ProjectTypeManaged 项目类型，普通Odps项目
 	ProjectTypeManaged = "managed"
 	// ProjectExternalExternal 项目类型，映射到Odps的外部项目，例如hive
@@ -45,16 +52,16 @@ func (p *Project) OdpsIns() *Odps {
 }
 
 type projectModel struct {
-	XMLName            xml.Name   `xml:"Project"`
-	Name               string     `xml:"Name"`
-	Type               string     `xml:"Type"`
-	Comment            string     `xml:"Comment"`
-	State              string     `xml:"State"`
-	ProjectGroupName   string     `xml:"ProjectGroupName"`
-	Properties         []Property `xml:"Properties>Property"`
-	DefaultCluster     string     `xml:"DefaultCluster"`
-	Clusters           []Cluster  `xml:"Clusters"`
-	ExtendedProperties []Property `xml:"ExtendedProperties>Property"`
+	XMLName            xml.Name      `xml:"Project"`
+	Name               string        `xml:"Name"`
+	Type               string        `xml:"Type"`
+	Comment            string        `xml:"Comment"`
+	Status             ProjectStatus `xml:"State"`
+	ProjectGroupName   string        `xml:"ProjectGroupName"`
+	Properties         []Property    `xml:"Properties>Property"`
+	DefaultCluster     string        `xml:"DefaultCluster"`
+	Clusters           []Cluster     `xml:"Clusters"`
+	ExtendedProperties []Property    `xml:"ExtendedProperties>Property"`
 	// 这三个字段在/projects中和/projects/<projectName>接口中返回的未知不一样,
 	// 前者是body的xml数据中，后者在header里
 	Owner            string  `xml:"Owner"`
@@ -183,8 +190,8 @@ func (p *Project) Comment() string {
 	return p.model.Comment
 }
 
-func (p *Project) State() string {
-	return p.model.State
+func (p *Project) Status() ProjectStatus {
+	return p.model.Status
 }
 
 func (p *Project) ProjectGroupName() string {
@@ -310,4 +317,51 @@ func (p *Project) GetTunnelEndpoint() (string, error) {
 	})
 
 	return fmt.Sprintf("%s://%s", schema, tunnelEndpoint), errors.WithStack(err)
+}
+
+func (status *ProjectStatus) FromStr(s string) {
+	switch strings.ToUpper(s) {
+	case "AVAILABLE":
+		*status = ProjectStatusAvailable
+	case "READONLY":
+		*status = ProjectStatusReadOnly
+	case "DELETING":
+		*status = ProjectStatusDeleting
+	case "FROZEN":
+		*status = ProjectStatusFrozen
+	default:
+		*status = ProjectStatusUnKnown
+	}
+}
+
+func (status ProjectStatus) String() string {
+	switch status {
+	case ProjectStatusAvailable:
+		return "AVAILABLE"
+	case ProjectStatusReadOnly:
+		return "READONLY"
+	case ProjectStatusDeleting:
+		return "DELETING"
+	case ProjectStatusFrozen:
+		return "FROZEN"
+	default:
+		return "UNKNOWN"
+	}
+}
+
+func (status *ProjectStatus) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	var s string
+
+	if err := d.DecodeElement(&s, &start); err != nil {
+		return errors.WithStack(err)
+	}
+
+	status.FromStr(s)
+
+	return nil
+}
+
+func (status ProjectStatus) MarshalXML(d *xml.Encoder, start xml.StartElement) error {
+	s := status.String()
+	return errors.WithStack(d.EncodeElement(s, start))
 }

@@ -8,19 +8,15 @@ import (
 )
 
 func ExampleProjects_List() {
-	c := make(chan odps.Project)
+	projectsIns := odpsIns.Projects()
+	projects, err := projectsIns.List(odps.ProjectFilter.WithNamePrefix("p"))
 
-	projects := odpsIns.Projects()
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
 
-	go func() {
-		err := projects.List(c, odps.ProjectFilter.WithNamePrefix("p"))
-		if err != nil {
-			log.Fatalf("%+v", err)
-		}
-	}()
-
-	for p := range c {
-		println(fmt.Sprintf("%+v", p))
+	for _, project := range projects {
+		println(fmt.Sprintf("%+v", project))
 	}
 
 	// Output:
@@ -28,18 +24,18 @@ func ExampleProjects_List() {
 
 func ExampleProjects_Exists() {
 	projects := odpsIns.Projects()
+	projectName := "project_1"
 
-	existed, _ := projects.Exists("project_1")
-	println(existed)
+	existed, err := projects.Exists(projectName)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
 
-	existed, _ = projects.Exists("project_2")
-	println(existed)
+	println(fmt.Sprintf("%s existed: %t", projectName, existed))
 	// Output:
 }
 
 func ExampleProject() {
-	// TODO remove the OUTPUT before publish
-
 	projects := odpsIns.Projects()
 	project := projects.Get("odps_smoke_test")
 
@@ -47,6 +43,7 @@ func ExampleProject() {
 		panic(err)
 	}
 
+	println(project.Status())
 	println(project.Owner())
 
 	creationTime := project.CreationTime()
