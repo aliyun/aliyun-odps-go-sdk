@@ -3,6 +3,7 @@ package sqldriver_test
 import (
 	"database/sql"
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
+	account2 "github.com/aliyun/aliyun-odps-go-sdk/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
@@ -11,7 +12,7 @@ import (
 )
 
 func Example() {
-	var account = odps.AliyunAccountFromEnv()
+	var account = account2.AliyunAccountFromEnv()
 	var endpoint = odps.LoadEndpointFromEnv()
 
 	config := sqldriver.NewConfig()
@@ -52,7 +53,7 @@ func Example() {
 }
 
 func ExampleStructField() {
-	var account = odps.AliyunAccountFromEnv()
+	var account = account2.AliyunAccountFromEnv()
 	var endpoint = odps.LoadEndpointFromEnv()
 
 	config := sqldriver.NewConfig()
@@ -87,7 +88,7 @@ func ExampleStructField() {
 }
 
 func ExampleInsert() {
-	var account = odps.AliyunAccountFromEnv()
+	var account = account2.AliyunAccountFromEnv()
 	var endpoint = odps.LoadEndpointFromEnv()
 
 	config := sqldriver.NewConfig()
@@ -129,7 +130,7 @@ func ExampleInsert() {
 }
 
 func ExampleCreateTable() {
-	var account = odps.AliyunAccountFromEnv()
+	var account = account2.AliyunAccountFromEnv()
 	var endpoint = odps.LoadEndpointFromEnv()
 
 	config := sqldriver.NewConfig()

@@ -1,6 +1,9 @@
-package odps
+package account
 
-import "net/http"
+import (
+	"github.com/aliyun/aliyun-odps-go-sdk"
+	"net/http"
+)
 
 type StsAccount struct {
 	stsToken string
@@ -23,5 +26,5 @@ func (account *StsAccount) GetType() AccountProvider {
 
 func (account *StsAccount) SignRequest(req *http.Request, endpoint string) {
 	account.AliyunAccount.SignRequest(req, endpoint)
-	req.Header.Set(HttpHeaderAuthorizationSTSToken, account.stsToken)
+	req.Header.Set(odps.HttpHeaderAuthorizationSTSToken, account.stsToken)
 }

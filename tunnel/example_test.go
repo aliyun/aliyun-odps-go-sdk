@@ -3,6 +3,7 @@ package tunnel_test
 import (
 	"fmt"
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
+	account2 "github.com/aliyun/aliyun-odps-go-sdk/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/memory"
 	"github.com/aliyun/aliyun-odps-go-sdk/tunnel"
@@ -21,7 +22,7 @@ func init() {
 	odpsEndpoint := os.Getenv("odps_endpoint")
 	tunnelEndpoint := os.Getenv("tunnel_odps_endpoint")
 
-	account := odps.NewAliyunAccount(accessId, accessKey)
+	account := account2.NewAliyunAccount(accessId, accessKey)
 	odpsIns = odps.NewOdps(account, odpsEndpoint)
 	tunnelIns = tunnel.NewTunnel(odpsIns, tunnelEndpoint)
 }

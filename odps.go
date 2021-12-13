@@ -1,6 +1,7 @@
 package odps
 
 import (
+	account2 "github.com/aliyun/aliyun-odps-go-sdk/account"
 	"github.com/pkg/errors"
 	"time"
 )
@@ -8,13 +9,13 @@ import (
 type Odps struct {
 	defaultProject string
 
-	account    Account
+	account    account2.Account
 	restClient RestClient
 	rb         ResourceBuilder
 	projects   Projects
 }
 
-func NewOdps(account Account, endpoint string) *Odps {
+func NewOdps(account account2.Account, endpoint string) *Odps {
 	ins := Odps{
 		account:    account,
 		restClient: NewOdpsRestClient(account, endpoint),
@@ -25,7 +26,7 @@ func NewOdps(account Account, endpoint string) *Odps {
 	return &ins
 }
 
-func (odps *Odps) Account() Account {
+func (odps *Odps) Account() account2.Account {
 	return odps.account
 }
 

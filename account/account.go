@@ -1,4 +1,4 @@
-package odps
+package account
 
 import (
 	"crypto/hmac"
@@ -21,7 +21,7 @@ const (
 	AccountBearToken
 )
 
-func (p AccountProvider) String() string  {
+func (p AccountProvider) String() string {
 	switch p {
 	case AccountTaobao:
 		return "TAOBAO"
@@ -41,13 +41,12 @@ type Account interface {
 	SignRequest(req *http.Request, endpoint string)
 }
 
-func base64HmacSha1(key []byte, data []byte) string  {
-	hasher := hmac.New(sha1.New,  key)
+func base64HmacSha1(key []byte, data []byte) string {
+	hasher := hmac.New(sha1.New, key)
 	hasher.Write(data)
 	sig := base64.StdEncoding.EncodeToString(hasher.Sum(nil))
 
 	return strings.TrimSpace(sig)
 }
-
 
 // TODO 添加其他类型的账号

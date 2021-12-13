@@ -1,7 +1,8 @@
-package odps
+package account
 
 import (
 	"fmt"
+	"github.com/aliyun/aliyun-odps-go-sdk"
 	"net/http"
 	"strings"
 )
@@ -21,7 +22,7 @@ func NewAppAccount(accessId string, accessKey string) *AppAccount {
 
 func (account *AppAccount) SignRequest(req *http.Request, endpoint string) {
 	account.AliyunAccount.SignRequest(req, endpoint)
-	signature := req.Header.Get(HttpHeaderAuthorization)
+	signature := req.Header.Get(odps.HttpHeaderAuthorization)
 	signature = base64HmacSha1([]byte(account.accessKey), []byte(signature))
 
 	appAuth := fmt.Sprintf(
@@ -31,5 +32,5 @@ func (account *AppAccount) SignRequest(req *http.Request, endpoint string) {
 		signature,
 	)
 
-	req.Header.Set(HttpHeaderAppAuthentication, appAuth)
+	req.Header.Set(odps.HttpHeaderAppAuthentication, appAuth)
 }

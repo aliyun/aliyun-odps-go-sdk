@@ -2,12 +2,13 @@ package tunnel_test
 
 import (
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
+	account2 "github.com/aliyun/aliyun-odps-go-sdk/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/tunnel"
 	"log"
 )
 
 func Example_tunnel_download_instance_result() {
-	var account = odps.AliyunAccountFromEnv()
+	var account = account2.AliyunAccountFromEnv()
 	var endpoint = odps.LoadEndpointFromEnv()
 	var odpsIns = odps.NewOdps(account, endpoint)
 

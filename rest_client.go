@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	"github.com/aliyun/aliyun-odps-go-sdk/account"
 	"github.com/pkg/errors"
 	"io"
 	"log"
@@ -23,7 +24,7 @@ const (
 
 type RestClient struct {
 	// odps 账号
-	Account
+	account.Account
 	// http超时时间，从tcp握手开始计时, 默认为0，即没有超时时间
 	HttpTimeout          time.Duration
 	TcpConnectionTimeout time.Duration
@@ -34,7 +35,7 @@ type RestClient struct {
 	endpoint       string
 }
 
-func NewOdpsRestClient(a Account, endpoint string) RestClient {
+func NewOdpsRestClient(a account.Account, endpoint string) RestClient {
 	var client = RestClient{
 		Account:              a,
 		endpoint:             endpoint,
