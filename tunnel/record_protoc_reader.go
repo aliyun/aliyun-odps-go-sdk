@@ -1,9 +1,9 @@
 package tunnel
 
 import (
-	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/aliyun/aliyun-odps-go-sdk/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/encoding/protowire"
 	"io"

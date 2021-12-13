@@ -1,7 +1,7 @@
 package account
 
 import (
-	"github.com/aliyun/aliyun-odps-go-sdk"
+	"github.com/aliyun/aliyun-odps-go-sdk/consts"
 	"net/http"
 )
 
@@ -20,11 +20,11 @@ func NewStsAccount(accessId, accessKey, stsToken string) *StsAccount {
 	}
 }
 
-func (account *StsAccount) GetType() AccountProvider {
-	return AccountSTS
+func (account *StsAccount) GetType() Provider {
+	return STS
 }
 
 func (account *StsAccount) SignRequest(req *http.Request, endpoint string) {
 	account.AliyunAccount.SignRequest(req, endpoint)
-	req.Header.Set(odps.HttpHeaderAuthorizationSTSToken, account.stsToken)
+	req.Header.Set(consts.HttpHeaderAuthorizationSTSToken, account.stsToken)
 }

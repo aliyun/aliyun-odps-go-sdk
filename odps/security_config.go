@@ -3,6 +3,7 @@ package odps
 import (
 	"bytes"
 	"encoding/xml"
+	"github.com/aliyun/aliyun-odps-go-sdk/consts"
 	"github.com/pkg/errors"
 	"net/url"
 )
@@ -95,13 +96,13 @@ func (sc *SecurityConfig) Update(supervisionToken string) error {
 		return errors.WithStack(err)
 	}
 
-	req, err := client.NewRequestWithUrlQuery(HttpMethod.PutMethod, resource, bytes.NewReader(bodyXml), queryArgs)
+	req, err := client.NewRequestWithUrlQuery(consts.HttpMethod.PutMethod, resource, bytes.NewReader(bodyXml), queryArgs)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
 	if supervisionToken != "" {
-		req.Header.Set(HttpHeaderOdpsSupervisionToken, supervisionToken)
+		req.Header.Set(consts.HttpHeaderOdpsSupervisionToken, supervisionToken)
 	}
 
 	return errors.WithStack(client.DoWithParseFunc(req, nil))

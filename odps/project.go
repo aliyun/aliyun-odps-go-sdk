@@ -3,6 +3,8 @@ package odps
 import (
 	"encoding/xml"
 	"fmt"
+	"github.com/aliyun/aliyun-odps-go-sdk/consts"
+	"github.com/aliyun/aliyun-odps-go-sdk/rest_client"
 	"github.com/pkg/errors"
 	"io/ioutil"
 	"log"
@@ -89,7 +91,7 @@ func NewProject(name string, odpsIns *Odps) Project {
 	}
 }
 
-func (p *Project) RestClient() RestClient {
+func (p *Project) RestClient() rest_client.RestClient {
 	return p.odpsIns.restClient
 }
 
@@ -128,14 +130,14 @@ func (p *Project) _loadFromOdps(params optionalParams) (*projectModel, error) {
 		}
 
 		header := res.Header
-		model.Owner = header.Get(HttpHeaderOdpsOwner)
+		model.Owner = header.Get(consts.HttpHeaderOdpsOwner)
 
-		creationTime, err := ParseRFC1123Date(header.Get(HttpHeaderOdpsCreationTime))
+		creationTime, err := ParseRFC1123Date(header.Get(consts.HttpHeaderOdpsCreationTime))
 		if err != nil {
 			log.Printf("/project get creation time error, %v", err)
 		}
 
-		lastModifiedTime, _ := ParseRFC1123Date(header.Get(HttpHeaderLastModified))
+		lastModifiedTime, _ := ParseRFC1123Date(header.Get(consts.HttpHeaderLastModified))
 		if err != nil {
 			log.Printf("/project get last modified time error, %v", err)
 		}
@@ -159,7 +161,7 @@ func (p *Project) Load() error {
 	p.beLoaded = true
 
 	if err != nil {
-		if httpNoteOk, ok := err.(HttpNotOk); ok {
+		if httpNoteOk, ok := err.(rest_client.HttpNotOk); ok {
 			if httpNoteOk.StatusCode == 404 {
 				p.exists = false
 			}
@@ -300,7 +302,7 @@ func (p *Project) GetTunnelEndpoint() (string, error) {
 	resource := p.rb.Tunnel()
 	queryArgs := make(url.Values, 1)
 	queryArgs.Set("service", "")
-	req, err := client.NewRequestWithUrlQuery(HttpMethod.GetMethod, resource, nil, queryArgs)
+	req, err := client.NewRequestWithUrlQuery(consts.HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
 		return "", errors.WithStack(err)
 	}

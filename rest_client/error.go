@@ -1,4 +1,4 @@
-package odps
+package rest_client
 
 import (
 	"fmt"
@@ -16,16 +16,16 @@ func (e HttpNotOk) Error() string {
 	return fmt.Sprintf("%s\n%s", e.Status, e.Body)
 }
 
-func NewHttpNotOk(res *http.Response) HttpNotOk  {
+func NewHttpNotOk(res *http.Response) HttpNotOk {
 	var body []byte
 
 	if res.Body != nil {
 		body, _ = ioutil.ReadAll(res.Body)
 	}
 
-	return HttpNotOk {
-		Status: res.Status,
+	return HttpNotOk{
+		Status:     res.Status,
 		StatusCode: res.StatusCode,
-		Body: body,
+		Body:       body,
 	}
 }

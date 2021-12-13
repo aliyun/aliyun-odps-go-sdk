@@ -8,28 +8,28 @@ import (
 	"strings"
 )
 
-type AccountProvider uint
+type Provider uint
 
 const (
-	_ AccountProvider = iota
-	// AccountTaobao 淘宝账号
-	AccountTaobao
-	// AccountAliyun 阿里云账号
-	AccountAliyun
-	AccountSTS
-	// AccountBearToken logview token
-	AccountBearToken
+	_ Provider = iota
+	// Taobao 淘宝账号
+	Taobao
+	// Aliyun 阿里云账号
+	Aliyun
+	STS
+	// BearToken logview token
+	BearToken
 )
 
-func (p AccountProvider) String() string {
+func (p Provider) String() string {
 	switch p {
-	case AccountTaobao:
+	case Taobao:
 		return "TAOBAO"
-	case AccountAliyun:
+	case Aliyun:
 		return "ALIYUN"
-	case AccountSTS:
+	case STS:
 		return "STS"
-	case AccountBearToken:
+	case BearToken:
 		return "BEAR_TOKEN"
 	default:
 		return "UnknownAccountProvider"
@@ -37,7 +37,7 @@ func (p AccountProvider) String() string {
 }
 
 type Account interface {
-	GetType() AccountProvider
+	GetType() Provider
 	SignRequest(req *http.Request, endpoint string)
 }
 

@@ -2,7 +2,7 @@ package odps_test
 
 import (
 	"fmt"
-	odps "github.com/aliyun/aliyun-odps-go-sdk"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 )
 
 func ExampleTable() {

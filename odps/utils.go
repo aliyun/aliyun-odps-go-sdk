@@ -3,6 +3,7 @@ package odps
 import (
 	"encoding/json"
 	"encoding/xml"
+	"github.com/aliyun/aliyun-odps-go-sdk/consts"
 	"github.com/pkg/errors"
 	"time"
 )
@@ -37,7 +38,7 @@ func (t *GMTTime) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 }
 
 func ParseRFC1123Date(s string) (time.Time, error) {
-	t, err := time.ParseInLocation(time.RFC1123, s, GMT)
+	t, err := time.ParseInLocation(time.RFC1123, s, consts.GMT)
 	return t, errors.WithStack(err)
 }
 

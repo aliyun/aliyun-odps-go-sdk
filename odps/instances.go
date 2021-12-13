@@ -3,6 +3,7 @@ package odps
 import (
 	"encoding/xml"
 	"fmt"
+	"github.com/aliyun/aliyun-odps-go-sdk/consts"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"net/http"
@@ -74,8 +75,8 @@ func (instances Instances) CreateTaskWithPriority(projectName string, task Task,
 	var instanceId string
 	var isSync bool
 
-	err := client.DoXmlWithParseFunc(HttpMethod.PostMethod, resource, nil, &instanceCreationModel, func(res *http.Response) error {
-		location := res.Header.Get(HttpHeaderLocation)
+	err := client.DoXmlWithParseFunc(consts.HttpMethod.PostMethod, resource, nil, &instanceCreationModel, func(res *http.Response) error {
+		location := res.Header.Get(consts.HttpHeaderLocation)
 
 		if location == "" {
 			return errors.New("invalid response, Location header required")

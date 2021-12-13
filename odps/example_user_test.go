@@ -1,7 +1,7 @@
 package odps_test
 
 import (
-	odps "github.com/aliyun/aliyun-odps-go-sdk"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"log"
 )
 

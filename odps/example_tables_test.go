@@ -2,8 +2,8 @@ package odps_test
 
 import (
 	"fmt"
-	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"log"
 )
 
@@ -80,10 +80,10 @@ func ExampleTables_Create() {
 	}
 
 	hints := make(map[string]string)
-	hints["odps.sql.preparse.odps2"] = "lot"
+	hints["odps.sql.preparse.odps"] = "lot"
 	hints["odps.sql.planner.mode"] = "lot"
-	hints["odps.sql.planner.parser.odps2"] = "true"
-	hints["odps.sql.ddl.odps2"] = "true"
+	hints["odps.sql.planner.parser.odps"] = "true"
+	hints["odps.sql.ddl.odps"] = "true"
 	hints["odps.compiler.output.format"] = "lot,pot"
 
 	builder := odps.NewTableSchemaBuilder()

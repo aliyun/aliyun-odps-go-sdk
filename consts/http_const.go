@@ -1,4 +1,4 @@
-package odps
+package consts
 
 import "time"
 

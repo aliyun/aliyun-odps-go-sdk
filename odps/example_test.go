@@ -1,12 +1,13 @@
 package odps_test
 
 import (
-	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/account"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
+	"github.com/aliyun/aliyun-odps-go-sdk/rest_client"
 )
 
 var account = account2.AliyunAccountFromEnv()
-var endpoint = odps.LoadEndpointFromEnv()
+var endpoint = rest_client.LoadEndpointFromEnv()
 var odpsIns = odps.NewOdps(account, endpoint)
 
 func init() {

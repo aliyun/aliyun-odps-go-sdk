@@ -1,7 +1,7 @@
 package account
 
 import (
-	"github.com/aliyun/aliyun-odps-go-sdk"
+	"github.com/aliyun/aliyun-odps-go-sdk/consts"
 	"net/http"
 )
 
@@ -17,8 +17,8 @@ func NewBearTokenAccount(endPoint, token string) BearTokenAccount {
 	}
 }
 
-func (account *BearTokenAccount) GetType() AccountProvider {
-	return AccountBearToken
+func (account *BearTokenAccount) GetType() Provider {
+	return BearToken
 }
 
 func (account *BearTokenAccount) Endpoint() string {
@@ -26,5 +26,5 @@ func (account *BearTokenAccount) Endpoint() string {
 }
 
 func (account *BearTokenAccount) SignRequest(req *http.Request, _ string) {
-	req.Header.Set(odps.HttpHeaderODPSBearerToken, account.token)
+	req.Header.Set(consts.HttpHeaderODPSBearerToken, account.token)
 }

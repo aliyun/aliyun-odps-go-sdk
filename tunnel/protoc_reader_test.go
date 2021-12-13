@@ -2,9 +2,9 @@ package tunnel
 
 import (
 	"bytes"
-	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/aliyun/aliyun-odps-go-sdk/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"strings"
 	"testing"
 )

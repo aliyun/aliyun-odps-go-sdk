@@ -3,7 +3,9 @@ package tunnel
 import (
 	"encoding/json"
 	"fmt"
-	odps "github.com/aliyun/aliyun-odps-go-sdk"
+	"github.com/aliyun/aliyun-odps-go-sdk/consts"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
+	"github.com/aliyun/aliyun-odps-go-sdk/rest_client"
 	"github.com/pkg/errors"
 	"net/http"
 	"net/url"
@@ -20,7 +22,7 @@ type InstanceResultDownloadSession struct {
 	LimitEnabled        bool
 	IsLongPolling       bool
 	Compressor          Compressor
-	RestClient          odps.RestClient
+	RestClient          rest_client.RestClient
 	schema              odps.TableSchema
 	status              DownLoadStatus
 	recordCount         int
@@ -29,7 +31,7 @@ type InstanceResultDownloadSession struct {
 
 func CreateInstanceResultDownloadSession(
 	projectName, instanceId string,
-	restClient odps.RestClient,
+	restClient rest_client.RestClient,
 	opts ...InstanceOption,
 ) (*InstanceResultDownloadSession, error) {
 	cfg := newInstanceSessionConfig(opts...)
@@ -63,7 +65,7 @@ func CreateInstanceResultDownloadSession(
 
 func AttachToExistedIRDownloadSession(
 	downloadId, projectName, instanceId string,
-	restClient odps.RestClient,
+	restClient rest_client.RestClient,
 	opts ...InstanceOption,
 ) (*InstanceResultDownloadSession, error) {
 	cfg := newInstanceSessionConfig(opts...)
@@ -164,7 +166,7 @@ func (is *InstanceResultDownloadSession) newInitiationRequest() (*http.Request, 
 		}
 	}
 
-	req, err := is.RestClient.NewRequestWithUrlQuery(odps.HttpMethod.PostMethod, resource, nil, queryArgs)
+	req, err := is.RestClient.NewRequestWithUrlQuery(consts.HttpMethod.PostMethod, resource, nil, queryArgs)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -178,7 +180,7 @@ func (is *InstanceResultDownloadSession) newLoadRequest() (*http.Request, error)
 	queryArgs := make(url.Values, 1)
 	queryArgs.Set("downloadid", is.Id)
 
-	req, err := is.RestClient.NewRequestWithUrlQuery(odps.HttpMethod.GetMethod, resource, nil, queryArgs)
+	req, err := is.RestClient.NewRequestWithUrlQuery(consts.HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -200,10 +202,10 @@ func (is *InstanceResultDownloadSession) loadInformation(req *http.Request) erro
 	var resModel ResModel
 	err := is.RestClient.DoWithParseFunc(req, func(res *http.Response) error {
 		if res.StatusCode/100 != 2 {
-			return errors.WithStack(odps.NewHttpNotOk(res))
+			return errors.WithStack(rest_client.NewHttpNotOk(res))
 		}
 
-		is.shouldTransformDate = res.Header.Get(odps.HttpHeaderOdpsDateTransFrom) == "true"
+		is.shouldTransformDate = res.Header.Get(consts.HttpHeaderOdpsDateTransFrom) == "true"
 		decoder := json.NewDecoder(res.Body)
 		return errors.WithStack(decoder.Decode(&resModel))
 	})
@@ -258,7 +260,7 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 	queryArgs.Set("rowrange", fmt.Sprintf("(%d,%d)", start, count))
 
 	req, err := is.RestClient.NewRequestWithUrlQuery(
-		odps.HttpMethod.GetMethod,
+		consts.HttpMethod.GetMethod,
 		is.ResourceUrl(),
 		nil,
 		queryArgs,
@@ -286,7 +288,7 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 	}
 
 	if res.StatusCode/100 != 2 {
-		return res, errors.WithStack(odps.NewHttpNotOk(res))
+		return res, errors.WithStack(rest_client.NewHttpNotOk(res))
 	}
 
 	contentEncoding := res.Header.Get("Content-Encoding")

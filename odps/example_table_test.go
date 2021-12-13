@@ -2,8 +2,8 @@ package odps_test
 
 import (
 	"fmt"
-	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"io"
 	"log"
 )
@@ -33,10 +33,10 @@ func ExampleTableSchema_ToSQLString() {
 	}
 
 	serdeProperties := make(map[string]string)
-	serdeProperties["odps.sql.preparse.odps2"] = "lot"
+	serdeProperties["odps.sql.preparse.odps"] = "lot"
 	serdeProperties["odps.sql.planner.mode"] = "lot"
-	serdeProperties["odps.sql.planner.parser.odps2"] = "true"
-	serdeProperties["odps.sql.ddl.odps2"] = "true"
+	serdeProperties["odps.sql.planner.parser.odps"] = "true"
+	serdeProperties["odps.sql.ddl.odps"] = "true"
 	serdeProperties["odps.compiler.output.format"] = "lot,pot"
 
 	jars := []string{"odps-udf-example.jar", "another.jar"}

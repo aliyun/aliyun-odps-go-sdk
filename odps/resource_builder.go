@@ -7,7 +7,7 @@ import (
 
 const (
 	ProjectsPath        = "/projects"
-	SchemasPath          = "/schemas"
+	SchemasPath         = "/schemas"
 	TablesPath          = "/tables"
 	RegistrationPath    = "/registration"
 	FunctionsPath       = "/functions"
@@ -28,7 +28,7 @@ const (
 	SessionsPath        = "/session"
 	AuthPath            = "/auth"
 	AuthorizationPath   = "/authorization"
-	TunnelPath              = "/tunnel"
+	TunnelPath          = "/tunnel"
 )
 
 type ResourceBuilder struct {

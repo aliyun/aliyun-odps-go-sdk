@@ -2,6 +2,7 @@ package odps
 
 import (
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/account"
+	"github.com/aliyun/aliyun-odps-go-sdk/rest_client"
 	"github.com/pkg/errors"
 	"time"
 )
@@ -10,7 +11,7 @@ type Odps struct {
 	defaultProject string
 
 	account    account2.Account
-	restClient RestClient
+	restClient rest_client.RestClient
 	rb         ResourceBuilder
 	projects   Projects
 }
@@ -18,7 +19,7 @@ type Odps struct {
 func NewOdps(account account2.Account, endpoint string) *Odps {
 	ins := Odps{
 		account:    account,
-		restClient: NewOdpsRestClient(account, endpoint),
+		restClient: rest_client.NewOdpsRestClient(account, endpoint),
 	}
 
 	ins.projects = NewProjects(&ins)
@@ -30,7 +31,7 @@ func (odps *Odps) Account() account2.Account {
 	return odps.account
 }
 
-func (odps *Odps) RestClient() RestClient {
+func (odps *Odps) RestClient() rest_client.RestClient {
 	return odps.restClient
 }
 
@@ -53,7 +54,7 @@ func (odps *Odps) DefaultProjectName() string {
 func (odps *Odps) SetDefaultProjectName(projectName string) {
 	odps.defaultProject = projectName
 	odps.rb.SetProject(projectName)
-	odps.restClient.setDefaultProject(projectName)
+	odps.restClient.SetDefaultProject(projectName)
 }
 
 func (odps *Odps) Projects() Projects {

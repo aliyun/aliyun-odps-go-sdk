@@ -1,10 +1,11 @@
-package odps
+package rest_client
 
 import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/account"
+	"github.com/aliyun/aliyun-odps-go-sdk/consts"
 	"github.com/pkg/errors"
 	"io"
 	"log"
@@ -52,7 +53,7 @@ func LoadEndpointFromEnv() string {
 	return endpoint
 }
 
-func (client *RestClient) setDefaultProject(projectName string) {
+func (client *RestClient) SetDefaultProject(projectName string) {
 	client.defaultProject = projectName
 }
 
@@ -108,9 +109,9 @@ func (client *RestClient) NewRequestWithUrlQuery(method, resource string, body i
 }
 
 func (client *RestClient) Do(req *http.Request) (*http.Response, error) {
-	req.Header.Set(HttpHeaderXOdpsUserAgent, UserAgentValue)
-	gmtTime := time.Now().In(GMT).Format(time.RFC1123)
-	req.Header.Set(HttpHeaderDate, gmtTime)
+	req.Header.Set(consts.HttpHeaderXOdpsUserAgent, consts.UserAgentValue)
+	gmtTime := time.Now().In(consts.GMT).Format(time.RFC1123)
+	req.Header.Set(consts.HttpHeaderDate, gmtTime)
 	query := req.URL.Query()
 
 	if !query.Has("curr_project") && client.defaultProject != "" {
@@ -169,7 +170,7 @@ func (client *RestClient) DoWithModel(req *http.Request, model interface{}) erro
 }
 
 func (client *RestClient) GetWithModel(resource string, queryArgs url.Values, model interface{}) error {
-	req, err := client.NewRequestWithUrlQuery(HttpMethod.GetMethod, resource, nil, queryArgs)
+	req, err := client.NewRequestWithUrlQuery(consts.HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -178,7 +179,7 @@ func (client *RestClient) GetWithModel(resource string, queryArgs url.Values, mo
 }
 
 func (client *RestClient) GetWithParseFunc(resource string, queryArgs url.Values, parseFunc func(res *http.Response) error) error {
-	req, err := client.NewRequestWithUrlQuery(HttpMethod.GetMethod, resource, nil, queryArgs)
+	req, err := client.NewRequestWithUrlQuery(consts.HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -187,7 +188,7 @@ func (client *RestClient) GetWithParseFunc(resource string, queryArgs url.Values
 }
 
 func (client *RestClient) PutWithParseFunc(resource string, queryArgs url.Values, body io.Reader, parseFunc func(res *http.Response) error) error {
-	req, err := client.NewRequestWithUrlQuery(HttpMethod.PutMethod, resource, body, queryArgs)
+	req, err := client.NewRequestWithUrlQuery(consts.HttpMethod.PutMethod, resource, body, queryArgs)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -209,7 +210,7 @@ func (client *RestClient) DoXmlWithParseFunc(
 	}
 
 	req, err := client.NewRequestWithUrlQuery(method, resource, bytes.NewReader(bodyXml), queryArgs)
-	req.Header.Set(HttpHeaderContentType, XMLContentType)
+	req.Header.Set(consts.HttpHeaderContentType, consts.XMLContentType)
 
 	if err != nil {
 		return errors.WithStack(err)
@@ -232,7 +233,7 @@ func (client *RestClient) DoXmlWithParseRes(
 	}
 
 	req, err := client.NewRequestWithUrlQuery(method, resource, bytes.NewReader(bodyXml), queryArgs)
-	req.Header.Set(HttpHeaderContentType, XMLContentType)
+	req.Header.Set(consts.HttpHeaderContentType, consts.XMLContentType)
 
 	if err != nil {
 		return errors.WithStack(err)

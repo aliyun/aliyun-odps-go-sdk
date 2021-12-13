@@ -27,7 +27,6 @@ func (t *TaskConfig) AddProperty(key, value string) {
 	t.Config = append(t.Config, Property{Name: key, Value: value})
 }
 
-
 type SQLCostTask struct {
 	XMLName xml.Name `xml:"SQLCost"`
 	SQLTask
@@ -79,7 +78,7 @@ type MergeTask struct {
 	TaskConfig
 }
 
-func (t *MergeTask) TaskType() string  {
+func (t *MergeTask) TaskType() string {
 	return "Merge"
 }
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"github.com/aliyun/aliyun-odps-go-sdk/consts"
 	"github.com/pkg/errors"
 	"net/url"
 	"strings"
@@ -121,7 +122,7 @@ func (tables *Tables) BatchLoadTables(tableNames []string) ([]Table, error) {
 	resource := rb.Tables()
 	client := tables.odpsIns.restClient
 
-	err := client.DoXmlWithModel(HttpMethod.PostMethod, resource, queryArgs, &postBodyModel, &resModel)
+	err := client.DoXmlWithModel(consts.HttpMethod.PostMethod, resource, queryArgs, &postBodyModel, &resModel)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}

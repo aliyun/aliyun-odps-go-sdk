@@ -13,7 +13,7 @@ const (
 	ObjectTypeInstance
 )
 
-func (p PermissionObjectType) String() string  {
+func (p PermissionObjectType) String() string {
 	switch p {
 	case ObjectTypeProject:
 		return "Project"
@@ -105,6 +105,3 @@ func (p PermissionEffect) String() string {
 		return "UnknownEffect"
 	}
 }
-
-
-

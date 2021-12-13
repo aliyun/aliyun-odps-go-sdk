@@ -3,8 +3,10 @@ package tunnel
 import (
 	"encoding/json"
 	"fmt"
-	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
+	"github.com/aliyun/aliyun-odps-go-sdk/consts"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
+	"github.com/aliyun/aliyun-odps-go-sdk/rest_client"
 	"github.com/pkg/errors"
 	"net/http"
 	"net/url"
@@ -43,7 +45,7 @@ type DownloadSession struct {
 	Async               bool
 	ShardId             int
 	Compressor          Compressor
-	RestClient          odps.RestClient
+	RestClient          rest_client.RestClient
 	schema              odps.TableSchema
 	status              DownLoadStatus
 	recordCount         int
@@ -61,7 +63,7 @@ type DownloadSession struct {
 //     异步创建session,小文件多的场景下可以避免连接超时的问题, 默认为false
 func CreateDownloadSession(
 	projectName, tableName string,
-	restClient odps.RestClient,
+	restClient rest_client.RestClient,
 	opts ...Option,
 ) (*DownloadSession, error) {
 
@@ -94,7 +96,7 @@ func CreateDownloadSession(
 
 func AttachToExistedDownloadSession(
 	sessionId, projectName, tableName string,
-	restClient odps.RestClient,
+	restClient rest_client.RestClient,
 	opts ...Option,
 ) (*DownloadSession, error) {
 
@@ -205,7 +207,7 @@ func (ds *DownloadSession) newInitiationRequest() (*http.Request, error) {
 		queryArgs.Set("shard", strconv.Itoa(ds.ShardId))
 	}
 
-	req, err := ds.RestClient.NewRequestWithUrlQuery(odps.HttpMethod.PostMethod, resource, nil, queryArgs)
+	req, err := ds.RestClient.NewRequestWithUrlQuery(consts.HttpMethod.PostMethod, resource, nil, queryArgs)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -226,7 +228,7 @@ func (ds *DownloadSession) newLoadRequest() (*http.Request, error) {
 	if ds.ShardId != 0 {
 		queryArgs.Set("shard", strconv.Itoa(ds.ShardId))
 	}
-	req, err := ds.RestClient.NewRequestWithUrlQuery(odps.HttpMethod.GetMethod, resource, nil, queryArgs)
+	req, err := ds.RestClient.NewRequestWithUrlQuery(consts.HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -248,10 +250,10 @@ func (ds *DownloadSession) loadInformation(req *http.Request) error {
 	var resModel ResModel
 	err := ds.RestClient.DoWithParseFunc(req, func(res *http.Response) error {
 		if res.StatusCode/100 != 2 {
-			return odps.NewHttpNotOk(res)
+			return rest_client.NewHttpNotOk(res)
 		}
 
-		ds.shouldTransformDate = res.Header.Get(odps.HttpHeaderOdpsDateTransFrom) == "true"
+		ds.shouldTransformDate = res.Header.Get(consts.HttpHeaderOdpsDateTransFrom) == "true"
 		decoder := json.NewDecoder(res.Body)
 		return decoder.Decode(&resModel)
 	})
@@ -294,7 +296,7 @@ func (ds *DownloadSession) newDownloadConnection(start, count int, columnNames [
 	}
 
 	req, err := ds.RestClient.NewRequestWithUrlQuery(
-		odps.HttpMethod.GetMethod,
+		consts.HttpMethod.GetMethod,
 		ds.ResourceUrl(),
 		nil,
 		queryArgs,
@@ -316,7 +318,7 @@ func (ds *DownloadSession) newDownloadConnection(start, count int, columnNames [
 	}
 
 	if res.StatusCode/100 != 2 {
-		return res, odps.NewHttpNotOk(res)
+		return res, rest_client.NewHttpNotOk(res)
 	}
 
 	contentEncoding := res.Header.Get("Content-Encoding")

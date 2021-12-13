@@ -11,5 +11,5 @@ type Job struct {
 	LastModifiedTime GMTTime
 	Priority         int
 	RunningCluster   string
-	Tasks            []Task   `xml:"Tasks>Task"`
+	Tasks            []Task `xml:"Tasks>Task"`
 }

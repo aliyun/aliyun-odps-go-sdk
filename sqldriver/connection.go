@@ -3,7 +3,7 @@ package sqldriver
 import (
 	"context"
 	"database/sql/driver"
-	odps "github.com/aliyun/aliyun-odps-go-sdk"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/tunnel"
 	"github.com/pkg/errors"
 )

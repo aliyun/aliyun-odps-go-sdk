@@ -1,16 +1,17 @@
 package tunnel
 
 import (
-	odps "github.com/aliyun/aliyun-odps-go-sdk"
+	"github.com/aliyun/aliyun-odps-go-sdk/consts"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/pkg/errors"
 	"net/http"
 	"time"
 )
 
 func addCommonSessionHttpHeader(header http.Header) {
-	header.Add(odps.HttpHeaderOdpsDateTransFrom, DateTransformVersion)
-	header.Add(odps.HttpHeaderOdpsTunnelVersion, Version)
+	header.Add(consts.HttpHeaderOdpsDateTransFrom, DateTransformVersion)
+	header.Add(consts.HttpHeaderOdpsTunnelVersion, Version)
 }
 
 type columnResModel struct {

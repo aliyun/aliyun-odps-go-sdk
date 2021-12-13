@@ -1,10 +1,10 @@
 package tunnel
 
 import (
-	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/ipc"
+	"github.com/aliyun/aliyun-odps-go-sdk/rest_client"
 	"github.com/pkg/errors"
 )
 
@@ -39,7 +39,7 @@ func (writer *RecordArrowWriter) GetHttpError() error {
 
 	res := rOrE.res
 	if res.StatusCode/100 != 2 {
-		return errors.WithStack(odps.NewHttpNotOk(res))
+		return errors.WithStack(rest_client.NewHttpNotOk(res))
 	}
 
 	return nil

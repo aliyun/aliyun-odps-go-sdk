@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"encoding/xml"
+	"github.com/aliyun/aliyun-odps-go-sdk/consts"
+	"github.com/aliyun/aliyun-odps-go-sdk/rest_client"
 	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/http"
@@ -65,8 +67,8 @@ func (sm *SecurityManager) CheckPermissionV1(p Permission) (*PermissionCheckResu
 		return nil, errors.WithStack(err)
 	}
 
-	req, err := client.NewRequest(HttpMethod.PostMethod, resource, bytes.NewReader(body))
-	req.Header.Set(HttpHeaderContentType, "application/json")
+	req, err := client.NewRequest(consts.HttpMethod.PostMethod, resource, bytes.NewReader(body))
+	req.Header.Set(consts.HttpHeaderContentType, "application/json")
 	var resModel ResModel
 	err = client.DoWithModel(req, &resModel)
 
@@ -130,14 +132,14 @@ func (sm *SecurityManager) setPolicy(resource, policyType string, policy string)
 	queryArgs := make(url.Values, 1)
 	queryArgs.Set(policyType, "")
 	client := sm.odpsIns.restClient
-	req, err := client.NewRequestWithUrlQuery(HttpMethod.PutMethod, resource, strings.NewReader(policy), queryArgs)
+	req, err := client.NewRequestWithUrlQuery(consts.HttpMethod.PutMethod, resource, strings.NewReader(policy), queryArgs)
 
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
 	if policyType == "security_policy" {
-		req.Header.Set(HttpHeaderContentType, "application/json")
+		req.Header.Set(consts.HttpHeaderContentType, "application/json")
 	}
 
 	return errors.WithStack(client.DoWithParseFunc(req, nil))
@@ -320,9 +322,9 @@ func (sm *SecurityManager) RunQuery(query string, jsonOutput bool, supervisionTo
 	var resModel ResModel
 	var isAsync bool
 
-	err := client.DoXmlWithParseRes(HttpMethod.PostMethod, resource, nil, reqBody, func(res *http.Response) error {
+	err := client.DoXmlWithParseRes(consts.HttpMethod.PostMethod, resource, nil, reqBody, func(res *http.Response) error {
 		if res.StatusCode < 200 || res.StatusCode >= 300 {
-			return errors.WithStack(NewHttpNotOk(res))
+			return errors.WithStack(rest_client.NewHttpNotOk(res))
 		}
 
 		isAsync = res.StatusCode != 200
@@ -330,7 +332,7 @@ func (sm *SecurityManager) RunQuery(query string, jsonOutput bool, supervisionTo
 		return errors.WithStack(decoder.Decode(&resModel))
 	})
 
-	if httpNodeOk, ok := err.(HttpNotOk); ok {
+	if httpNodeOk, ok := err.(rest_client.HttpNotOk); ok {
 		return string(httpNodeOk.Body), errors.WithStack(err)
 	}
 
@@ -355,11 +357,11 @@ func (sm *SecurityManager) GenerateAuthorizationToken(policy string) (string, er
 
 	queryArgs := make(url.Values, 1)
 	queryArgs.Set("sign_bearer_token", "")
-	req, err := client.NewRequest(HttpMethod.PostMethod, resource, strings.NewReader(policy))
+	req, err := client.NewRequest(consts.HttpMethod.PostMethod, resource, strings.NewReader(policy))
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
-	req.Header.Set(HttpHeaderContentType, "application/json")
+	req.Header.Set(consts.HttpHeaderContentType, "application/json")
 
 	type ResModel struct {
 		XMLName xml.Name `xml:"Authorization"`

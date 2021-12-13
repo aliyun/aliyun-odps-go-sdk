@@ -2,7 +2,7 @@ package account
 
 import (
 	"bytes"
-	"github.com/aliyun/aliyun-odps-go-sdk"
+	"github.com/aliyun/aliyun-odps-go-sdk/consts"
 	"net/http"
 	"net/url"
 	"os"
@@ -44,8 +44,8 @@ func (account *AliyunAccount) AccessKey() string {
 	return account.accessKey
 }
 
-func (account *AliyunAccount) GetType() AccountProvider {
-	return AccountAliyun
+func (account *AliyunAccount) GetType() Provider {
+	return Aliyun
 }
 
 func (account *AliyunAccount) SignRequest(req *http.Request, endpoint string) {
@@ -56,18 +56,18 @@ func (account *AliyunAccount) SignRequest(req *http.Request, endpoint string) {
 	msg.WriteByte('\n')
 
 	// write common header
-	msg.WriteString(req.Header.Get(odps.HttpHeaderContentMD5))
+	msg.WriteString(req.Header.Get(consts.HttpHeaderContentMD5))
 	msg.WriteByte('\n')
-	msg.WriteString(req.Header.Get(odps.HttpHeaderContentType))
+	msg.WriteString(req.Header.Get(consts.HttpHeaderContentType))
 	msg.WriteByte('\n')
-	msg.WriteString(req.Header.Get(odps.HttpHeaderDate))
+	msg.WriteString(req.Header.Get(consts.HttpHeaderDate))
 	msg.WriteByte('\n')
 
 	// build canonical header
 	var canonicalHeaderKeys []string
 
 	for key := range req.Header {
-		if strings.HasPrefix(strings.ToLower(key), odps.HttpHeaderOdpsPrefix) {
+		if strings.HasPrefix(strings.ToLower(key), consts.HttpHeaderOdpsPrefix) {
 			canonicalHeaderKeys = append(canonicalHeaderKeys, key)
 		}
 	}
@@ -128,5 +128,5 @@ func (account *AliyunAccount) SignRequest(req *http.Request, endpoint string) {
 	signature.WriteByte(':')
 	signature.WriteString(_signature)
 
-	req.Header.Set(odps.HttpHeaderAuthorization, signature.String())
+	req.Header.Set(consts.HttpHeaderAuthorization, signature.String())
 }

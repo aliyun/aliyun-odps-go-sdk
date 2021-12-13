@@ -2,8 +2,10 @@ package tunnel
 
 import (
 	"encoding/json"
-	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
+	"github.com/aliyun/aliyun-odps-go-sdk/consts"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
+	"github.com/aliyun/aliyun-odps-go-sdk/rest_client"
 	"github.com/pkg/errors"
 	"io"
 	"net/http"
@@ -57,7 +59,7 @@ type UploadSession struct {
 	Overwrite           bool
 	UseArrow            bool
 	Compressor          Compressor
-	RestClient          odps.RestClient
+	RestClient          rest_client.RestClient
 	fieldMaxSize        int
 	shouldTransformDate bool
 	schema              odps.TableSchema
@@ -81,7 +83,7 @@ func (u *UploadSession) SetPartitionKey(partitionKey string) {
 // CreateUploadSession 创建一个新的UploadSession
 func CreateUploadSession(
 	projectName, tableName string,
-	restClient odps.RestClient,
+	restClient rest_client.RestClient,
 	opts ...Option,
 ) (*UploadSession, error) {
 
@@ -114,7 +116,7 @@ func CreateUploadSession(
 // AttachToExistedUploadSession 根据已有的session id获取session
 func AttachToExistedUploadSession(
 	sessionId, projectName, tableName string,
-	restClient odps.RestClient,
+	restClient rest_client.RestClient,
 	opts ...Option) (*UploadSession, error) {
 
 	cfg := newSessionConfig(opts...)
@@ -214,7 +216,7 @@ func (u *UploadSession) Commit(blockIds []int) error {
 		queryArgs.Set("partition", u.partitionKey)
 	}
 
-	req, err := u.RestClient.NewRequestWithUrlQuery(odps.HttpMethod.PostMethod, u.ResourceUrl(), nil, queryArgs)
+	req, err := u.RestClient.NewRequestWithUrlQuery(consts.HttpMethod.PostMethod, u.ResourceUrl(), nil, queryArgs)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -249,10 +251,10 @@ func (u *UploadSession) loadInformation(req *http.Request) error {
 	var resModel ResModel
 	err := u.RestClient.DoWithParseFunc(req, func(res *http.Response) error {
 		if res.StatusCode/100 != 2 {
-			return errors.WithStack(odps.NewHttpNotOk(res))
+			return errors.WithStack(rest_client.NewHttpNotOk(res))
 		}
 
-		u.shouldTransformDate = res.Header.Get(odps.HttpHeaderOdpsDateTransFrom) == "true"
+		u.shouldTransformDate = res.Header.Get(consts.HttpHeaderOdpsDateTransFrom) == "true"
 
 		decoder := json.NewDecoder(res.Body)
 		return errors.WithStack(decoder.Decode(&resModel))
@@ -293,7 +295,7 @@ func (u *UploadSession) newInitiationRequest() (*http.Request, error) {
 		queryArgs.Set("override", "true")
 	}
 
-	req, err := u.RestClient.NewRequestWithUrlQuery(odps.HttpMethod.PostMethod, resource, nil, queryArgs)
+	req, err := u.RestClient.NewRequestWithUrlQuery(consts.HttpMethod.PostMethod, resource, nil, queryArgs)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -311,7 +313,7 @@ func (u *UploadSession) newLoadRequest() (*http.Request, error) {
 		queryArgs.Set("partition", u.partitionKey)
 	}
 
-	req, err := u.RestClient.NewRequestWithUrlQuery(odps.HttpMethod.GetMethod, resource, nil, queryArgs)
+	req, err := u.RestClient.NewRequestWithUrlQuery(consts.HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -339,8 +341,8 @@ func (u *UploadSession) newUploadConnection(blockId int, useArrow bool) (*httpCo
 	reader, writer = io.Pipe()
 
 	resource := u.ResourceUrl()
-	req, err := u.RestClient.NewRequestWithUrlQuery(odps.HttpMethod.PutMethod, resource, reader, queryArgs)
-	req.Header.Set(odps.HttpHeaderContentType, "application/octet-stream")
+	req, err := u.RestClient.NewRequestWithUrlQuery(consts.HttpMethod.PutMethod, resource, reader, queryArgs)
+	req.Header.Set(consts.HttpHeaderContentType, "application/octet-stream")
 	addCommonSessionHttpHeader(req.Header)
 	if err != nil {
 		return nil, errors.WithStack(err)

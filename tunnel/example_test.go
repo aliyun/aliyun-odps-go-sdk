@@ -2,10 +2,10 @@ package tunnel_test
 
 import (
 	"fmt"
-	odps "github.com/aliyun/aliyun-odps-go-sdk"
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/memory"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/tunnel"
 	"github.com/pkg/errors"
 	"log"

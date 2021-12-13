@@ -3,7 +3,7 @@ package odps_test
 import (
 	"encoding/json"
 	"fmt"
-	odps "github.com/aliyun/aliyun-odps-go-sdk"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"log"
 )
 

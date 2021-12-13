@@ -3,6 +3,7 @@ package odps
 import (
 	"encoding/json"
 	"encoding/xml"
+	"github.com/aliyun/aliyun-odps-go-sdk/consts"
 	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/http"
@@ -104,9 +105,9 @@ func (instance *Instance) Load() error {
 
 	err := client.GetWithParseFunc(instance.resourceUrl, nil, func(res *http.Response) error {
 		header := res.Header
-		instance.owner = header.Get(HttpHeaderOdpsOwner)
-		instance.startTime, _ = ParseRFC1123Date(header.Get(HttpHeaderOdpsStartTime))
-		instance.endTime, _ = ParseRFC1123Date(header.Get(HttpHeaderOdpsEndTime))
+		instance.owner = header.Get(consts.HttpHeaderOdpsOwner)
+		instance.startTime, _ = ParseRFC1123Date(header.Get(consts.HttpHeaderOdpsStartTime))
+		instance.endTime, _ = ParseRFC1123Date(header.Get(consts.HttpHeaderOdpsEndTime))
 
 		decoder := xml.NewDecoder(res.Body)
 		if err := decoder.Decode(&resModel); err != nil {

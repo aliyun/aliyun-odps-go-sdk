@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"github.com/aliyun/aliyun-odps-go-sdk/consts"
 	"github.com/pkg/errors"
 	"net/url"
 	"strconv"
@@ -461,13 +462,13 @@ func (t *Table) Read(partition string, columns []string, limit int, timezone str
 	client := t.odpsIns.restClient
 	resource := t.ResourceUrl()
 
-	req, err := client.NewRequestWithUrlQuery(HttpMethod.GetMethod, resource, nil, queryArgs)
+	req, err := client.NewRequestWithUrlQuery(consts.HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
 	if timezone != "" {
-		req.Header.Set(HttpHeaderSqlTimezone, timezone)
+		req.Header.Set(consts.HttpHeaderSqlTimezone, timezone)
 	}
 
 	res, err := client.Do(req)

@@ -1,7 +1,8 @@
 package tunnel
 
 import (
-	odps "github.com/aliyun/aliyun-odps-go-sdk"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
+	"github.com/aliyun/aliyun-odps-go-sdk/rest_client"
 	"github.com/pkg/errors"
 	"time"
 )
@@ -104,8 +105,8 @@ func (t *Tunnel) AttachToExistedDownloadSession(
 	return session, errors.WithStack(err)
 }
 
-func (t *Tunnel) getRestClient() odps.RestClient {
-	client := odps.NewOdpsRestClient(t.odpsIns.Account(), t.endpoint)
+func (t *Tunnel) getRestClient() rest_client.RestClient {
+	client := rest_client.NewOdpsRestClient(t.odpsIns.Account(), t.endpoint)
 	client.HttpTimeout = t.HttpTimeout()
 	client.TcpConnectionTimeout = t.TcpConnectionTimeout()
 

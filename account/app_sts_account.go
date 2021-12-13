@@ -2,7 +2,7 @@ package account
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk"
+	"github.com/aliyun/aliyun-odps-go-sdk/consts"
 	"net/http"
 	"strings"
 )
@@ -24,7 +24,7 @@ func NewAppStsAccount(accessId, accessKey, stsToken string) *AppStsAccount {
 
 func (account *AppStsAccount) SignRequest(req *http.Request, endpoint string) {
 	account.AliyunAccount.SignRequest(req, endpoint)
-	signature := req.Header.Get(odps.HttpHeaderAuthorization)
+	signature := req.Header.Get(consts.HttpHeaderAuthorization)
 	signature = base64HmacSha1([]byte(account.accessKey), []byte(signature))
 
 	stsAuth := fmt.Sprintf(
@@ -34,6 +34,6 @@ func (account *AppStsAccount) SignRequest(req *http.Request, endpoint string) {
 		signature,
 	)
 
-	req.Header.Set(odps.HttpHeaderSTSAuthentication, stsAuth)
-	req.Header.Set(odps.HttpHeaderSTSToken, account.stsToken)
+	req.Header.Set(consts.HttpHeaderSTSAuthentication, stsAuth)
+	req.Header.Set(consts.HttpHeaderSTSToken, account.stsToken)
 }
