@@ -2,9 +2,9 @@ package tunnel
 
 import (
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
-	"github.com/fetchadd/arrow"
-	"github.com/fetchadd/arrow/array"
-	"github.com/fetchadd/arrow/ipc"
+	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
+	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
+	"github.com/aliyun/aliyun-odps-go-sdk/arrow/ipc"
 	"github.com/pkg/errors"
 )
 

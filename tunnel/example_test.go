@@ -3,9 +3,9 @@ package tunnel_test
 import (
 	"fmt"
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
+	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
+	"github.com/aliyun/aliyun-odps-go-sdk/arrow/memory"
 	"github.com/aliyun/aliyun-odps-go-sdk/tunnel"
-	"github.com/fetchadd/arrow/array"
-	"github.com/fetchadd/arrow/memory"
 	"github.com/pkg/errors"
 	"log"
 	"os"

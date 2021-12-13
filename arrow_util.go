@@ -1,8 +1,8 @@
 package odps
 
 import (
+	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
-	"github.com/fetchadd/arrow"
 	"github.com/pkg/errors"
 )
 

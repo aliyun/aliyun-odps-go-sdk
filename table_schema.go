@@ -3,7 +3,7 @@ package odps
 import (
 	"bytes"
 	"fmt"
-	"github.com/fetchadd/arrow"
+	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/pkg/errors"
 	"html/template"
 	"strings"

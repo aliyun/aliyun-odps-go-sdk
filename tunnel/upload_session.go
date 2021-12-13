@@ -3,7 +3,7 @@ package tunnel
 import (
 	"encoding/json"
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
-	"github.com/fetchadd/arrow"
+	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/pkg/errors"
 	"io"
 	"net/http"

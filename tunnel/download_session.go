@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	odps "github.com/aliyun/aliyun-odps-go-sdk"
-	"github.com/fetchadd/arrow"
+	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/pkg/errors"
 	"net/http"
 	"net/url"
