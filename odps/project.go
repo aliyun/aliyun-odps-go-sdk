@@ -171,8 +171,8 @@ func (p *Project) Load() error {
 	return nil
 }
 
-// HasBeLoaded whether `Load()` has been called
-func (p *Project) HasBeLoaded() bool {
+// IsLoaded whether `Load()` has been called
+func (p *Project) IsLoaded() bool {
 	return p.beLoaded
 }
 

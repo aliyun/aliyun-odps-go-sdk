@@ -53,7 +53,7 @@ func NewTable(odpsIns *Odps, projectName string, tableName string) Table {
 	}
 }
 
-func (t *Table) HasBeLoad() bool {
+func (t *Table) IsLoaded() bool {
 	return t.beLoaded
 }
 

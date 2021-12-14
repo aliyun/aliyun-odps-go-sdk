@@ -64,7 +64,7 @@ func (instance *Instance) ProjectName() string {
 	return instance.projectName
 }
 
-func (instance *Instance) HasBeLoaded() bool {
+func (instance *Instance) IsLoaded() bool {
 	return instance.reLoaded
 }
 

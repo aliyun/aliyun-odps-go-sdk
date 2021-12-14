@@ -79,7 +79,7 @@ func (p *Projects) Get(projectName string) Project {
 func (p *Projects) Exists(projectName string) (bool, error) {
 	project := p.Get(projectName)
 
-	if !project.HasBeLoaded() {
+	if !project.IsLoaded() {
 		err := project.Load()
 
 		if err != nil {
