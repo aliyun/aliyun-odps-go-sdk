@@ -3,7 +3,7 @@ package sqldriver
 import (
 	"errors"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
+	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"net/url"
 	"strconv"
@@ -94,13 +94,13 @@ func ParseDSN(dsn string) (*Config, error) {
 	return config, nil
 }
 
-func (c *Config) GenAccount() account.Account {
-	var account account.Account
+func (c *Config) GenAccount() account2.Account {
+	var account account2.Account
 
 	if c.StsToken == "" {
-		account = account.NewAliyunAccount(c.AccessId, c.AccessKey)
+		account = account2.NewAliyunAccount(c.AccessId, c.AccessKey)
 	} else {
-		account = account.NewStsAccount(c.AccessId, c.AccessKey, c.StsToken)
+		account = account2.NewStsAccount(c.AccessId, c.AccessKey, c.StsToken)
 	}
 
 	return account
