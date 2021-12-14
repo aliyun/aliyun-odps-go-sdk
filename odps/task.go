@@ -3,6 +3,7 @@ package odps
 import (
 	"encoding/json"
 	"encoding/xml"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
 type Task interface {
@@ -20,11 +21,11 @@ func (n TaskName) GetName() string {
 
 // TaskConfig 作为embedding filed使用时，使用者自动实现Task接口的AddProperty方法
 type TaskConfig struct {
-	Config []Property `xml:"Config>Property"`
+	Config []common.Property `xml:"Config>Property"`
 }
 
 func (t *TaskConfig) AddProperty(key, value string) {
-	t.Config = append(t.Config, Property{Name: key, Value: value})
+	t.Config = append(t.Config, common.Property{Name: key, Value: value})
 }
 
 type SQLCostTask struct {

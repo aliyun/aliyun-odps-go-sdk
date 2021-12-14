@@ -3,7 +3,7 @@ package odps
 import (
 	"encoding/xml"
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/consts"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"net/http"
@@ -13,13 +13,14 @@ import (
 	"time"
 )
 
-// Instances 表示ODPS中所有Instance的集合
+// Instances is used to get or create instance(s)
 type Instances struct {
 	projectName string
 	odpsIns     *Odps
 }
 
-// NewInstances 如果projectName没有指定，则使用Odps的默认项目名
+// NewInstances create Instances object, if the projectName is not set,
+// the default project name of odpsIns will be used
 func NewInstances(odpsIns *Odps, projectName ...string) Instances {
 	var _projectName string
 
@@ -69,14 +70,14 @@ func (instances Instances) CreateTaskWithPriority(projectName string, task Task,
 	var resModel ResModel
 
 	client := instances.odpsIns.restClient
-	rb := ResourceBuilder{}
+	rb := common.ResourceBuilder{}
 	rb.SetProject(projectName)
 	resource := rb.Instances()
 	var instanceId string
 	var isSync bool
 
-	err := client.DoXmlWithParseFunc(consts.HttpMethod.PostMethod, resource, nil, &instanceCreationModel, func(res *http.Response) error {
-		location := res.Header.Get(consts.HttpHeaderLocation)
+	err := client.DoXmlWithParseFunc(common.HttpMethod.PostMethod, resource, nil, &instanceCreationModel, func(res *http.Response) error {
+		location := res.Header.Get(common.HttpHeaderLocation)
 
 		if location == "" {
 			return errors.New("invalid response, Location header required")
@@ -110,18 +111,20 @@ func (instances Instances) CreateTaskWithPriority(projectName string, task Task,
 	return &instance, nil
 }
 
-// List 获取全部的Instance, filter可以忽略或提供一个，提供多个时，只会使用第一个
-func (instances Instances) List(c chan Instance, filter ...InstancesFilter) error {
-	defer close(c)
+// List Get all instances, the filters can be given with InstanceFilter.Status, InstanceFilter.OnlyOwner,
+// InstanceFilter.QuotaIndex, InstanceFilter.TimeRange
+func (instances Instances) List(filters ...InsFilterFunc) <-chan InstanceOrErr {
+	c := make(chan InstanceOrErr)
 
 	queryArgs := make(url.Values)
+	queryArgs.Set("onlyowner", "no")
 
-	if filter != nil {
-		filter[0].fillQueryParams(queryArgs)
+	for _, filter := range filters {
+		filter(queryArgs)
 	}
 
 	client := instances.odpsIns.restClient
-	rb := ResourceBuilder{projectName: instances.projectName}
+	rb := common.ResourceBuilder{ProjectName: instances.projectName}
 	resources := rb.Instances()
 
 	type ResModel struct {
@@ -131,59 +134,63 @@ func (instances Instances) List(c chan Instance, filter ...InstancesFilter) erro
 		Instances []struct {
 			Name      string
 			Owner     string
-			StartTime GMTTime
-			EndTime   GMTTime `xml:"EndTime"`
+			StartTime common.GMTTime
+			EndTime   common.GMTTime `xml:"EndTime"`
 			Status    InstanceStatus
 		} `xml:"Instance"`
 	}
 
-	var resModel ResModel
+	go func() {
+		defer close(c)
+		var resModel ResModel
 
-	for {
-		err := client.GetWithModel(resources, queryArgs, &resModel)
+		for {
+			err := client.GetWithModel(resources, queryArgs, &resModel)
 
-		if err != nil {
-			return errors.WithStack(err)
+			if err != nil {
+				c <- InstanceOrErr{Instance{}, errors.WithStack(err)}
+				break
+			}
+
+			if len(resModel.Instances) == 0 {
+				break
+			}
+
+			for _, model := range resModel.Instances {
+				instance := NewInstance(instances.odpsIns, instances.projectName, model.Name)
+				instance.startTime = time.Time(model.StartTime)
+				instance.endTime = time.Time(model.EndTime)
+				instance.status = model.Status
+				instance.owner = model.Owner
+
+				c <- InstanceOrErr{instance, nil}
+			}
+
+			if resModel.Marker != "" {
+				queryArgs.Set("marker", resModel.Marker)
+				resModel = ResModel{}
+			} else {
+				break
+			}
 		}
+	}()
 
-		if len(resModel.Instances) == 0 {
-			break
-		}
-
-		for _, model := range resModel.Instances {
-			instance := NewInstance(instances.odpsIns, instances.projectName, model.Name)
-			instance.startTime = time.Time(model.StartTime)
-			instance.endTime = time.Time(model.EndTime)
-			instance.status = model.Status
-			instance.owner = model.Owner
-
-			c <- instance
-		}
-
-		if resModel.Marker != "" {
-			queryArgs.Set("marker", resModel.Marker)
-			resModel = ResModel{}
-		} else {
-			break
-		}
-	}
-
-	return nil
+	return c
 }
 
-// ListInstancesQueued 获取全部的Instance Queued信息, 信息是json字符串，需要自己进行解析。
-// filter可以忽略或提供一个，提供多个时，只会使用第一个
-func (instances Instances) ListInstancesQueued(c chan string, filter ...InstancesFilter) error {
-	defer close(c)
-
+// ListInstancesQueued Get all instance Queued information, the information is in json string，you need parse it yourself。
+// The filters can be given with InstanceFilter.Status, InstanceFilter.OnlyOwner, InstanceFilter.QuotaIndex,
+// InstanceFilter.TimeRange
+func (instances Instances) ListInstancesQueued(filters ...InsFilterFunc) ([]string, error) {
 	queryArgs := make(url.Values)
+	queryArgs.Set("onlyowner", "no")
 
-	if filter != nil {
-		filter[0].fillQueryParams(queryArgs)
+	for _, filter := range filters {
+		filter(queryArgs)
 	}
 
 	client := instances.odpsIns.restClient
-	rb := ResourceBuilder{projectName: instances.projectName}
+	rb := common.ResourceBuilder{ProjectName: instances.projectName}
 	resources := rb.CachedInstances()
 
 	type ResModel struct {
@@ -194,19 +201,20 @@ func (instances Instances) ListInstancesQueued(c chan string, filter ...Instance
 	}
 
 	var resModel ResModel
+	var insList []string
 
 	for {
 		err := client.GetWithModel(resources, queryArgs, &resModel)
 
 		if err != nil {
-			return errors.WithStack(err)
+			return insList, errors.WithStack(err)
 		}
 
 		if resModel.Content == "" {
 			break
 		}
 
-		c <- resModel.Content
+		insList = append(insList, resModel.Content)
 
 		if resModel.Marker != "" {
 			queryArgs.Set("marker", resModel.Marker)
@@ -216,50 +224,48 @@ func (instances Instances) ListInstancesQueued(c chan string, filter ...Instance
 		}
 	}
 
-	return nil
+	return insList, nil
 }
 
-type InstancesFilter struct {
-	// Instance状态
-	Status InstanceStatus
-	// 是否只返回提交查询人自己的instance
-	OnlyOwner bool
+type InsFilterFunc func(values url.Values)
+
+var InstanceFilter = struct {
+	// Only get instances with a given status
+	Status func(InstanceStatus) InsFilterFunc
+	// Only get instances that create by the current account
+	OnlyOwner func() InsFilterFunc
 	// Instance 运行所在 quota 组过滤条件
-	QuotaIndex string
-	// 起始执行时间
-	FromTime time.Time
-	// 执行结束时间
-	EndTime time.Time
-}
+	QuotaIndex func(string) InsFilterFunc
+	// Get instances running between start and end times
+	TimeRange func(time.Time, time.Time) InsFilterFunc
+}{
+	Status: func(status InstanceStatus) InsFilterFunc {
+		return func(values url.Values) {
+			if status != 0 {
+				values.Set("status", status.String())
+			}
+		}
+	},
 
-func (f *InstancesFilter) fillQueryParams(params url.Values) {
-	if f.Status != 0 {
-		params.Set("status", f.Status.String())
-	}
+	OnlyOwner: func() InsFilterFunc {
+		return func(values url.Values) {
+			values.Set("onlyowner", "yes")
+		}
+	},
 
-	if f.OnlyOwner {
-		params.Set("onlyowner", "yes")
-	} else {
-		params.Set("onlyowner", "no")
-	}
+	QuotaIndex: func(s string) InsFilterFunc {
+		return func(values url.Values) {
+			values.Set("quotaindex", s)
+		}
+	},
 
-	if f.QuotaIndex != "" {
-		params.Set("quotaindex", f.QuotaIndex)
-	}
+	TimeRange: func(s time.Time, e time.Time) InsFilterFunc {
+		return func(values url.Values) {
+			startTime := strconv.FormatInt(s.Unix(), 10)
+			endTime := strconv.FormatInt(e.Unix(), 10)
 
-	var startTime string
-	var endTime string
-
-	if !f.FromTime.IsZero() {
-		startTime = strconv.FormatInt(f.FromTime.Unix(), 10)
-	}
-
-	if !f.EndTime.IsZero() {
-		endTime = strconv.FormatInt(f.EndTime.Unix(), 10)
-	}
-
-	if startTime != "" || endTime != "" {
-		dataRange := fmt.Sprintf("%s:%s", startTime, endTime)
-		params.Set("datarange", dataRange)
-	}
+			dateRange := fmt.Sprintf("%s:%s", startTime, endTime)
+			values.Set("daterange", dateRange)
+		}
+	},
 }

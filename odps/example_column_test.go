@@ -3,7 +3,7 @@ package odps_test
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"log"
 )
 
@@ -37,7 +37,7 @@ func ExampleColumn() {
            }
            ]`
 
-	var column []odps.Column
+	var column []tableschema.Column
 
 	err := json.Unmarshal([]byte(raw), &column)
 	if err != nil {

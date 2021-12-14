@@ -15,11 +15,11 @@ func ExamplePartition_Load() {
 	err := partition.Load()
 	if err != nil {
 		log.Fatalf("%+v", err)
-	} else {
-		println(fmt.Sprintf("Name: %s", partition.Name()))
-		println(fmt.Sprintf("Record number: %d", partition.RecordNum()))
-		println(fmt.Sprintf("Create Time: %s", partition.CreatedTime()))
 	}
+
+	println(fmt.Sprintf("Name: %s", partition.Name()))
+	println(fmt.Sprintf("Record number: %d", partition.RecordNum()))
+	println(fmt.Sprintf("Create Time: %s", partition.CreatedTime()))
 
 	// Output:
 }
@@ -33,12 +33,11 @@ func ExamplePartition_LoadExtended() {
 	err := partition.LoadExtended()
 	if err != nil {
 		log.Fatalf("%+v", err)
-	} else {
-		println(fmt.Sprintf("Name: %s", partition.Name()))
-		println(fmt.Sprintf("File number: %d", partition.FileNumEx()))
-		println(fmt.Sprintf("PhysicalSizefd: %d", partition.PhysicalSizeEx()))
-		println(fmt.Sprintf("Reserved: %s", partition.ReservedEx()))
 	}
 
+	println(fmt.Sprintf("Name: %s", partition.Name()))
+	println(fmt.Sprintf("File number: %d", partition.FileNumEx()))
+	println(fmt.Sprintf("PhysicalSizefd: %d", partition.PhysicalSizeEx()))
+	println(fmt.Sprintf("Reserved: %s", partition.ReservedEx()))
 	// Output:
 }

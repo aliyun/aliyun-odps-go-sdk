@@ -3,6 +3,7 @@ package odps
 import (
 	"encoding/csv"
 	"encoding/xml"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/pkg/errors"
 	"strings"
 )
@@ -23,7 +24,7 @@ func NewSqlTask(name string, query string, comment string, properties map[string
 	}
 
 	for key, value := range properties {
-		sqlTask.Config = append(sqlTask.Config, Property{Name: key, Value: value})
+		sqlTask.Config = append(sqlTask.Config, common.Property{Name: key, Value: value})
 	}
 
 	return sqlTask

@@ -3,7 +3,7 @@ package odps
 import (
 	"encoding/json"
 	"encoding/xml"
-	"github.com/aliyun/aliyun-odps-go-sdk/consts"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/http"
@@ -22,31 +22,7 @@ const (
 	InstanceStatusUnknown
 )
 
-func InstancesStatusFromStr(s string) InstanceStatus {
-	switch strings.ToLower(s) {
-	case "running":
-		return InstanceRunning
-	case "suspended":
-		return InstanceSuspended
-	case "terminated":
-		return InstanceTerminated
-	default:
-		return InstanceStatusUnknown
-	}
-}
-
-func (status InstanceStatus) String() string {
-	switch status {
-	case InstanceRunning:
-		return "Running"
-	case InstanceSuspended:
-		return "Suspended"
-	case InstanceTerminated:
-		return "Terminated"
-	default:
-		return "InstanceStatusUnknown"
-	}
-}
+const DefaultJobPriority = 9
 
 type Instance struct {
 	projectName       string
@@ -63,8 +39,14 @@ type Instance struct {
 	isSync            bool
 }
 
+// InstanceOrErr used for the return value of Instances.List method
+type InstanceOrErr struct {
+	Ins Instance
+	Err error
+}
+
 func NewInstance(odpsIns *Odps, projectName, instanceId string) Instance {
-	rb := ResourceBuilder{projectName: projectName}
+	rb := common.ResourceBuilder{ProjectName: projectName}
 
 	return Instance{
 		id:          instanceId,
@@ -105,9 +87,9 @@ func (instance *Instance) Load() error {
 
 	err := client.GetWithParseFunc(instance.resourceUrl, nil, func(res *http.Response) error {
 		header := res.Header
-		instance.owner = header.Get(consts.HttpHeaderOdpsOwner)
-		instance.startTime, _ = ParseRFC1123Date(header.Get(consts.HttpHeaderOdpsStartTime))
-		instance.endTime, _ = ParseRFC1123Date(header.Get(consts.HttpHeaderOdpsEndTime))
+		instance.owner = header.Get(common.HttpHeaderOdpsOwner)
+		instance.startTime, _ = common.ParseRFC1123Date(header.Get(common.HttpHeaderOdpsStartTime))
+		instance.endTime, _ = common.ParseRFC1123Date(header.Get(common.HttpHeaderOdpsEndTime))
 
 		decoder := xml.NewDecoder(res.Body)
 		if err := decoder.Decode(&resModel); err != nil {
@@ -352,6 +334,32 @@ func (instance *Instance) GetResult() ([]TaskResult, error) {
 	}
 
 	return resModel.Tasks, nil
+}
+
+func InstancesStatusFromStr(s string) InstanceStatus {
+	switch strings.ToLower(s) {
+	case "running":
+		return InstanceRunning
+	case "suspended":
+		return InstanceSuspended
+	case "terminated":
+		return InstanceTerminated
+	default:
+		return InstanceStatusUnknown
+	}
+}
+
+func (status InstanceStatus) String() string {
+	switch status {
+	case InstanceRunning:
+		return "Running"
+	case InstanceSuspended:
+		return "Suspended"
+	case InstanceTerminated:
+		return "Terminated"
+	default:
+		return "InstanceStatusUnknown"
+	}
 }
 
 func (status *InstanceStatus) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {

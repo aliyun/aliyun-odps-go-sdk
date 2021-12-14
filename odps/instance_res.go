@@ -2,6 +2,7 @@ package odps
 
 import (
 	"encoding/xml"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/pkg/errors"
 	"strings"
 )
@@ -61,8 +62,8 @@ func (status TaskStatus) String() string {
 type TaskInInstance struct {
 	Type      string `xml:"Type,attr"`
 	Name      string
-	StartTime GMTTime
-	EndTime   GMTTime `xml:"EndTime"`
+	StartTime common.GMTTime
+	EndTime   common.GMTTime `xml:"EndTime"`
 	Status    TaskStatus
 }
 

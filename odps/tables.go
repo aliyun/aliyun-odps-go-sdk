@@ -4,19 +4,20 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/consts"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/pkg/errors"
 	"net/url"
 	"strings"
 )
 
-// Tables 表示ODPS中所有Table的集合
+// Tables used for get all the tables in an odps project
 type Tables struct {
 	projectName string
 	odpsIns     *Odps
 }
 
-// NewTables 如果projectName没有指定，则使用Odps的默认项目名
+// NewTables if projectName is not set，the default projectName of odps will be used
 func NewTables(odpsIns *Odps, projectName ...string) Tables {
 	var _projectName string
 
@@ -32,27 +33,19 @@ func NewTables(odpsIns *Odps, projectName ...string) Tables {
 	}
 }
 
-func (tables *Tables) List(c chan Table, extended bool, name, owner string) error {
-	defer close(c)
-
-	queryArgs := make(url.Values, 5)
+// List get all the tables, filters can be specified with TableFilter.NamePrefix,
+// TableFilter.Extended, TableFilter.Owner
+func (ts *Tables) List(filters ...TFilterFunc) ([]Table, error) {
+	queryArgs := make(url.Values, 4)
 	queryArgs.Set("expectmarker", "true")
 
-	if extended {
-		queryArgs.Set("extended", "")
+	for _, filter := range filters {
+		filter(queryArgs)
 	}
 
-	if name != "" {
-		queryArgs.Set("name", name)
-	}
-
-	if owner != "" {
-		queryArgs.Set("owner", owner)
-	}
-
-	rb := ResourceBuilder{projectName: tables.projectName}
+	rb := common.ResourceBuilder{ProjectName: ts.projectName}
 	resource := rb.Tables()
-	client := tables.odpsIns.restClient
+	client := ts.odpsIns.restClient
 
 	type ResModel struct {
 		XMLName  xml.Name     `xml:"Tables"`
@@ -62,11 +55,12 @@ func (tables *Tables) List(c chan Table, extended bool, name, owner string) erro
 	}
 
 	var resModel ResModel
+	var tables []Table
 
 	for {
 		err := client.GetWithModel(resource, queryArgs, &resModel)
 		if err != nil {
-			return errors.WithStack(err)
+			return tables, errors.WithStack(err)
 		}
 
 		if len(resModel.Tables) == 0 {
@@ -74,10 +68,10 @@ func (tables *Tables) List(c chan Table, extended bool, name, owner string) erro
 		}
 
 		for _, tableModel := range resModel.Tables {
-			table := NewTable(tables.odpsIns, tables.projectName, tableModel.Name)
+			table := NewTable(ts.odpsIns, ts.projectName, tableModel.Name)
 			table.model = tableModel
 
-			c <- table
+			tables = append(tables, table)
 		}
 
 		if resModel.Marker != "" {
@@ -88,11 +82,11 @@ func (tables *Tables) List(c chan Table, extended bool, name, owner string) erro
 		}
 	}
 
-	return nil
+	return tables, nil
 }
 
-// BatchLoadTables 批量加载表信息, rest api 对请求数量有限制, 目前一次操作最多可请求 100 张表信息; 返回的表数据,与操作权限有关.
-func (tables *Tables) BatchLoadTables(tableNames []string) ([]Table, error) {
+// BatchLoadTables can get at most 100 tables, and the information of table is according to the permission
+func (ts *Tables) BatchLoadTables(tableNames []string) ([]Table, error) {
 	type PostBodyModel struct {
 		XMLName xml.Name `xml:"Tables"`
 		Tables  []struct {
@@ -106,7 +100,7 @@ func (tables *Tables) BatchLoadTables(tableNames []string) ([]Table, error) {
 		postBodyModel.Tables = append(postBodyModel.Tables, struct {
 			Project string
 			Name    string
-		}{Project: tables.projectName, Name: tableName})
+		}{Project: ts.projectName, Name: tableName})
 	}
 
 	type ResModel struct {
@@ -118,11 +112,11 @@ func (tables *Tables) BatchLoadTables(tableNames []string) ([]Table, error) {
 
 	queryArgs := make(url.Values, 1)
 	queryArgs.Set("query", "")
-	rb := ResourceBuilder{projectName: tables.projectName}
+	rb := common.ResourceBuilder{ProjectName: ts.projectName}
 	resource := rb.Tables()
-	client := tables.odpsIns.restClient
+	client := ts.odpsIns.restClient
 
-	err := client.DoXmlWithModel(consts.HttpMethod.PostMethod, resource, queryArgs, &postBodyModel, &resModel)
+	err := client.DoXmlWithModel(common.HttpMethod.PostMethod, resource, queryArgs, &postBodyModel, &resModel)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -130,7 +124,7 @@ func (tables *Tables) BatchLoadTables(tableNames []string) ([]Table, error) {
 	ret := make([]Table, len(resModel.Table))
 
 	for i, tableModel := range resModel.Table {
-		table := NewTable(tables.odpsIns, tables.projectName, tableModel.Name)
+		table := NewTable(ts.odpsIns, ts.projectName, tableModel.Name)
 		table.model = tableModel
 		ret[i] = table
 	}
@@ -138,13 +132,15 @@ func (tables *Tables) BatchLoadTables(tableNames []string) ([]Table, error) {
 	return ret, nil
 }
 
-// Create 创建表, 表的内容在schema中， 需要提前构建schema
-func (tables *Tables) Create(
-	schema TableSchema,
+// Create table with schema, the schema can be build with tableschema.SchemaBuilder
+// parameter hints can affect the `Set` sql execution, like odps.mapred.map.split.size
+// you can get introduce about alias from the reference of alias command
+func (ts *Tables) Create(
+	schema tableschema.TableSchema,
 	createIfNotExists bool,
 	hints, alias map[string]string) (*Instance, error) {
 
-	sql, err := schema.ToSQLString(tables.projectName, createIfNotExists)
+	sql, err := schema.ToSQLString(ts.projectName, createIfNotExists)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -161,17 +157,17 @@ func (tables *Tables) Create(
 		task.AddProperty("settings", string(aliasJson))
 	}
 
-	instances := NewInstances(tables.odpsIns, tables.projectName)
+	instances := NewInstances(ts.odpsIns, ts.projectName)
 
-	return instances.CreateTask(tables.projectName, &task)
+	return instances.CreateTask(ts.projectName, &task)
 }
 
-func (tables *Tables) CreateAndWait(
-	schema TableSchema,
+func (ts *Tables) CreateAndWait(
+	schema tableschema.TableSchema,
 	createIfNotExists bool,
 	hints, alias map[string]string) error {
 
-	instance, err := tables.Create(schema, createIfNotExists, hints, alias)
+	instance, err := ts.Create(schema, createIfNotExists, hints, alias)
 
 	if err != nil {
 		return errors.WithStack(err)
@@ -180,15 +176,15 @@ func (tables *Tables) CreateAndWait(
 	return errors.WithStack(instance.WaitForSuccess())
 }
 
-// CreateExternal 创建外部表, 表的内容在schema中， 需要提前构建schema
-func (tables *Tables) CreateExternal(
-	schema TableSchema,
+// CreateExternal create external table, the schema can be build with tableschema.SchemaBuilder
+func (ts *Tables) CreateExternal(
+	schema tableschema.TableSchema,
 	createIfNotExists bool,
 	serdeProperties map[string]string,
 	jars []string,
 	hints, alias map[string]string) (*Instance, error) {
 
-	sql, err := schema.ToExternalSQLString(tables.projectName, createIfNotExists, serdeProperties, jars)
+	sql, err := schema.ToExternalSQLString(ts.projectName, createIfNotExists, serdeProperties, jars)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -205,20 +201,20 @@ func (tables *Tables) CreateExternal(
 		task.AddProperty("settings", string(aliasJson))
 	}
 
-	instances := NewInstances(tables.odpsIns, tables.projectName)
+	instances := NewInstances(ts.odpsIns, ts.projectName)
 
-	i, err := instances.CreateTask(tables.projectName, &task)
+	i, err := instances.CreateTask(ts.projectName, &task)
 	return i, errors.WithStack(err)
 }
 
-func (tables *Tables) CreateExternalAndWait(
-	schema TableSchema,
+func (ts *Tables) CreateExternalAndWait(
+	schema tableschema.TableSchema,
 	createIfNotExists bool,
 	serdeProperties map[string]string,
 	jars []string,
 	hints, alias map[string]string) error {
 
-	instance, err := tables.CreateExternal(schema, createIfNotExists, serdeProperties, jars, hints, alias)
+	instance, err := ts.CreateExternal(schema, createIfNotExists, serdeProperties, jars, hints, alias)
 
 	if err != nil {
 		return errors.WithStack(err)
@@ -227,14 +223,14 @@ func (tables *Tables) CreateExternalAndWait(
 	return errors.WithStack(instance.WaitForSuccess())
 }
 
-func (tables *Tables) CreateWithDataHub(
-	schema TableSchema,
+func (ts *Tables) CreateWithDataHub(
+	schema tableschema.TableSchema,
 	createIfNotExists bool,
 	shardNum,
 	hubLifecycle int,
 ) (*Instance, error) {
 
-	sql, err := schema.toSQLString(tables.projectName, createIfNotExists, false)
+	sql, err := schema.ToBaseSQLString(ts.projectName, createIfNotExists, false)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -252,19 +248,19 @@ func (tables *Tables) CreateWithDataHub(
 
 	task := NewSqlTask("SQLCreateTableTaskWithDataHub", sb.String(), "", nil)
 
-	instances := NewInstances(tables.odpsIns, tables.projectName)
+	instances := NewInstances(ts.odpsIns, ts.projectName)
 
-	i, err := instances.CreateTask(tables.projectName, &task)
+	i, err := instances.CreateTask(ts.projectName, &task)
 	return i, errors.WithStack(err)
 }
 
-func (tables *Tables) CreateWithDataHubAndWait(
-	schema TableSchema,
+func (ts *Tables) CreateWithDataHubAndWait(
+	schema tableschema.TableSchema,
 	createIfNotExists bool,
 	shardNum,
 	hubLifecycle int,
 ) error {
-	instance, err := tables.CreateWithDataHub(schema, createIfNotExists, shardNum, hubLifecycle)
+	instance, err := ts.CreateWithDataHub(schema, createIfNotExists, shardNum, hubLifecycle)
 
 	if err != nil {
 		return errors.WithStack(err)
@@ -273,8 +269,8 @@ func (tables *Tables) CreateWithDataHubAndWait(
 	return errors.WithStack(instance.WaitForSuccess())
 }
 
-// Delete 删除表
-func (tables *Tables) Delete(tableName string, ifExists bool) (*Instance, error) {
+// Delete delete table
+func (ts *Tables) Delete(tableName string, ifExists bool) (*Instance, error) {
 	var sqlBuilder strings.Builder
 	sqlBuilder.WriteString("drop table")
 	if ifExists {
@@ -282,22 +278,49 @@ func (tables *Tables) Delete(tableName string, ifExists bool) (*Instance, error)
 	}
 
 	sqlBuilder.WriteRune(' ')
-	sqlBuilder.WriteString(tables.projectName)
+	sqlBuilder.WriteString(ts.projectName)
 	sqlBuilder.WriteRune('.')
 	sqlBuilder.WriteString(tableName)
 	sqlBuilder.WriteString(";")
 
 	sqlTask := NewSqlTask("SQLDropTableTask", sqlBuilder.String(), "", nil)
-	instances := NewInstances(tables.odpsIns, tables.projectName)
-	i, err := instances.CreateTask(tables.projectName, &sqlTask)
+	instances := NewInstances(ts.odpsIns, ts.projectName)
+	i, err := instances.CreateTask(ts.projectName, &sqlTask)
 	return i, errors.WithStack(err)
 }
 
-func (tables *Tables) DeleteAndWait(tableName string, ifExists bool) error {
-	instance, err := tables.Delete(tableName, ifExists)
+func (ts *Tables) DeleteAndWait(tableName string, ifExists bool) error {
+	instance, err := ts.Delete(tableName, ifExists)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
 	return errors.WithStack(instance.WaitForSuccess())
+}
+
+type TFilterFunc func(url.Values)
+
+var TableFilter = struct {
+	// Weather get extended information or not
+	Extended func() TFilterFunc
+	// Filter out tables with name prefix
+	NamePrefix func(string) TFilterFunc
+	// Filter out tables with owner name
+	Owner func(string) TFilterFunc
+}{
+	Extended: func() TFilterFunc {
+		return func(values url.Values) {
+			values.Set("extended", "")
+		}
+	},
+	NamePrefix: func(name string) TFilterFunc {
+		return func(values url.Values) {
+			values.Set("name", name)
+		}
+	},
+	Owner: func(owner string) TFilterFunc {
+		return func(values url.Values) {
+			values.Set("owner", owner)
+		}
+	},
 }

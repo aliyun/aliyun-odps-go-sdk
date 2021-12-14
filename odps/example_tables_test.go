@@ -2,23 +2,21 @@ package odps_test
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"log"
 )
 
 func ExampleTables_List() {
-	tables := odps.NewTables(odpsIns)
-	c := make(chan odps.Table)
+	ts := odps.NewTables(odpsIns)
+	tables, err := ts.List(odps.TableFilter.Extended())
 
-	go func() {
-		err := tables.List(c, true, "", "")
-		if err != nil {
-			log.Fatalf("%+v", err)
-		}
-	}()
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
 
-	for t := range c {
+	for _, t := range tables {
 		println(fmt.Sprintf("%s, %s, %s", t.Name(), t.Owner(), t.Type()))
 	}
 
@@ -37,44 +35,44 @@ func ExampleTables_BatchLoadTables() {
 	tables, err := tablesIns.BatchLoadTables(tableNames)
 	if err != nil {
 		log.Fatalf("%+v", err)
-	} else {
-		for _, table := range tables {
-			println(fmt.Sprintf("%s, %s, %s", table.Name(), table.TableID(), table.Type()))
-		}
+	}
 
-		schema, err := tables[len(tables)-1].GetSchema()
-		if err != nil {
-			log.Fatalf("%+v", err)
-		} else {
-			for _, c := range schema.Columns {
-				println(fmt.Sprintf("%s, %s, %t, %s", c.Name, c.Type, c.IsNullable, c.Comment))
-			}
-		}
+	for _, table := range tables {
+		println(fmt.Sprintf("%s, %s, %s", table.Name(), table.TableID(), table.Type()))
+	}
+
+	schema, err := tables[len(tables)-1].GetSchema()
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	for _, c := range schema.Columns {
+		println(fmt.Sprintf("%s, %s, %t, %s", c.Name, c.Type, c.IsNullable, c.Comment))
 	}
 
 	// Output:
 }
 
 func ExampleTables_Create() {
-	c1 := odps.Column{
+	c1 := tableschema.Column{
 		Name:    "name",
 		Type:    datatype.StringType,
 		Comment: "name of user",
 	}
 
-	c2 := odps.Column{
+	c2 := tableschema.Column{
 		Name:    "age",
 		Type:    datatype.IntType,
 		Comment: "how old is the user",
 	}
 
-	p1 := odps.Column{
+	p1 := tableschema.Column{
 		Name:    "region",
 		Type:    datatype.StringType,
 		Comment: "居住区域",
 	}
 
-	p2 := odps.Column{
+	p2 := tableschema.Column{
 		Name: "code",
 		Type: datatype.IntType,
 	}
@@ -86,34 +84,34 @@ func ExampleTables_Create() {
 	hints["odps.sql.ddl.odps"] = "true"
 	hints["odps.compiler.output.format"] = "lot,pot"
 
-	builder := odps.NewTableSchemaBuilder()
-	builder.Name("user").
+	builder := tableschema.NewSchemaBuilder()
+	builder.Name("user_temp").
 		Comment("这就是一条注释").
 		Columns(c1, c2).
 		PartitionColumns(p1, p2).
 		Lifecycle(2)
 
 	schema := builder.Build()
-	sql, _ := schema.ToSQLString("project_1", false)
+	sql, _ := schema.ToSQLString(defaultProjectName, false)
 	println(sql)
-	tables := odps.NewTables(odpsIns, "project_1")
+
+	tables := odps.NewTables(odpsIns)
 	instance, err := tables.Create(schema, true, hints, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
-	} else {
-		err := instance.WaitForSuccess()
-		if err != nil {
-			log.Fatalf("%+v", err)
-		}
+	}
+
+	err = instance.WaitForSuccess()
+	if err != nil {
+		log.Fatalf("%+v", err)
 	}
 
 	// Output:
 }
 
 func ExampleTables_DeleteAndWait() {
-	//ExampleTables_Create()
-	tables := odps.NewTables(odpsIns, "project_1")
-	err := tables.DeleteAndWait("user1", false)
+	tables := odps.NewTables(odpsIns, odpsIns.DefaultProjectName())
+	err := tables.DeleteAndWait("user_temp", false)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

@@ -5,7 +5,8 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/consts"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/pkg/errors"
 	"net/url"
 	"strconv"
@@ -23,36 +24,10 @@ const (
 	TableTypeUnknown
 )
 
-func TableTypeFromStr(s string) TableType {
-	switch s {
-	case "MANAGED_TABLE":
-		return ManagedTable
-	case "VIRTUAL_VIEW":
-		return VirtualView
-	case "EXTERNAL_TABLE":
-		return ExternalTable
-	default:
-		return TableTypeUnknown
-	}
-}
-
-func (t TableType) String() string {
-	switch t {
-	case ManagedTable:
-		return "MANAGED_TABLE"
-	case VirtualView:
-		return "VIRTUAL_VIEW"
-	case ExternalTable:
-		return "EXTERNAL_TABLE"
-	default:
-		return "TableTypeUnknown"
-	}
-}
-
-// Table 表示ODPS中的表
+// Table represent the table in odps projects
 type Table struct {
 	model       tableModel
-	tableSchema TableSchema
+	tableSchema tableschema.TableSchema
 	odpsIns     *Odps
 	beLoaded    bool
 }
@@ -121,7 +96,7 @@ func (t *Table) Name() string {
 }
 
 func (t *Table) ResourceUrl() string {
-	rb := ResourceBuilder{projectName: t.ProjectName()}
+	rb := common.ResourceBuilder{ProjectName: t.ProjectName()}
 	return rb.Table(t.Name())
 }
 
@@ -289,7 +264,7 @@ func (t *Table) HubLifeCycle() int {
 	return t.tableSchema.HubLifecycle
 }
 
-func (t *Table) PartitionColumns() []Column {
+func (t *Table) PartitionColumns() []tableschema.Column {
 	return t.tableSchema.PartitionColumns
 }
 
@@ -297,7 +272,7 @@ func (t *Table) ShardInfoJson() string {
 	return t.tableSchema.ShardInfo
 }
 
-func (t *Table) GetSchema() (*TableSchema, error) {
+func (t *Table) GetSchema() (*tableschema.TableSchema, error) {
 	err := json.Unmarshal([]byte(t.model.Schema), &t.tableSchema)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -306,7 +281,7 @@ func (t *Table) GetSchema() (*TableSchema, error) {
 	return &t.tableSchema, nil
 }
 
-func (t *Table) Schema() TableSchema {
+func (t *Table) Schema() tableschema.TableSchema {
 	return t.tableSchema
 }
 
@@ -369,10 +344,8 @@ func (t *Table) DeletePartition(ifExists bool, partitionKey string) error {
 	return errors.WithStack(t.ExecSqlAndWait("SQLDropPartitionTask", sb.String()))
 }
 
-// GetPartitions partitionKey格式形如"region='10026, name='abc'"
-func (t *Table) GetPartitions(c chan Partition, partitionKey string) error {
-	defer close(c)
-
+// GetPartitions get partitions with partitionKey like "region='10026, name='abc'"
+func (t *Table) GetPartitions(partitionKey string) ([]Partition, error) {
 	queryArgs := make(url.Values, 4)
 	queryArgs.Set("partitions", "")
 	queryArgs.Set("expectmarker", "true")
@@ -402,15 +375,16 @@ func (t *Table) GetPartitions(c chan Partition, partitionKey string) error {
 	}
 
 	var resModel ResModel
+	var partitions []Partition
 
 	for {
 		err := client.GetWithModel(resource, queryArgs, &resModel)
 		if err != nil {
-			return errors.WithStack(err)
+			return partitions, errors.WithStack(err)
 		}
 
 		if len(resModel.Partitions) == 0 {
-			return nil
+			return partitions, nil
 		}
 
 		var pModel partitionModel
@@ -421,15 +395,15 @@ func (t *Table) GetPartitions(c chan Partition, partitionKey string) error {
 				kv[c.Name] = c.Value
 			}
 
-			pModel.CreateTime = GMTTime(time.Unix(p.CreationTime, 0))
-			pModel.LastDDLTime = GMTTime(time.Unix(p.LastDDLTime, 0))
-			pModel.LastModifiedTime = GMTTime(time.Unix(p.LastModifiedTime, 0))
+			pModel.CreateTime = common.GMTTime(time.Unix(p.CreationTime, 0))
+			pModel.LastDDLTime = common.GMTTime(time.Unix(p.LastDDLTime, 0))
+			pModel.LastModifiedTime = common.GMTTime(time.Unix(p.LastModifiedTime, 0))
 			pModel.PartitionSize = p.PartitionSize
 			pModel.PartitionRecordNum = p.PartitionRecordCount
 
 			partition := NewPartition(t.odpsIns, t.ProjectName(), t.Name(), kv)
 			partition.model = pModel
-			c <- partition
+			partitions = append(partitions, partition)
 		}
 
 		if resModel.Marker != "" {
@@ -440,9 +414,12 @@ func (t *Table) GetPartitions(c chan Partition, partitionKey string) error {
 		}
 	}
 
-	return nil
+	return partitions, nil
 }
 
+// Read can get at most 1W records or 10M bytes of records. partition is a string like "region='10026, name='abc'"
+// columns are the columns wanted. limit is the most records to get. timezone is the timezone of datetime type data,
+// it can be ""
 func (t *Table) Read(partition string, columns []string, limit int, timezone string) (*csv.Reader, error) {
 	queryArgs := make(url.Values, 4)
 
@@ -462,13 +439,13 @@ func (t *Table) Read(partition string, columns []string, limit int, timezone str
 	client := t.odpsIns.restClient
 	resource := t.ResourceUrl()
 
-	req, err := client.NewRequestWithUrlQuery(consts.HttpMethod.GetMethod, resource, nil, queryArgs)
+	req, err := client.NewRequestWithUrlQuery(common.HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
 	if timezone != "" {
-		req.Header.Set(consts.HttpHeaderSqlTimezone, timezone)
+		req.Header.Set(common.HttpHeaderSqlTimezone, timezone)
 	}
 
 	res, err := client.Do(req)
@@ -484,6 +461,32 @@ func (t *Table) CreateShards(shardCount int) error {
 	sb.WriteString(fmt.Sprintf("alter table %s.%s", t.ProjectName(), t.Name()))
 	sb.WriteString(fmt.Sprintf("\ninto %d shards;", shardCount))
 	return errors.WithStack(t.ExecSqlAndWait("SQLCreateShardsTask", sb.String()))
+}
+
+func TableTypeFromStr(s string) TableType {
+	switch s {
+	case "MANAGED_TABLE":
+		return ManagedTable
+	case "VIRTUAL_VIEW":
+		return VirtualView
+	case "EXTERNAL_TABLE":
+		return ExternalTable
+	default:
+		return TableTypeUnknown
+	}
+}
+
+func (t TableType) String() string {
+	switch t {
+	case ManagedTable:
+		return "MANAGED_TABLE"
+	case VirtualView:
+		return "VIRTUAL_VIEW"
+	case ExternalTable:
+		return "EXTERNAL_TABLE"
+	default:
+		return "TableTypeUnknown"
+	}
 }
 
 func (t *TableType) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {

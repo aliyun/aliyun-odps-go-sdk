@@ -1,8 +1,9 @@
 package odps
 
 import (
-	account2 "github.com/aliyun/aliyun-odps-go-sdk/account"
-	"github.com/aliyun/aliyun-odps-go-sdk/rest_client"
+	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/pkg/errors"
 	"time"
 )
@@ -11,15 +12,15 @@ type Odps struct {
 	defaultProject string
 
 	account    account2.Account
-	restClient rest_client.RestClient
-	rb         ResourceBuilder
+	restClient restclient.RestClient
+	rb         common.ResourceBuilder
 	projects   Projects
 }
 
 func NewOdps(account account2.Account, endpoint string) *Odps {
 	ins := Odps{
 		account:    account,
-		restClient: rest_client.NewOdpsRestClient(account, endpoint),
+		restClient: restclient.NewOdpsRestClient(account, endpoint),
 	}
 
 	ins.projects = NewProjects(&ins)
@@ -31,7 +32,7 @@ func (odps *Odps) Account() account2.Account {
 	return odps.account
 }
 
-func (odps *Odps) RestClient() rest_client.RestClient {
+func (odps *Odps) RestClient() restclient.RestClient {
 	return odps.restClient
 }
 
@@ -63,6 +64,22 @@ func (odps *Odps) Projects() Projects {
 
 func (odps *Odps) Project(name string) Project {
 	return NewProject(name, odps)
+}
+
+func (odps *Odps) Tables() Tables {
+	return NewTables(odps)
+}
+
+func (odps *Odps) Table(name string) Table {
+	return NewTable(odps, odps.DefaultProjectName(), name)
+}
+
+func (odps *Odps) Instances() Instances {
+	return NewInstances(odps)
+}
+
+func (odps *Odps) Instance(instanceId string) Instance {
+	return NewInstance(odps, odps.defaultProject, instanceId)
 }
 
 func (odps *Odps) RunSQl(sql string) (*Instance, error) {

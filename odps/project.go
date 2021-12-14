@@ -3,8 +3,9 @@ package odps
 import (
 	"encoding/xml"
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/consts"
-	"github.com/aliyun/aliyun-odps-go-sdk/rest_client"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	restclient2 "github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/security"
 	"github.com/pkg/errors"
 	"io/ioutil"
 	"log"
@@ -21,32 +22,27 @@ type ProjectStatus int
 const (
 	_ = iota
 
-	// ProjectStatusAvailable 项目状态, 正常
 	ProjectStatusAvailable
-	// ProjectStatusReadOnly 项目状态，只读
 	ProjectStatusReadOnly
-	// ProjectStatusDeleting 项目状态，删除
 	ProjectStatusDeleting
-	// ProjectStatusFrozen 项目状态，冻结
 	ProjectStatusFrozen
-	// ProjectStatusUnKnown 项目状态，未知，正常情况下不会出现这个状态
 	ProjectStatusUnKnown
 )
 
 const (
-	// ProjectTypeManaged 项目类型，普通Odps项目
+	// ProjectTypeManaged ordinary project
 	ProjectTypeManaged = "managed"
-	// ProjectExternalExternal 项目类型，映射到Odps的外部项目，例如hive
+	// ProjectExternalExternal external project，like hive
 	ProjectExternalExternal = "external"
 )
 
 type Project struct {
 	model         projectModel
-	allProperties []Property
+	allProperties []common.Property
 	exists        bool
 	beLoaded      bool
 	odpsIns       *Odps
-	rb            ResourceBuilder
+	rb            common.ResourceBuilder
 }
 
 func (p *Project) OdpsIns() *Odps {
@@ -54,27 +50,27 @@ func (p *Project) OdpsIns() *Odps {
 }
 
 type projectModel struct {
-	XMLName            xml.Name      `xml:"Project"`
-	Name               string        `xml:"Name"`
-	Type               string        `xml:"Type"`
-	Comment            string        `xml:"Comment"`
-	Status             ProjectStatus `xml:"State"`
-	ProjectGroupName   string        `xml:"ProjectGroupName"`
-	Properties         []Property    `xml:"Properties>Property"`
-	DefaultCluster     string        `xml:"DefaultCluster"`
-	Clusters           []Cluster     `xml:"Clusters"`
-	ExtendedProperties []Property    `xml:"ExtendedProperties>Property"`
-	// 这三个字段在/projects中和/projects/<projectName>接口中返回的未知不一样,
+	XMLName            xml.Name          `xml:"Project"`
+	Name               string            `xml:"Name"`
+	Type               string            `xml:"Type"`
+	Comment            string            `xml:"Comment"`
+	Status             ProjectStatus     `xml:"State"`
+	ProjectGroupName   string            `xml:"ProjectGroupName"`
+	Properties         []common.Property `xml:"Properties>Property"`
+	DefaultCluster     string            `xml:"DefaultCluster"`
+	Clusters           []Cluster         `xml:"Clusters"`
+	ExtendedProperties []common.Property `xml:"ExtendedProperties>Property"`
+	// 这三个字段在/projects中和/projects/<ProjectName>接口中返回的未知不一样,
 	// 前者是body的xml数据中，后者在header里
-	Owner            string  `xml:"Owner"`
-	CreationTime     GMTTime `xml:"CreationTime"`
-	LastModifiedTime GMTTime `xml:"LastModifiedTime"`
+	Owner            string         `xml:"Owner"`
+	CreationTime     common.GMTTime `xml:"CreationTime"`
+	LastModifiedTime common.GMTTime `xml:"LastModifiedTime"`
 }
 
 type OptionalQuota struct {
-	XMLName    xml.Name   `xml:"OptionalQuota"`
-	QuotaId    string     `xml:"QuotaID"`
-	Properties Properties `xml:"Properties"`
+	XMLName    xml.Name          `xml:"OptionalQuota"`
+	QuotaId    string            `xml:"QuotaID"`
+	Properties common.Properties `xml:"Properties"`
 }
 
 type Cluster struct {
@@ -87,11 +83,11 @@ func NewProject(name string, odpsIns *Odps) Project {
 	return Project{
 		model:   projectModel{Name: name},
 		odpsIns: odpsIns,
-		rb:      ResourceBuilder{projectName: name},
+		rb:      common.ResourceBuilder{ProjectName: name},
 	}
 }
 
-func (p *Project) RestClient() rest_client.RestClient {
+func (p *Project) RestClient() restclient2.RestClient {
 	return p.odpsIns.restClient
 }
 
@@ -130,20 +126,20 @@ func (p *Project) _loadFromOdps(params optionalParams) (*projectModel, error) {
 		}
 
 		header := res.Header
-		model.Owner = header.Get(consts.HttpHeaderOdpsOwner)
+		model.Owner = header.Get(common.HttpHeaderOdpsOwner)
 
-		creationTime, err := ParseRFC1123Date(header.Get(consts.HttpHeaderOdpsCreationTime))
+		creationTime, err := common.ParseRFC1123Date(header.Get(common.HttpHeaderOdpsCreationTime))
 		if err != nil {
 			log.Printf("/project get creation time error, %v", err)
 		}
 
-		lastModifiedTime, _ := ParseRFC1123Date(header.Get(consts.HttpHeaderLastModified))
+		lastModifiedTime, _ := common.ParseRFC1123Date(header.Get(common.HttpHeaderLastModified))
 		if err != nil {
 			log.Printf("/project get last modified time error, %v", err)
 		}
 
-		model.CreationTime = GMTTime(creationTime)
-		model.LastModifiedTime = GMTTime(lastModifiedTime)
+		model.CreationTime = common.GMTTime(creationTime)
+		model.LastModifiedTime = common.GMTTime(lastModifiedTime)
 
 		return nil
 	}
@@ -161,7 +157,7 @@ func (p *Project) Load() error {
 	p.beLoaded = true
 
 	if err != nil {
-		if httpNoteOk, ok := err.(rest_client.HttpNotOk); ok {
+		if httpNoteOk, ok := err.(restclient2.HttpNotOk); ok {
 			if httpNoteOk.StatusCode == 404 {
 				p.exists = false
 			}
@@ -200,14 +196,16 @@ func (p *Project) ProjectGroupName() string {
 	return p.model.ProjectGroupName
 }
 
-// PropertiesSet Properties 获取Project已配置过的的信息
-func (p *Project) PropertiesSet() Properties {
+// PropertiesHasBeSet Properties get the properties those have be set for the project
+func (p *Project) PropertiesHasBeSet() common.Properties {
 	return p.model.Properties
 }
 
-// GetAllProperties 获取 Project 全部可配置的属性, 包含从group继承来的配置信息。
-// 注意GetAllProperties有可能会从odps后台加载数据，所以有可能会出错
-func (p *Project) GetAllProperties() (Properties, error) {
+// GetAllProperties get all the configurable properties of the project, including the
+// properties inherit from group.
+// **note**, this method may return error when something wrong during loading data
+// from the api serer
+func (p *Project) GetAllProperties() (common.Properties, error) {
 	if p.allProperties != nil {
 		return p.allProperties, nil
 	}
@@ -224,7 +222,8 @@ func (p *Project) GetAllProperties() (Properties, error) {
 
 // GetDefaultCluster Get default cluster. This is an internal method for group-api.
 // Returns efault cluster when called by group owner, otherwise ,null.
-// 注意GetDefaultProperties有可能会从odps后台加载数据，所以有可能会出错
+// **note**, this method may return error when something wrong during loading data
+// from the api serer
 func (p *Project) GetDefaultCluster() (string, error) {
 	if p.model.DefaultCluster != "" {
 		return p.model.DefaultCluster, nil
@@ -243,7 +242,8 @@ func (p *Project) GetDefaultCluster() (string, error) {
 
 // GetClusters Get information of clusters owned by this project. This is an internal
 // method for group-api.
-// 注意GetClusters有可能会从odps后台加载数据，所以有可能会出错
+// **note**, this method may return error when something wrong during loading data
+// from the api serer
 func (p *Project) GetClusters() ([]Cluster, error) {
 	if p.model.Clusters != nil {
 		return p.model.Clusters, nil
@@ -260,9 +260,10 @@ func (p *Project) GetClusters() ([]Cluster, error) {
 	return p.model.Clusters, nil
 }
 
-// GetExtendedProperties 获取项目的扩展属性
-// 注意GetExtendedProperties有可能会从odps后台加载数据，所以有可能会出错
-func (p *Project) GetExtendedProperties() (Properties, error) {
+// GetExtendedProperties get the extended properties of the project
+// **note**, this method may return error when something wrong during loading data
+// from the api serer
+func (p *Project) GetExtendedProperties() (common.Properties, error) {
 	if p.model.ExtendedProperties != nil {
 		return p.model.ExtendedProperties, nil
 	}
@@ -293,8 +294,8 @@ func (p *Project) Existed() bool {
 	return p.exists
 }
 
-func (p *Project) SecurityManager() SecurityManager {
-	return NewSecurityManager(p.odpsIns, p.Name())
+func (p *Project) SecurityManager() security.Manager {
+	return security.NewSecurityManager(p.odpsIns.restClient, p.Name())
 }
 
 func (p *Project) GetTunnelEndpoint() (string, error) {
@@ -302,7 +303,7 @@ func (p *Project) GetTunnelEndpoint() (string, error) {
 	resource := p.rb.Tunnel()
 	queryArgs := make(url.Values, 1)
 	queryArgs.Set("service", "")
-	req, err := client.NewRequestWithUrlQuery(consts.HttpMethod.GetMethod, resource, nil, queryArgs)
+	req, err := client.NewRequestWithUrlQuery(common.HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
 		return "", errors.WithStack(err)
 	}

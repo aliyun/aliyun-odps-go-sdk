@@ -9,7 +9,7 @@ import (
 
 func ExampleProjects_List() {
 	projectsIns := odpsIns.Projects()
-	projects, err := projectsIns.List(odps.ProjectFilter.WithNamePrefix("p"))
+	projects, err := projectsIns.List(odps.ProjectFilter.NamePrefix("p"))
 
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -37,7 +37,7 @@ func ExampleProjects_Exists() {
 
 func ExampleProject() {
 	projects := odpsIns.Projects()
-	project := projects.Get("odps_smoke_test")
+	project := projects.Get(defaultProjectName)
 
 	if err := project.Load(); err != nil {
 		panic(err)

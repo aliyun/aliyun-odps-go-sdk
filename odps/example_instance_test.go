@@ -8,37 +8,40 @@ import (
 )
 
 func ExampleInstances_List() {
-	instances := odps.NewInstances(odpsIns)
+	ins := odpsIns.Instances()
+	timeFormat := "2006-01-02 15:04:05"
+	startTime, _ := time.Parse(timeFormat, "2021-11-15 02:15:30")
+	endTime, _ := time.Parse(timeFormat, "2021-11-18 06:22:02")
 
-	c := make(chan odps.Instance)
+	instances := ins.List(odps.InstanceFilter.TimeRange(startTime, endTime))
+	//instances := ins.List()
 
-	go func() {
-		err := instances.List(c)
-		if err != nil {
-			log.Fatalf("%+v", err)
+	for ie := range instances {
+		if ie.Err != nil {
+			log.Fatalf("%+v", ie.Err)
 		}
-	}()
 
-	for i := range c {
-		println(fmt.Sprintf("%+v", i))
+		i := ie.Ins
+
+		println(
+			fmt.Sprintf(
+				"%s, %s, %s, %s, %s",
+				i.Id(), i.Owner(), i.StartTime().Format(timeFormat), i.EndTime().Format(timeFormat), i.Status(),
+			))
 	}
 
 	// Output:
 }
 
 func ExampleInstances_ListInstancesQueued() {
-	instances := odps.NewInstances(odpsIns)
+	ins := odpsIns.Instances()
 
-	c := make(chan string)
+	instances, err := ins.ListInstancesQueued()
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
 
-	go func() {
-		err := instances.ListInstancesQueued(c)
-		if err != nil {
-			log.Fatalf("%+v", err)
-		}
-	}()
-
-	for i := range c {
+	for _, i := range instances {
 		println(fmt.Sprintf("%+v", i))
 	}
 
@@ -46,29 +49,24 @@ func ExampleInstances_ListInstancesQueued() {
 }
 
 func ExampleInstances_CreateTask() {
-	instances := odps.NewInstances(odpsIns)
-	sqlTask := odps.NewSqlTask("hello", "select count(*) from user;", "", nil)
-	instance, err := instances.CreateTask("odps_smoke_test", &sqlTask)
+	instances := odpsIns.Instances()
+	sqlTask := odps.NewSqlTask("hello", "select count(*) from sale_detail;", "", nil)
+	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
 
 	if err != nil {
 		log.Fatalf("%+v", err)
-	} else {
-		println(instance.Id())
 	}
+
+	println(instance.Id())
 
 	err = instance.Load()
 	if err != nil {
 		log.Fatalf("%+v", err)
-	} else {
-		println(fmt.Sprintf("%s, %s, %s", instance.StartTime(), instance.EndTime(), instance.Status()))
 	}
 
-	body, err := instance.GetTaskDetail("hello")
-	if err != nil {
-		log.Fatalf("%+v", err)
-	} else {
-		println(body)
-	}
+	println(fmt.Sprintf("%s, %s, %s", instance.StartTime(), instance.EndTime(), instance.Status()))
+
+	timeFormat := "2006-01-02 15:04:05"
 
 Loop:
 	for {
@@ -76,9 +74,13 @@ Loop:
 		task := tasks[0]
 		if err != nil {
 			log.Fatalf("%+v", err)
-		} else {
-			println(fmt.Sprintf("%s, %s, %s, %s", task.StartTime, task.EndTime, task.Status, task.Name))
 		}
+
+		println(
+			fmt.Sprintf(
+				"%s, %s, %s, %s",
+				task.StartTime.Format(timeFormat), task.EndTime.Format(timeFormat), task.Status, task.Name,
+			))
 
 		switch task.Status {
 		case odps.TaskCancelled, odps.TaskFailed, odps.TaskSuccess:
@@ -91,9 +93,20 @@ Loop:
 	err = instance.Load()
 	if err != nil {
 		log.Fatalf("%+v", err)
-	} else {
-		println(fmt.Sprintf("%s, %s, %s", instance.StartTime(), instance.EndTime(), instance.Status()))
 	}
+
+	body, err := instance.GetTaskDetail("hello")
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	println(string(body))
+
+	println(
+		fmt.Sprintf(
+			"%s, %s, %s",
+			instance.StartTime().Format(timeFormat), instance.EndTime().Format(timeFormat), instance.Status(),
+		))
 
 	// Output:
 }
@@ -101,13 +114,13 @@ Loop:
 func ExampleInstance_Terminate() {
 	instances := odps.NewInstances(odpsIns)
 	sqlTask := odps.NewSqlTask("hello", "select count(*) from user;", "", nil)
-	instance, err := instances.CreateTask("odps_smoke_test", &sqlTask)
+	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
 
 	if err != nil {
 		log.Fatalf("%+v", err)
-	} else {
-		println(instance.Id())
 	}
+
+	println(instance.Id())
 
 	err = instance.Terminate()
 	if err != nil {
@@ -117,30 +130,23 @@ func ExampleInstance_Terminate() {
 	err = instance.Load()
 	if err != nil {
 		log.Fatalf("%+v", err)
-	} else {
-		println(fmt.Sprintf("%s, %s, %s", instance.StartTime(), instance.EndTime(), instance.Status()))
 	}
+
+	println(fmt.Sprintf("%s, %s, %s", instance.StartTime(), instance.EndTime(), instance.Status()))
 
 	// Output:
 }
 
 func ExampleInstance_GetTaskProgress() {
 	instances := odps.NewInstances(odpsIns)
-	sqlTask := odps.NewSqlTask("hello", "select name, age from jet_pai_smoke_input, user where jet_pai_smoke_input.label = user.name;", "", nil)
-	instance, err := instances.CreateTask("odps_smoke_test", &sqlTask)
+	sqlTask := odps.NewSqlTask("hello", "select count(*) from sale_detail;", "", nil)
+	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
 
 	if err != nil {
 		log.Fatalf("%+v", err)
-	} else {
-		println(instance.Id())
 	}
 
-	body, err := instance.GetTaskDetail("hello")
-	if err != nil {
-		log.Fatalf("%+v", err)
-	} else {
-		println(body)
-	}
+	println(instance.Id())
 
 	for i := 0; i < 5; i++ {
 		progress, err := instance.GetTaskProgress("hello")
@@ -156,26 +162,32 @@ func ExampleInstance_GetTaskProgress() {
 		time.Sleep(time.Second * 1)
 	}
 
+	body, err := instance.GetTaskDetail("hello")
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	println(string(body))
+
 	// Output:
 }
 
 func ExampleInstance_GetTaskSummary() {
 	instances := odps.NewInstances(odpsIns)
-	sqlTask := odps.NewSqlTask("hello1", "select * from user;", "", nil)
-	instance, err := instances.CreateTask("odps_smoke_test", &sqlTask)
+	sqlTask := odps.NewSqlTask("hello1", "select count(*) from sale_detail;", "", nil)
+	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
 
 	if err != nil {
 		log.Fatalf("%+v", err)
-	} else {
-		println(instance.Id())
 	}
+	println(instance.Id())
+	_ = instance.WaitForSuccess()
 
 	taskSummary, err := instance.GetTaskSummary("hello1")
 	if err != nil {
 		log.Fatalf("%+v", err)
-	} else {
-		println(fmt.Sprintf("%s\n%s\n", taskSummary.JsonSummary, taskSummary.Summary))
 	}
+	println(fmt.Sprintf("%s\n%s\n", taskSummary.JsonSummary, taskSummary.Summary))
 
 	// Output:
 }
@@ -183,20 +195,19 @@ func ExampleInstance_GetTaskSummary() {
 func ExampleInstance_GetCachedInfo() {
 	instances := odps.NewInstances(odpsIns)
 	sqlTask := odps.NewSqlTask("hello1", "select * from user;", "", nil)
-	instance, err := instances.CreateTask("odps_smoke_test", &sqlTask)
+	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
 
 	if err != nil {
 		log.Fatalf("%+v", err)
-	} else {
-		println(instance.Id())
 	}
+	println(instance.Id())
 
 	i, err := instance.GetCachedInfo()
 	if err != nil {
 		log.Fatalf("%+v", err)
-	} else {
-		println(fmt.Sprintf("%+v", i))
 	}
+
+	println(fmt.Sprintf("%+v", i))
 
 	// Output:
 }

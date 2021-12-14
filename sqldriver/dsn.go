@@ -2,9 +2,9 @@ package sqldriver
 
 import (
 	"errors"
-	"github.com/aliyun/aliyun-odps-go-sdk/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
-	"github.com/aliyun/aliyun-odps-go-sdk/rest_client"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"net/url"
 	"strconv"
 	"time"
@@ -106,9 +106,9 @@ func (c *Config) GenAccount() account.Account {
 	return account
 }
 
-func (c *Config) GenRestClient() rest_client.RestClient {
+func (c *Config) GenRestClient() restclient.RestClient {
 	account := c.GenAccount()
-	client := rest_client.NewOdpsRestClient(account, c.Endpoint)
+	client := restclient.NewOdpsRestClient(account, c.Endpoint)
 	client.TcpConnectionTimeout = c.ConnectTimeout
 	client.HttpTimeout = c.OperationTimeout
 

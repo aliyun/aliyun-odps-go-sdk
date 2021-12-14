@@ -2,10 +2,10 @@ package sqldriver_test
 
 import (
 	"database/sql"
-	account2 "github.com/aliyun/aliyun-odps-go-sdk/account"
-	"github.com/aliyun/aliyun-odps-go-sdk/data"
-	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
-	odps "github.com/aliyun/aliyun-odps-go-sdk/rest_client"
+	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+	odps "github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 	"log"
 	"time"

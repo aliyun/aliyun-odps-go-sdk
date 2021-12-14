@@ -16,7 +16,9 @@ func NewProjects(odps *Odps) Projects {
 	}
 }
 
-// List 获取全部的Project
+// List get all the projects thant current account can access in the specific endpoint
+// filters can be specified with ProjectFilter.NamePrefix, ProjectFilter.Owner,
+// ProjectFilter.User, ProjectFilter.Group
 func (p *Projects) List(filters ...PFilterFunc) ([]Project, error) {
 	queryArgs := make(url.Values)
 
@@ -88,12 +90,12 @@ func (p *Projects) Exists(projectName string) (bool, error) {
 	return project.Existed(), nil
 }
 
-// CreateExternalProject 创建 external 项目
+// CreateExternalProject  unimplemented!
 func (p *Projects) CreateExternalProject(projectName string) error {
 	return errors.New("unimplemented")
 }
 
-// DeleteExternalProject 删除 external 项目
+// DeleteExternalProject unimplemented!
 func (p *Projects) DeleteExternalProject(projectName string) error {
 	return errors.New("unimplemented")
 }
@@ -103,21 +105,21 @@ func (p *Projects) UpdateProject(projectName string) error {
 }
 
 var ProjectFilter = struct {
-	WithNamePrefix func(string) PFilterFunc
-	WithOwner      func(string) PFilterFunc
-	WithUser       func(string) PFilterFunc
-	WithGroup      func(string) PFilterFunc
+	// Filter out projects with a name prefix
+	NamePrefix func(string) PFilterFunc
+	// Filter out projects with project owner name, this filter cannot be used with `User` together
+	Owner func(string) PFilterFunc
+	// Filter out projects with a project member name
+	User func(string) PFilterFunc
+	// Filter out projects with the project group name
+	Group func(string) PFilterFunc
+	// MaxItems, it seems to be not workable
+	// WithMaxItems
 }{
-	// 指定projects的名字前缀作为查询条件
-	WithNamePrefix: withProjectNamePrefix,
-	// 指定projects的所有者作为查询条件，不能与user同时使用，不支持分页
-	WithOwner: withProjectOwner,
-	// 指定projects的加入用户名作为查询条件，不能与owner同时使用，不支持分页。
-	WithUser: withUserInProject,
-	// 指定projects的group name作为查询条件。
-	WithGroup: withProjectGroup,
-	// MaxItems貌似不起作用
-	// MaxItems int
+	NamePrefix: withProjectNamePrefix,
+	Owner:      withProjectOwner,
+	User:       withUserInProject,
+	Group:      withProjectGroup,
 }
 
 type PFilterFunc func(url.Values)

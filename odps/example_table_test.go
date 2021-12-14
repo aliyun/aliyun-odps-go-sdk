@@ -2,32 +2,33 @@ package odps_test
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"io"
 	"log"
 )
 
 func ExampleTableSchema_ToSQLString() {
-	c1 := odps.Column{
+	c1 := tableschema.Column{
 		Name:    "name",
 		Type:    datatype.StringType,
 		Comment: "name of user",
 	}
 
-	c2 := odps.Column{
+	c2 := tableschema.Column{
 		Name:    "age",
 		Type:    datatype.IntType,
 		Comment: "how old is the user",
 	}
 
-	p1 := odps.Column{
+	p1 := tableschema.Column{
 		Name:    "region",
 		Type:    datatype.StringType,
 		Comment: "居住区域",
 	}
 
-	p2 := odps.Column{
+	p2 := tableschema.Column{
 		Name: "code",
 		Type: datatype.IntType,
 	}
@@ -41,7 +42,7 @@ func ExampleTableSchema_ToSQLString() {
 
 	jars := []string{"odps-udf-example.jar", "another.jar"}
 
-	builder := odps.NewTableSchemaBuilder()
+	builder := tableschema.NewSchemaBuilder()
 	builder.Name("user").
 		Comment("这就是一条注释").
 		Columns(c1, c2).
@@ -53,8 +54,9 @@ func ExampleTableSchema_ToSQLString() {
 	schema := builder.Build()
 
 	sql, _ := schema.ToSQLString("project_1", true)
+	println("sql of create table:")
 	println(sql)
-	println("\n")
+	println()
 
 	externalSql, err := schema.ToExternalSQLString(
 		"project_1",
@@ -65,14 +67,16 @@ func ExampleTableSchema_ToSQLString() {
 
 	if err != nil {
 		log.Fatalf("%+v", err)
-	} else {
-		println(externalSql)
 	}
+
+	println("sql of create external table:")
+	println(externalSql)
+
 	// Output:
 }
 
 func ExampleTable_Load() {
-	table := odps.NewTable(odpsIns, "project_1", "has_struct")
+	table := odpsIns.Table("has_struct")
 	err := table.Load()
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -85,7 +89,7 @@ func ExampleTable_Load() {
 }
 
 func ExampleTable_AddPartition() {
-	table := odps.NewTable(odpsIns, "project_1", "sale_detail")
+	table := odpsIns.Table("sale_detail")
 	instance, err := table.AddPartition(true, "sale_date='202111',region='hangzhou'")
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -105,18 +109,13 @@ func ExampleTable_AddPartition() {
 }
 
 func ExampleTable_GetPartitions() {
-	table := odps.NewTable(odpsIns, "project_1", "sale_detail")
-	c := make(chan odps.Partition)
+	table := odpsIns.Table("sale_detail")
+	partitions, err := table.GetPartitions("")
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
 
-	go func() {
-		err := table.GetPartitions(c, "")
-
-		if err != nil {
-			log.Fatalf("%+v", err)
-		}
-	}()
-
-	for p := range c {
+	for _, p := range partitions {
 		println(fmt.Sprintf("Name: %s", p.Name()))
 		println(fmt.Sprintf("Create time: %s", p.CreatedTime()))
 		println(fmt.Sprintf("Last DDL time: %s", p.LastDDLTime()))
@@ -129,48 +128,50 @@ func ExampleTable_GetPartitions() {
 
 func ExampleTable_ExecSql() {
 	//table := odps.NewTable(odpsIns, "project_1", "sale_detail")
-	table := odps.NewTable(odpsIns, "project_1", "has_struct")
+	table := odpsIns.Table("has_struct")
 	//instance, err := table.ExecSql("SelectSale_detail", "select * from sale_detail;")
 	instance, err := table.ExecSql("Select_has_struct", "select * from has_struct;")
 	if err != nil {
 		log.Fatalf("%+v", err)
-	} else {
-		err = instance.WaitForSuccess()
-		if err != nil {
-			log.Fatalf("%+v", err)
-		}
-
-		results, err := instance.GetResult()
-		if err != nil {
-			log.Fatalf("%+v", err)
-		} else if len(results) > 0 {
-			println(fmt.Sprintf("%+v", results[0]))
-		}
 	}
+
+	err = instance.WaitForSuccess()
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	results, err := instance.GetResult()
+	if err != nil {
+		log.Fatalf("%+v", err)
+	} else if len(results) == 0 {
+		log.Fatalf("should get at least one result")
+	}
+
+	println(fmt.Sprintf("%+v", results[0].Result))
 
 	// Output:
 }
 
 func ExampleTable_Read() {
-	table := odps.NewTable(odpsIns, "project_1", "sale_detail")
+	table := odps.NewTable(odpsIns, defaultProjectName, "sale_detail")
 	columns := []string{
 		"shop_name", "customer_id", "total_price", "sale_date", "region",
 	}
 	reader, err := table.Read("", columns, -1, "")
 	if err != nil {
 		log.Fatalf("%+v", err)
-	} else {
-		for {
-			record, err := reader.Read()
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				log.Fatal(err)
-			}
+	}
 
-			println(fmt.Sprintf("%+v", record))
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
 		}
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		println(fmt.Sprintf("%+v", record))
 	}
 
 	// Output:

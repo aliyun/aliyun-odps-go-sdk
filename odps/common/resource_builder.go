@@ -1,0 +1,144 @@
+package common
+
+import (
+	"net/url"
+	"path"
+)
+
+const (
+	ProjectsPath        = "/projects"
+	SchemasPath         = "/schemas"
+	TablesPath          = "/tables"
+	RegistrationPath    = "/registration"
+	FunctionsPath       = "/functions"
+	EventsPath          = "/events"
+	ResourcesPath       = "/resources"
+	InstancesPath       = "/instances"
+	CachedInstancesPath = "/cachedinstances"
+	VolumesPath         = "/volumes"
+	StreamsPath         = "/streams"
+	TopologiesPath      = "/topologies"
+	XFlowsPath          = "/xflows"
+	StreamJobsPath      = "/streamjobs"
+	ServersPath         = "/servers"
+	MatricesPath        = "/matrices"
+	OfflineModelsPath   = "/offlinemodels"
+	UsersPath           = "/users"
+	RolesPath           = "/roles"
+	SessionsPath        = "/session"
+	AuthPath            = "/auth"
+	AuthorizationPath   = "/authorization"
+	TunnelPath          = "/tunnel"
+)
+
+type ResourceBuilder struct {
+	ProjectName string
+}
+
+func NewResourceBuilder(projectName string) ResourceBuilder {
+	return ResourceBuilder{ProjectName: url.QueryEscape(projectName)}
+}
+
+func (rb *ResourceBuilder) SetProject(name string) {
+	rb.ProjectName = url.QueryEscape(name)
+}
+
+func (rb *ResourceBuilder) Projects() string {
+	return ProjectsPath
+}
+
+func (rb *ResourceBuilder) Project() string {
+	return path.Join(ProjectsPath, rb.ProjectName)
+}
+
+func (rb *ResourceBuilder) Tables() string {
+	return path.Join(ProjectsPath, rb.ProjectName, TablesPath)
+}
+
+func (rb *ResourceBuilder) Table(tableName string) string {
+	return path.Join(ProjectsPath, rb.ProjectName, TablesPath, url.PathEscape(tableName))
+}
+
+func (rb *ResourceBuilder) TableWithSchemaName(tableName, schemaName string) string {
+	return path.Join(ProjectsPath, rb.ProjectName, SchemasPath, schemaName, TablesPath, url.PathEscape(tableName))
+}
+
+func (rb *ResourceBuilder) Functions() string {
+	return path.Join(ProjectsPath, rb.ProjectName, RegistrationPath, FunctionsPath)
+}
+
+func (rb *ResourceBuilder) Function(functionName string) string {
+	return path.Join(ProjectsPath, rb.ProjectName, RegistrationPath, FunctionsPath, url.PathEscape(functionName))
+}
+
+func (rb *ResourceBuilder) XFlows() string {
+	return path.Join(ProjectsPath, rb.ProjectName, XFlowsPath)
+}
+
+func (rb *ResourceBuilder) XFlow(xFlowName string) string {
+	return path.Join(ProjectsPath, rb.ProjectName, XFlowsPath, url.PathEscape(xFlowName))
+}
+
+func (rb *ResourceBuilder) Instances() string {
+	return path.Join(ProjectsPath, rb.ProjectName, InstancesPath)
+}
+
+func (rb *ResourceBuilder) CachedInstances() string {
+	return path.Join(ProjectsPath, rb.ProjectName, CachedInstancesPath)
+}
+
+func (rb *ResourceBuilder) Instance(instanceId string) string {
+	return path.Join(ProjectsPath, rb.ProjectName, InstancesPath, url.PathEscape(instanceId))
+}
+
+func (rb *ResourceBuilder) Resources() string {
+	return path.Join(ProjectsPath, rb.ProjectName, ResourcesPath)
+}
+
+func (rb *ResourceBuilder) Resource(resourceName string) string {
+	return path.Join(ProjectsPath, rb.ProjectName, ResourcesPath, url.PathEscape(resourceName))
+}
+
+func (rb *ResourceBuilder) Volumes() string {
+	return path.Join(ProjectsPath, rb.ProjectName, VolumesPath)
+}
+
+func (rb *ResourceBuilder) Volume(volumeName string) string {
+	return path.Join(ProjectsPath, rb.ProjectName, VolumesPath, url.PathEscape(volumeName))
+}
+
+func (rb *ResourceBuilder) VolumePartition(volumeName, partitionKey string) string {
+	return path.Join(ProjectsPath, rb.ProjectName, VolumesPath, url.PathEscape(volumeName), partitionKey)
+}
+
+func (rb *ResourceBuilder) Users() string {
+	return path.Join(ProjectsPath, rb.ProjectName, UsersPath)
+}
+
+func (rb *ResourceBuilder) User(userId string) string {
+	return path.Join(ProjectsPath, rb.ProjectName, UsersPath, url.PathEscape(userId))
+}
+
+func (rb *ResourceBuilder) Roles() string {
+	return path.Join(ProjectsPath, rb.ProjectName, RolesPath)
+}
+
+func (rb *ResourceBuilder) Role(roleName string) string {
+	return path.Join(ProjectsPath, rb.ProjectName, RolesPath, url.PathEscape(roleName))
+}
+
+func (rb *ResourceBuilder) Auth() string {
+	return path.Join(ProjectsPath, rb.ProjectName, AuthPath)
+}
+
+func (rb *ResourceBuilder) Authorization() string {
+	return path.Join(ProjectsPath, rb.ProjectName, AuthorizationPath)
+}
+
+func (rb *ResourceBuilder) AuthorizationId(instanceId string) string {
+	return path.Join(ProjectsPath, rb.ProjectName, AuthorizationPath, url.PathEscape(instanceId))
+}
+
+func (rb *ResourceBuilder) Tunnel() string {
+	return path.Join(ProjectsPath, rb.ProjectName, TunnelPath)
+}

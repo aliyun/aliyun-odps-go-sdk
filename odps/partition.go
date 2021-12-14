@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/pkg/errors"
 	"net/url"
 	"strings"
@@ -21,11 +22,11 @@ type Partition struct {
 }
 
 type partitionModel struct {
-	CreateTime         GMTTime `json:"createTime"`
-	LastDDLTime        GMTTime `json:"lastDDLTime"`
-	LastModifiedTime   GMTTime `json:"lastModifiedTime"`
-	PartitionRecordNum int     `json:"partitionRecordNum"`
-	PartitionSize      int     `json:"partitionSize"`
+	CreateTime         common.GMTTime `json:"createTime"`
+	LastDDLTime        common.GMTTime `json:"lastDDLTime"`
+	LastModifiedTime   common.GMTTime `json:"lastModifiedTime"`
+	PartitionRecordNum int            `json:"partitionRecordNum"`
+	PartitionSize      int            `json:"partitionSize"`
 }
 
 type partitionExtendedModel struct {
@@ -46,7 +47,7 @@ func NewPartition(odpsIns *Odps, projectName, tableName string, kv map[string]st
 	}
 }
 
-// Name 返回a=xx,b=yy格式的字符串
+// Name return string with format like "a=xx,b=yy"
 func (p *Partition) Name() string {
 	i, n := 0, len(p.kv)
 	var sb strings.Builder
@@ -64,7 +65,7 @@ func (p *Partition) Name() string {
 }
 
 func (p *Partition) Load() error {
-	var rb ResourceBuilder
+	var rb common.ResourceBuilder
 	rb.SetProject(p.projectName)
 	resource := rb.Table(p.tableName)
 	client := p.odpsIns.restClient
@@ -95,7 +96,7 @@ func (p *Partition) Load() error {
 }
 
 func (p *Partition) LoadExtended() error {
-	var rb ResourceBuilder
+	var rb common.ResourceBuilder
 	rb.SetProject(p.projectName)
 	resource := rb.Table(p.tableName)
 	client := p.odpsIns.restClient
