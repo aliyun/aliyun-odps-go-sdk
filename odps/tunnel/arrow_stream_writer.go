@@ -7,7 +7,7 @@ import (
 
 const DefaultChunkSize = 65536
 
-// ArrowStreamWriter 将数据构建成固定大小的chunk，以chunk为单位计算crc，并将crc写入数据流
+// ArrowStreamWriter calculates the crc value in chunk unit
 type ArrowStreamWriter struct {
 	inner              io.WriteCloser
 	chunkCrc           Crc32CheckSum

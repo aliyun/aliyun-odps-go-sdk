@@ -12,70 +12,27 @@ type TypeID int
 
 const (
 	NULL TypeID = iota
-	// BIGINT 8字节有符号整形
 	BIGINT
-
-	// DOUBLE 双精度浮点
 	DOUBLE
-
-	// BOOLEAN 布尔型
 	BOOLEAN
-
-	// DATETIME 日期类型
 	DATETIME
-
-	// STRING 字符串类型
 	STRING
-
-	// DECIMAL 精确小数类型
 	DECIMAL
-
-	// MAP Map类型
 	MAP
-
-	// ARRAY Array类型
 	ARRAY
-
-	// VOID 空类型
 	VOID
-
-	// TINYINT 1字节有符号整型
 	TINYINT
-
-	// SMALLINT 2字节有符号整型
 	SMALLINT
-
-	// INT 4字节有符号整型
 	INT
-
-	// FLOAT 单精度浮点
 	FLOAT
-
-	// CHAR 固定长度字符串
 	CHAR
-
-	// VARCHAR 可变长度字符串
 	VARCHAR
-
-	// DATE 时间类型
 	DATE
-
-	// TIMESTAMP 时间戳
 	TIMESTAMP
-
-	// BINARY 字节数组
 	BINARY
-
-	// IntervalDayTime 日期间隔
 	IntervalDayTime
-
-	// IntervalYearMonth 年份间隔
 	IntervalYearMonth
-
-	// STRUCT 结构体
 	STRUCT
-
-	// TypeUnknown 未知类型
 	TypeUnknown
 )
 

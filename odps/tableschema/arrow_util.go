@@ -6,7 +6,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// TypeToArrowType odps数据类型转换为arrow数据类型
+// TypeToArrowType convert odps field type to arrow field type
 //*        Storage Type      |  Arrow Type
 //*    ----------------------+---------------------
 //*      boolean             |  boolean
@@ -22,7 +22,7 @@ import (
 //*      binary              |  binary
 //*      date                |  date32
 //*      datetime            |  timestamp(nano)
-//*      timestamp           |  timezstamp(nano) 【注：精度选择功能开发中】
+//*      timestamp           |  timestamp(nano) 【注：精度选择功能开发中】
 //*      interval_day_time   |  day_time_interval
 //*      interval_year_month |  month_interval
 //*      decimal             |  decimal

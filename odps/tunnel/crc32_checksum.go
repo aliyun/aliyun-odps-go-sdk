@@ -19,8 +19,9 @@ func NewCrc32CheckSum() Crc32CheckSum {
 	}
 }
 
-// Update 注意不要用int类型的data，因为int类型在32和64位平台上的size不一样
-// java中的int为32, 所以同样的int数据，用java和go计算出的crc32值可能不一样
+// Update can not use data of int type, as the size of int is different
+// on 32 and 64 platform. In java the size of int is always 32 bits, so
+// the same int data can generate different crc value when using java and go
 func (crc *Crc32CheckSum) Update(data interface{}) {
 	var _ = binary.Write(crc.buffer, binary.LittleEndian, data)
 	crc.value = crc32.Update(crc.value, crc.table, crc.buffer.Bytes())

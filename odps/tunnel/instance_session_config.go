@@ -20,7 +20,7 @@ func newInstanceSessionConfig(opts ...InstanceOption) *instanceSessionConfig {
 	return cfg
 }
 
-// InstanceOption 不可直接使用，需要通过{@link InstanceSessionCfg}.XX构建
+// InstanceOption must be created by InstanceSessionCfg.XXX
 type InstanceOption func(cfg *instanceSessionConfig)
 
 func withTaskName(taskName string) InstanceOption {

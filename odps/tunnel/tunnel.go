@@ -7,24 +7,22 @@ import (
 	"time"
 )
 
-// Tunnel Tunnel是ODPS的数据通道，用户可以通过Tunnel向ODPS上传或下载数据
-// Tunnel是访问ODPS Tunnel服务的入口类，支持表数据(非视图)的上传、下载, 或下载某个instance的执行结果。
-// 对一张表或partition上传下载的过程，称为一个session。session由一个或多个到Tunnel Server的
-// HTTP Request组成。session的超时时间是24小时，如果大批量数据传输超过24小时，需要自行拆分成
-// 多个session。
-// 数据的上传和下载分别由UploadSession和DownloadSession这两个会话来负责
+// Tunnel is used to upload or download data in odps, it can also be used to download the result
+// of sql query.
+// From the begging of one upload or download to the ending is called a session. As some table is
+// very big, more than one http connections are used for the upload or download, all the http connections
+// are created by session. The timeout of session is 24 hours
 //
-// 典型的表数据上传流程如下:
-// 1. 创建Tunnel
-// 2. 创建UploadSession
-// 3. 创建RecordWriter, 写入Record
-// 4. 提交上传操作
+// The typical table upload processes are
+// 1. create tunnel
+// 2. create UploadSession
+// 3. create RecordWriter, use the writer to write Record data
+// 4. commit the data
 //
-// 典型的表数据下载流程如下:
-// 1. 创建Tunnel
-// 2. 创建DownloadSession
-// 3. 创建RecordReader, 读取Record
-
+// The typical table download processes are
+// 1. create tunnel
+// 2. create DownloadSession
+// 3. create RecordReader, use the reader to read out Record
 type Tunnel struct {
 	odpsIns              *odps.Odps
 	endpoint             string

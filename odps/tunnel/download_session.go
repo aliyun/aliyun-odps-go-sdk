@@ -25,21 +25,23 @@ const (
 	DownloadStatusInitiating
 )
 
-// DownloadSession 表示从ODPS表中下载数据的会话，
-// 需要通过TableTunnel来创建。Session ID是Session的唯一标识符，可通过getId()
-// 获取。表中Record总数可通过RecordCount()得到，用户可根据Record总数来启动并发
-// 下载。 DownloadSession通过创建RecordReader来完成数据的读取,需指定读取记录的
-// 起始位置和数量。目前仅支持{@link RecordArrowReader}。
-// RecordReader对应HTTP请求的超时时间为 300S，超时后 service 端会主动关闭。
+// DownloadSession is used to download table data, it can be created by Tunnel.
+// You can use RecordCount to get the count of total records, and can create
+// multiply RecordReader in parallel according the record count to download
+// the data in less time. The RecordArrowReader is the only RecordReader now.
+//
+// Underneath the RecordReader is the http connection, when no data occurs in it during
+// 300s, the tunnel sever will close it.
 type DownloadSession struct {
 	Id          string
 	ProjectName string
-	// 暂时没有用到
+	// TODO use schema to get the resource url of a table
 	SchemaName string
 	TableName  string
-	// 由于session中用到的partitionKey中不能有"'"。 如, 正确的例子region=hangzhou
-	// 错误的例子,region='hangzhou', 用户习惯用后者。为了避免错误，将partitionKey私有
-	// 如果用户需要单独设置partitionKey, 则需要使用SetPartitionKey
+	// The partition keys used by a session can not contain "'", for example, "region=hangzhou" is a
+	// positive case, and "region='hangzhou'" is a negative case. But the partition keys like "region='hangzhou'" are more
+	// common, to avoid the users use the error format, the partitionKey of UploadSession is private, it can be set when
+	// creating a session or using SetPartitionKey.
 	partitionKey        string
 	UseArrow            bool
 	Async               bool
@@ -53,14 +55,17 @@ type DownloadSession struct {
 	arrowSchema         *arrow.Schema
 }
 
-// CreateDownloadSession
-// Option是可选项，有
-// ${@link SessionCfg}.WithPartitionKey(string)
-//     下载数据表的partition描述，格式如下: pt=xxx,dt=xxx
-// ${@link SessionCfg}.WithShardId(string)
-//     下载数据表的shard标识
-// ${@link SessionCfg}.Async()
-//     异步创建session,小文件多的场景下可以避免连接超时的问题, 默认为false
+// CreateDownloadSession create a new download session before downing data.
+// The opts can be one or more of:
+// SessionCfg.WithPartitionKey
+// SessionCfg.WithSchemaName, it doesn't work now
+// SessionCfg.WithDefaultDeflateCompressor, using deflate compressor with default level
+// SessionCfg.WithDeflateCompressor, using deflate compressor with specific level
+// SessionCfg.WithSnappyFramedCompressor
+// SessionCfg.Overwrite, overwrite data
+// SessionCfg.UseArrow, it is the default config
+// SessionCfg.ShardId, set the shard id of the table
+// SessionCfg.Async, enable the async mode of the session which can avoiding timeout when there are many small files
 func CreateDownloadSession(
 	projectName, tableName string,
 	restClient restclient2.RestClient,
@@ -94,6 +99,17 @@ func CreateDownloadSession(
 	return &session, nil
 }
 
+// AttachToExistedDownloadSession get an existed session by the session id.
+// The opts can be one or more of:
+// SessionCfg.WithPartitionKey
+// SessionCfg.WithSchemaName, it doesn't work now
+// SessionCfg.WithDefaultDeflateCompressor, using deflate compressor with default level
+// SessionCfg.WithDeflateCompressor, using deflate compressor with specific level
+// SessionCfg.WithSnappyFramedCompressor
+// SessionCfg.Overwrite, overwrite data
+// SessionCfg.UseArrow, it is the default config
+// SessionCfg.ShardId, set the shard id of the table
+// SessionCfg.Async, enable the async mode of the session which can avoiding timeout when there are many small files
 func AttachToExistedDownloadSession(
 	sessionId, projectName, tableName string,
 	restClient restclient2.RestClient,

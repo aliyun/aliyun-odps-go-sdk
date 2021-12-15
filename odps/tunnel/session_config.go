@@ -29,7 +29,7 @@ func newSessionConfig(opts ...Option) *sessionConfig {
 	return cfg
 }
 
-// Option 不可直接使用，需要通过{@link SessionCfg}.XX构建
+// Option can not be used directly, it can be created by SessionCfg.XXX
 type Option func(cfg *sessionConfig)
 
 func withPartitionKey(partitionKey string) Option {

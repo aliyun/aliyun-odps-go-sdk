@@ -7,7 +7,7 @@ import (
 )
 
 type Array struct {
-	typ  *datatype.ArrayType // 考虑到很多数据都会用到同一个类型，所以多个数据用指针指向相同的类型，
+	typ  *datatype.ArrayType // 考虑到很多数据都会用到同一个类型，所以多个数据用指针指向相同的类型，TODO 后面可能要去掉
 	data []Data
 }
 

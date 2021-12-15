@@ -12,9 +12,7 @@ type Provider uint
 
 const (
 	_ Provider = iota
-	// Taobao 淘宝账号
 	Taobao
-	// Aliyun 阿里云账号
 	Aliyun
 	STS
 	// BearToken logview token

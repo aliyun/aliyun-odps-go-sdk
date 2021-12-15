@@ -28,33 +28,38 @@ const (
 	UploadStatusCommitting
 )
 
-// UploadSession 向ODPS表上传数据的session
-// 上传session是insert into语义，即对同一张 表或partition的多个上传session互不影响。
-// session id是session的唯一标志符。
+// UploadSession works as "insert into", multiply sessions for the same table or partition do not affect each other.
+// Session id is the unique identifier of a session。
 //
-// UploadSession通过{@link OpenRecordWriter}方法创建RecordWriter(目前仅支持{@link RecordArrowWriter})来
-// 完成写入数据，每个RecordWriter对应一个Http连接, 单个UploadSession可以创建多个RecordArrowWriter
+// UploadSession uses OpenRecordWriter to create a RecordArrowWriter(it is the only type of RecordWriter now) for
+// writing data into a table. Each RecordWriter uses a http connection to transfer data with the tunnel server, and
+// each UploadSession can create multiply RecordWriters, so multiply http connections can be used to upload data
+// in parallel.
 //
-// 创建RecordWriter时需指定block ID，block ID是 RecordWriter 的唯一标识符,取值范围 [0, 20000)，单个block上传的数据限制是
-// 100G。 同一 UploadSession 中，使用同一block ID多次打开RecordWriter会导致覆盖行为，最后一个调用Close()的RecordWriter
-// 所上传的数据会被保留。同一RecordWriter实例不能重复调用Close()
+// A block id must be given when creating a RecordWriter, it is the unique identifier of a writer. The block id can be one
+// number in [0, 20000)。A single RecordWriter can write at most 100G data。If multiply RecordWriters are created with the
+// same block id, the data will be overwritten, and only the data from the writer who calls Close lastly will be kept.
 //
-// RecordWriter 对应的HTTP连接超时为120s，若120s内没有数据传输，service端会主动关闭连接。特别提醒，HTTP协议本身有8K buffer
+// The timeout of http connection used by RecordWriter is 120s， the sever will close the connection when no data occurs in the
+// connection during 120 seconds.
 //
-// 最后调用 {@link Commit} 来提交本次上传的所有数据块。
+// The Commit method must be called to notify the server that all data has been upload and the data can be written into
+// the table
 //
-// 由于session中用到的partitionKey中不能有"'"。 如, 正确的例子region=hangzhou
-// 错误的例子,region='hangzhou', 用户习惯用后者。为了避免错误，将partitionKey私有
-// 如果用户需要单独设置partitionKey, 则需要使用SetPartitionKey
+// In particular, the partition keys used by a session can not contain "'", for example, "region=hangzhou" is a
+// positive case, and "region='hangzhou'" is a negative case. But the partition keys like "region='hangzhou'" are more
+// common, to avoid the users use the error format, the partitionKey of UploadSession is private, it can be set when
+// creating a session or using SetPartitionKey.
 type UploadSession struct {
 	Id          string
 	ProjectName string
-	// 暂时没有用到
+	// TODO use schema to get the resource url of a table
 	SchemaName string
 	TableName  string
-	// 由于session中用到的partitionKey中不能有"'"。 如, 正确的例子region=hangzhou
-	// 错误的例子,region='hangzhou', 用户习惯用后者。为了避免错误，将partitionKey私有
-	// 如果用户需要单独设置partitionKey, 则需要使用SetPartitionKey
+	// The partition keys used by a session can not contain "'", for example, "region=hangzhou" is a
+	// positive case, and "region='hangzhou'" is a negative case. But the partition keys like "region='hangzhou'" are more
+	// common, to avoid the users use the error format, the partitionKey of UploadSession is private, it can be set when
+	// creating a session or using SetPartitionKey.
 	partitionKey        string
 	Overwrite           bool
 	UseArrow            bool
@@ -80,7 +85,15 @@ func (u *UploadSession) SetPartitionKey(partitionKey string) {
 	u.partitionKey = strings.ReplaceAll(partitionKey, "'", "")
 }
 
-// CreateUploadSession 创建一个新的UploadSession
+// CreateUploadSession create a new upload session before uploading data。
+// The opts can be one or more of:
+// SessionCfg.WithPartitionKey
+// SessionCfg.WithSchemaName, it doesn't work now
+// SessionCfg.WithDefaultDeflateCompressor, using deflate compressor with default level
+// SessionCfg.WithDeflateCompressor, using deflate compressor with specific level
+// SessionCfg.WithSnappyFramedCompressor
+// SessionCfg.Overwrite, overwrite data
+// SessionCfg.UseArrow, it is the default config
 func CreateUploadSession(
 	projectName, tableName string,
 	restClient restclient2.RestClient,
@@ -113,7 +126,15 @@ func CreateUploadSession(
 	return &session, nil
 }
 
-// AttachToExistedUploadSession 根据已有的session id获取session
+// AttachToExistedUploadSession get an existed session by the session id.
+// The opts can be one or more of:
+// SessionCfg.WithPartitionKey
+// SessionCfg.WithSchemaName, it doesn't work now
+// SessionCfg.WithDefaultDeflateCompressor, using deflate compressor with default level
+// SessionCfg.WithDeflateCompressor, using deflate compressor with specific level
+// SessionCfg.WithSnappyFramedCompressor
+// SessionCfg.Overwrite, overwrite data
+// SessionCfg.UseArrow, it is the default config
 func AttachToExistedUploadSession(
 	sessionId, projectName, tableName string,
 	restClient restclient2.RestClient,

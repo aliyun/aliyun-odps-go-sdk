@@ -40,7 +40,6 @@ func Example_tunnel_upload_arrow() {
 	)
 	if err != nil {
 		log.Fatalf("%+v", err)
-		return
 	}
 	schema := session.ArrowSchema()
 
@@ -131,7 +130,6 @@ func Example_tunnel_upload_arrow() {
 	err = session.Commit(blockIds)
 	if err != nil {
 		log.Fatalf("%+v", err)
-		return
 	}
 
 	// Output:
@@ -144,7 +142,6 @@ func Example_tunnel_download_arrow_simple() {
 	)
 	if err != nil {
 		log.Fatalf("%+v", err)
-		return
 	}
 
 	recordCount := session.RecordCount()
@@ -153,7 +150,6 @@ func Example_tunnel_download_arrow_simple() {
 	reader, err := session.OpenRecordReader(0, 2, []string{"payload"})
 	if err != nil {
 		log.Fatalf("%+v", err)
-		return
 	}
 
 	n := 0
@@ -182,7 +178,6 @@ func Example_tunnel_download_arrow_with_partition() {
 	)
 	if err != nil {
 		log.Fatalf("%+v", err)
-		return
 	}
 
 	recordCount := session.RecordCount()
@@ -194,7 +189,6 @@ func Example_tunnel_download_arrow_with_partition() {
 
 	if err != nil {
 		log.Fatalf("%+v", err)
-		return
 	}
 
 	n := 0

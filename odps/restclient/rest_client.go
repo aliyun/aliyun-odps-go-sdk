@@ -24,9 +24,9 @@ const (
 )
 
 type RestClient struct {
-	// odps 账号
 	account.Account
-	// http超时时间，从tcp握手开始计时, 默认为0，即没有超时时间
+	// It is the total time from the tcp connection to http response.
+	// the default value is 0, represents no timeout
 	HttpTimeout          time.Duration
 	TcpConnectionTimeout time.Duration
 	DisableCompression   bool
