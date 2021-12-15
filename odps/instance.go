@@ -39,9 +39,9 @@ type Instance struct {
 	isSync            bool
 }
 
-// InstanceOrErr used for the return value of Instances.List method
+// InstanceOrErr is used for the return value of Instances.List
 type InstanceOrErr struct {
-	Ins Instance
+	Ins *Instance
 	Err error
 }
 

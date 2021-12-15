@@ -35,7 +35,9 @@ func NewTables(odpsIns *Odps, projectName ...string) Tables {
 
 // List get all the tables, filters can be specified with TableFilter.NamePrefix,
 // TableFilter.Extended, TableFilter.Owner
-func (ts *Tables) List(filters ...TFilterFunc) ([]Table, error) {
+func (ts *Tables) List(filters ...TFilterFunc) <-chan TableOrErr {
+	c := make(chan TableOrErr)
+
 	queryArgs := make(url.Values, 4)
 	queryArgs.Set("expectmarker", "true")
 
@@ -54,35 +56,39 @@ func (ts *Tables) List(filters ...TFilterFunc) ([]Table, error) {
 		MaxItems int
 	}
 
-	var resModel ResModel
-	var tables []Table
+	go func() {
+		defer close(c)
 
-	for {
-		err := client.GetWithModel(resource, queryArgs, &resModel)
-		if err != nil {
-			return tables, errors.WithStack(err)
+		var resModel ResModel
+
+		for {
+			err := client.GetWithModel(resource, queryArgs, &resModel)
+			if err != nil {
+				c <- TableOrErr{nil, err}
+				break
+			}
+
+			if len(resModel.Tables) == 0 {
+				break
+			}
+
+			for _, tableModel := range resModel.Tables {
+				table := NewTable(ts.odpsIns, ts.projectName, tableModel.Name)
+				table.model = tableModel
+
+				c <- TableOrErr{&table, nil}
+			}
+
+			if resModel.Marker != "" {
+				queryArgs.Set("marker", resModel.Marker)
+				resModel = ResModel{}
+			} else {
+				break
+			}
 		}
+	}()
 
-		if len(resModel.Tables) == 0 {
-			break
-		}
-
-		for _, tableModel := range resModel.Tables {
-			table := NewTable(ts.odpsIns, ts.projectName, tableModel.Name)
-			table.model = tableModel
-
-			tables = append(tables, table)
-		}
-
-		if resModel.Marker != "" {
-			queryArgs.Set("marker", resModel.Marker)
-			resModel = ResModel{}
-		} else {
-			break
-		}
-	}
-
-	return tables, nil
+	return c
 }
 
 // BatchLoadTables can get at most 100 tables, and the information of table is according to the permission

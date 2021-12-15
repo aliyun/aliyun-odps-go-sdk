@@ -148,7 +148,7 @@ func (instances Instances) List(filters ...InsFilterFunc) <-chan InstanceOrErr {
 			err := client.GetWithModel(resources, queryArgs, &resModel)
 
 			if err != nil {
-				c <- InstanceOrErr{Instance{}, errors.WithStack(err)}
+				c <- InstanceOrErr{nil, errors.WithStack(err)}
 				break
 			}
 
@@ -163,7 +163,7 @@ func (instances Instances) List(filters ...InsFilterFunc) <-chan InstanceOrErr {
 				instance.status = model.Status
 				instance.owner = model.Owner
 
-				c <- InstanceOrErr{instance, nil}
+				c <- InstanceOrErr{&instance, nil}
 			}
 
 			if resModel.Marker != "" {

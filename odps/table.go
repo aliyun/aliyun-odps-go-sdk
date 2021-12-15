@@ -32,6 +32,12 @@ type Table struct {
 	beLoaded    bool
 }
 
+// TableOrErr is used for the return value of Tables.List
+type TableOrErr struct {
+	Table *Table
+	Err   error
+}
+
 type tableModel struct {
 	XMLName     xml.Name `xml:"Table"`
 	Name        string

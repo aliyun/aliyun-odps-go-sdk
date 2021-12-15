@@ -10,13 +10,13 @@ import (
 
 func ExampleTables_List() {
 	ts := odps.NewTables(odpsIns)
-	tables, err := ts.List(odps.TableFilter.Extended())
+	tables := ts.List(odps.TableFilter.Extended())
+	for te := range tables {
+		if te.Err != nil {
+			log.Fatalf("%+v", te.Err)
+		}
 
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-
-	for _, t := range tables {
+		t := te.Table
 		println(fmt.Sprintf("%s, %s, %s", t.Name(), t.Owner(), t.Type()))
 	}
 
