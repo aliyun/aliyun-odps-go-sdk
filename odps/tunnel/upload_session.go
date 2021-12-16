@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	restclient2 "github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/pkg/errors"
 	"io"
@@ -64,7 +64,7 @@ type UploadSession struct {
 	Overwrite           bool
 	UseArrow            bool
 	Compressor          Compressor
-	RestClient          restclient2.RestClient
+	RestClient          restclient.RestClient
 	fieldMaxSize        int
 	shouldTransformDate bool
 	schema              tableschema.TableSchema
@@ -96,7 +96,7 @@ func (u *UploadSession) SetPartitionKey(partitionKey string) {
 // SessionCfg.UseArrow, it is the default config
 func CreateUploadSession(
 	projectName, tableName string,
-	restClient restclient2.RestClient,
+	restClient restclient.RestClient,
 	opts ...Option,
 ) (*UploadSession, error) {
 
@@ -137,7 +137,7 @@ func CreateUploadSession(
 // SessionCfg.UseArrow, it is the default config
 func AttachToExistedUploadSession(
 	sessionId, projectName, tableName string,
-	restClient restclient2.RestClient,
+	restClient restclient.RestClient,
 	opts ...Option) (*UploadSession, error) {
 
 	cfg := newSessionConfig(opts...)
@@ -272,7 +272,7 @@ func (u *UploadSession) loadInformation(req *http.Request) error {
 	var resModel ResModel
 	err := u.RestClient.DoWithParseFunc(req, func(res *http.Response) error {
 		if res.StatusCode/100 != 2 {
-			return errors.WithStack(restclient2.NewHttpNotOk(res))
+			return errors.WithStack(restclient.NewHttpNotOk(res))
 		}
 
 		u.shouldTransformDate = res.Header.Get(common.HttpHeaderOdpsDateTransFrom) == "true"

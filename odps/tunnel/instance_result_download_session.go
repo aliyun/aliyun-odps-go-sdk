@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	restclient2 "github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/pkg/errors"
 	"net/http"
@@ -22,7 +22,7 @@ type InstanceResultDownloadSession struct {
 	LimitEnabled        bool
 	IsLongPolling       bool
 	Compressor          Compressor
-	RestClient          restclient2.RestClient
+	RestClient          restclient.RestClient
 	schema              tableschema.TableSchema
 	status              DownLoadStatus
 	recordCount         int
@@ -31,7 +31,7 @@ type InstanceResultDownloadSession struct {
 
 func CreateInstanceResultDownloadSession(
 	projectName, instanceId string,
-	restClient restclient2.RestClient,
+	restClient restclient.RestClient,
 	opts ...InstanceOption,
 ) (*InstanceResultDownloadSession, error) {
 	cfg := newInstanceSessionConfig(opts...)
@@ -65,7 +65,7 @@ func CreateInstanceResultDownloadSession(
 
 func AttachToExistedIRDownloadSession(
 	downloadId, projectName, instanceId string,
-	restClient restclient2.RestClient,
+	restClient restclient.RestClient,
 	opts ...InstanceOption,
 ) (*InstanceResultDownloadSession, error) {
 	cfg := newInstanceSessionConfig(opts...)
@@ -202,7 +202,7 @@ func (is *InstanceResultDownloadSession) loadInformation(req *http.Request) erro
 	var resModel ResModel
 	err := is.RestClient.DoWithParseFunc(req, func(res *http.Response) error {
 		if res.StatusCode/100 != 2 {
-			return errors.WithStack(restclient2.NewHttpNotOk(res))
+			return errors.WithStack(restclient.NewHttpNotOk(res))
 		}
 
 		is.shouldTransformDate = res.Header.Get(common.HttpHeaderOdpsDateTransFrom) == "true"
@@ -288,7 +288,7 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 	}
 
 	if res.StatusCode/100 != 2 {
-		return res, errors.WithStack(restclient2.NewHttpNotOk(res))
+		return res, errors.WithStack(restclient.NewHttpNotOk(res))
 	}
 
 	contentEncoding := res.Header.Get("Content-Encoding")
