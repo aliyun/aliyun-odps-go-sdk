@@ -4,7 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	restclient2 "github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/security"
 	"github.com/pkg/errors"
 	"io/ioutil"
@@ -87,7 +87,7 @@ func NewProject(name string, odpsIns *Odps) Project {
 	}
 }
 
-func (p *Project) RestClient() restclient2.RestClient {
+func (p *Project) RestClient() restclient.RestClient {
 	return p.odpsIns.restClient
 }
 
@@ -157,7 +157,7 @@ func (p *Project) Load() error {
 	p.beLoaded = true
 
 	if err != nil {
-		if httpNoteOk, ok := err.(restclient2.HttpNotOk); ok {
+		if httpNoteOk, ok := err.(restclient.HttpNotOk); ok {
 			if httpNoteOk.StatusCode == 404 {
 				p.exists = false
 			}
@@ -320,6 +320,30 @@ func (p *Project) GetTunnelEndpoint() (string, error) {
 	})
 
 	return fmt.Sprintf("%s://%s", schema, tunnelEndpoint), errors.WithStack(err)
+}
+
+// Update the project properties, the properties are different in different versioned odps.
+// When the "properties" is nil, the system will give the project all the default properties.
+// You'd better ask technique support help when using this method.
+func (p *Project) Update(properties map[string]string) error {
+	type BodyModel struct {
+		Name       string
+		Properties common.Properties
+	}
+
+	_properties := make(common.Properties, 0, len(properties))
+	for key, value := range properties {
+		_properties = append(_properties, common.Property{Name: key, Value: value})
+	}
+
+	var bodyModel = BodyModel{
+		Name:       p.Name(),
+		Properties: _properties,
+	}
+
+	resource := p.rb.Project()
+	client := p.RestClient()
+	return client.DoXmlWithModel(common.HttpMethod.PutMethod, resource, nil, &bodyModel, nil)
 }
 
 func (status *ProjectStatus) FromStr(s string) {
