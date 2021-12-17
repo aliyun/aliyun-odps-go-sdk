@@ -4,5 +4,3 @@
 */
 
 package odps
-
-// TODO 将所有的Extended属性的Getter后加Ex后缀

@@ -4,19 +4,14 @@ import (
 	"database/sql"
 	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 	"log"
+	"os"
 )
 
 func main() {
-	accessId := ""
-	accessKey := ""
-	endpoint := ""
-	projectName := ""
-
-	config := sqldriver.NewConfig()
-	config.Endpoint = endpoint
-	config.AccessId = accessId
-	config.AccessKey = accessKey
-	config.ProjectName = projectName
+	config, err := sqldriver.NewConfigFromIni(os.Args[1])
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
 
 	dsn := config.FormatDsn()
 	// or dsn := "http://<accessId>:<accessKey>@<endpoint>?project=<project>"
@@ -27,7 +22,7 @@ func main() {
 	}
 
 	sqlStr := "create table if not exists user_test (" +
-		"name string,score int,birthday date,addresses array<string>" +
+		"name string,score int,birthday datetime,addresses array<string>" +
 		") " +
 		"partitioned by (age int,hometown string) " +
 		"lifecycle 2;"

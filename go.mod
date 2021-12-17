@@ -17,4 +17,5 @@ require (
 	github.com/golang/snappy v0.0.3
 	github.com/pkg/errors v0.9.1
 	google.golang.org/protobuf v1.27.1
+	gopkg.in/ini.v1 v1.66.2
 )
