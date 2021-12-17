@@ -11,7 +11,7 @@ func ExampleOdps_RunSQl() {
 	ts := t.Format("2006-01-02")
 	sql := fmt.Sprintf("insert into has_date values (date'%s');", ts)
 
-	ins, err := odpsIns.RunSQl(sql)
+	ins, err := odpsIns.ExecSQl(sql)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

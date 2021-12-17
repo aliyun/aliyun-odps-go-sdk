@@ -82,7 +82,11 @@ func (odps *Odps) Instance(instanceId string) Instance {
 	return NewInstance(odps, odps.defaultProject, instanceId)
 }
 
-func (odps *Odps) RunSQl(sql string) (*Instance, error) {
+func (odps *Odps) ExecSQl(sql string) (*Instance, error) {
+	if odps.defaultProject == "" {
+		return nil, errors.New("default project has not been set for odps")
+	}
+
 	task := NewSqlTask("execute_sql", sql, "", nil)
 	Instances := NewInstances(odps, odps.defaultProject)
 	i, err := Instances.CreateTask(odps.defaultProject, &task)

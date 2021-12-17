@@ -22,7 +22,7 @@ func Example_tunnel_download_instance_result() {
 		log.Fatalf("%+v", err)
 	}
 
-	ins, err := odpsIns.RunSQl("select * from data_type_demo;")
+	ins, err := odpsIns.ExecSQl("select * from data_type_demo;")
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

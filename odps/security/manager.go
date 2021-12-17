@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	restclient2 "github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/http"
@@ -14,12 +14,12 @@ import (
 )
 
 type Manager struct {
-	restClient     restclient2.RestClient
+	restClient     restclient.RestClient
 	projectName    string
 	securityConfig Config
 }
 
-func NewSecurityManager(restClient restclient2.RestClient, projectName string) Manager {
+func NewSecurityManager(restClient restclient.RestClient, projectName string) Manager {
 	return Manager{
 		restClient:     restClient,
 		projectName:    projectName,
@@ -316,7 +316,7 @@ func (sm *Manager) RunQuery(query string, jsonOutput bool, supervisionToken stri
 
 	err := client.DoXmlWithParseRes(common.HttpMethod.PostMethod, resource, nil, reqBody, func(res *http.Response) error {
 		if res.StatusCode < 200 || res.StatusCode >= 300 {
-			return errors.WithStack(restclient2.NewHttpNotOk(res))
+			return errors.WithStack(restclient.NewHttpNotOk(res))
 		}
 
 		isAsync = res.StatusCode != 200
@@ -324,7 +324,7 @@ func (sm *Manager) RunQuery(query string, jsonOutput bool, supervisionToken stri
 		return errors.WithStack(decoder.Decode(&resModel))
 	})
 
-	if httpNodeOk, ok := err.(restclient2.HttpNotOk); ok {
+	if httpNodeOk, ok := err.(restclient.HttpNotOk); ok {
 		return string(httpNodeOk.Body), errors.WithStack(err)
 	}
 

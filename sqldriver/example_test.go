@@ -5,7 +5,7 @@ import (
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
-	odps "github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 	"log"
 	"time"
@@ -13,7 +13,7 @@ import (
 
 func Example() {
 	var account = account2.AliyunAccountFromEnv()
-	var endpoint = odps.LoadEndpointFromEnv()
+	var endpoint = restclient.LoadEndpointFromEnv()
 
 	config := sqldriver.NewConfig()
 	config.Endpoint = endpoint
@@ -54,7 +54,7 @@ func Example() {
 
 func ExampleStructField() {
 	var account = account2.AliyunAccountFromEnv()
-	var endpoint = odps.LoadEndpointFromEnv()
+	var endpoint = restclient.LoadEndpointFromEnv()
 
 	config := sqldriver.NewConfig()
 	config.Endpoint = endpoint
@@ -89,7 +89,7 @@ func ExampleStructField() {
 
 func ExampleInsert() {
 	var account = account2.AliyunAccountFromEnv()
-	var endpoint = odps.LoadEndpointFromEnv()
+	var endpoint = restclient.LoadEndpointFromEnv()
 
 	config := sqldriver.NewConfig()
 	config.Endpoint = endpoint
@@ -131,7 +131,7 @@ func ExampleInsert() {
 
 func ExampleCreateTable() {
 	var account = account2.AliyunAccountFromEnv()
-	var endpoint = odps.LoadEndpointFromEnv()
+	var endpoint = restclient.LoadEndpointFromEnv()
 
 	config := sqldriver.NewConfig()
 	config.Endpoint = endpoint

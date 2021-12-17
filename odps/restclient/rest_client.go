@@ -252,6 +252,10 @@ func (client *RestClient) DoXmlWithModel(
 	parseFunc := func(res *http.Response) error {
 		decoder := xml.NewDecoder(res.Body)
 
+		if resModel == nil {
+			return nil
+		}
+
 		return errors.WithStack(decoder.Decode(resModel))
 	}
 

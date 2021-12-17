@@ -327,11 +327,12 @@ func (p *Project) GetTunnelEndpoint() (string, error) {
 // You'd better ask technique support help when using this method.
 func (p *Project) Update(properties map[string]string) error {
 	type BodyModel struct {
+		XMLName    xml.Name `xml:"Project"`
 		Name       string
-		Properties common.Properties
+		Properties []common.Property `xml:"Properties>Property"`
 	}
 
-	_properties := make(common.Properties, 0, len(properties))
+	_properties := make([]common.Property, 0, len(properties))
 	for key, value := range properties {
 		_properties = append(_properties, common.Property{Name: key, Value: value})
 	}
