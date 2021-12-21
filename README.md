@@ -1,5 +1,5 @@
 # Install
-当前：
+## 当前：
 go sdk还没有发布到外网，需要将代码下载到本地后使用。使用方法
 <p>1. 下载代码</p>
 <p>2. 向自己的go.sum添加</p>
@@ -10,7 +10,7 @@ replace github.com/aliyun/aliyun-odps-go-sdk => <代码路径>/
 ```
 <p>3. go mod tidy</p>
 
-正式发布后：
+## 正式发布后：
 ```shell
 go get github.com/aliyun/aliyun-odps-go-sdk
 ```
