@@ -1,7 +1,8 @@
 package tunnel
 
 import (
-	data2 "github.com/aliyun/aliyun-odps-go-sdk/odps/data"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/pkg/errors"
@@ -43,8 +44,8 @@ func (r *RecordProtocReader) HttpRes() *http.Response {
 	return r.httpRes
 }
 
-func (r *RecordProtocReader) Read() (data2.Record, error) {
-	record := data2.NewRecord(len(r.columns))
+func (r *RecordProtocReader) Read() (data.Record, error) {
+	record := data.NewRecord(len(r.columns))
 
 LOOP:
 	for {
@@ -117,19 +118,30 @@ LOOP:
 	return record, nil
 }
 
-func (r *RecordProtocReader) Iterator() <-chan data2.Record {
-	records := make(chan data2.Record)
+func (r *RecordProtocReader) Iterator() <-chan common.Result {
+	records := make(chan common.Result)
 
 	go func() {
 		defer close(records)
 
 		for {
-			record, _ := r.Read()
-			if record == nil {
+			record, err := r.Read()
+			result := common.Result{}
+
+			isEOF := errors.Is(err, io.EOF)
+
+			if err != nil && !isEOF {
+				result.Error = err
+				records <- result
 				return
 			}
 
-			records <- record
+			if isEOF {
+				return
+			}
+
+			result.Data = record
+			records <- result
 		}
 	}()
 
@@ -140,8 +152,8 @@ func (r *RecordProtocReader) Close() error {
 	return errors.WithStack(r.httpRes.Body.Close())
 }
 
-func (r *RecordProtocReader) readField(dt datatype.DataType) (data2.Data, error) {
-	var fieldValue data2.Data
+func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) {
+	var fieldValue data.Data
 
 	switch dt.ID() {
 	case datatype.DOUBLE:
@@ -151,7 +163,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data2.Data, error)
 		}
 
 		r.recordCrc.Update(v)
-		fieldValue = data2.Double(v)
+		fieldValue = data.Double(v)
 	case datatype.FLOAT:
 		v, err := r.protoReader.ReadFloat32()
 		if err != nil {
@@ -159,7 +171,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data2.Data, error)
 		}
 
 		r.recordCrc.Update(v)
-		fieldValue = data2.Float(v)
+		fieldValue = data.Float(v)
 	case datatype.BOOLEAN:
 		v, err := r.protoReader.ReadBool()
 		if err != nil {
@@ -167,7 +179,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data2.Data, error)
 		}
 
 		r.recordCrc.Update(v)
-		fieldValue = data2.Bool(v)
+		fieldValue = data.Bool(v)
 	case datatype.BIGINT:
 		v, err := r.protoReader.ReadSInt64()
 		if err != nil {
@@ -175,7 +187,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data2.Data, error)
 		}
 
 		r.recordCrc.Update(v)
-		fieldValue = data2.BigInt(v)
+		fieldValue = data.BigInt(v)
 	case datatype.IntervalYearMonth:
 		v, err := r.protoReader.ReadSInt64()
 		if err != nil {
@@ -183,7 +195,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data2.Data, error)
 		}
 
 		r.recordCrc.Update(v)
-		fieldValue = data2.IntervalYearMonth(v)
+		fieldValue = data.IntervalYearMonth(v)
 	case datatype.INT:
 		v, err := r.protoReader.ReadSInt64()
 		if err != nil {
@@ -191,7 +203,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data2.Data, error)
 		}
 
 		r.recordCrc.Update(v)
-		fieldValue = data2.Int(v)
+		fieldValue = data.Int(v)
 	case datatype.SMALLINT:
 		v, err := r.protoReader.ReadSInt64()
 		if err != nil {
@@ -199,7 +211,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data2.Data, error)
 		}
 
 		r.recordCrc.Update(v)
-		fieldValue = data2.SmallInt(v)
+		fieldValue = data.SmallInt(v)
 	case datatype.TINYINT:
 		v, err := r.protoReader.ReadSInt64()
 		if err != nil {
@@ -207,14 +219,14 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data2.Data, error)
 		}
 
 		r.recordCrc.Update(v)
-		fieldValue = data2.TinyInt(v)
+		fieldValue = data.TinyInt(v)
 	case datatype.STRING:
 		v, err := r.protoReader.ReadBytes()
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
 		r.recordCrc.Update(v)
-		s := data2.String(v)
+		s := data.String(v)
 		fieldValue = &s
 	case datatype.VARCHAR:
 		v, err := r.protoReader.ReadBytes()
@@ -223,7 +235,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data2.Data, error)
 		}
 		r.recordCrc.Update(v)
 		t := dt.(datatype.VarcharType)
-		fieldValue, _ = data2.NewVarChar(t.Length, string(v))
+		fieldValue, _ = data.NewVarChar(t.Length, string(v))
 	case datatype.CHAR:
 		v, err := r.protoReader.ReadBytes()
 		if err != nil {
@@ -231,14 +243,14 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data2.Data, error)
 		}
 		r.recordCrc.Update(v)
 		t := dt.(datatype.CharType)
-		fieldValue, _ = data2.NewChar(t.Length, string(v))
+		fieldValue, _ = data.NewChar(t.Length, string(v))
 	case datatype.BINARY:
 		v, err := r.protoReader.ReadBytes()
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
 		r.recordCrc.Update(v)
-		fieldValue = data2.Binary(v)
+		fieldValue = data.Binary(v)
 	case datatype.DATETIME:
 		v, err := r.protoReader.ReadSInt64()
 		if err != nil {
@@ -249,7 +261,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data2.Data, error)
 		// TODO 需要根据schema中的shouldTransform，来确定是否将时间转换为本地时区的时间
 		seconds := v / 1000
 		nanoSeconds := (v % 1000) * 1000_000
-		fieldValue = data2.DateTime(time.Unix(seconds, nanoSeconds))
+		fieldValue = data.DateTime(time.Unix(seconds, nanoSeconds))
 	case datatype.DATE:
 		v, err := r.protoReader.ReadSInt64()
 		if err != nil {
@@ -258,7 +270,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data2.Data, error)
 
 		r.recordCrc.Update(v)
 		seconds := v * Day
-		fieldValue = data2.Date(time.Unix(seconds, 0))
+		fieldValue = data.Date(time.Unix(seconds, 0))
 	case datatype.IntervalDayTime:
 		seconds, err := r.protoReader.ReadSInt64()
 		if err != nil {
@@ -272,7 +284,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data2.Data, error)
 		r.recordCrc.Update(seconds)
 		r.recordCrc.Update(nanoSeconds)
 
-		fieldValue = data2.NewIntervalDayTime(int32(seconds), nanoSeconds)
+		fieldValue = data.NewIntervalDayTime(int32(seconds), nanoSeconds)
 	case datatype.TIMESTAMP:
 		seconds, err := r.protoReader.ReadSInt64()
 		if err != nil {
@@ -286,14 +298,14 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data2.Data, error)
 		r.recordCrc.Update(seconds)
 		r.recordCrc.Update(nanoSeconds)
 
-		fieldValue = data2.Timestamp(time.Unix(seconds, int64(nanoSeconds)))
+		fieldValue = data.Timestamp(time.Unix(seconds, int64(nanoSeconds)))
 	case datatype.DECIMAL:
 		v, err := r.protoReader.ReadBytes()
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
 		r.recordCrc.Update(v)
-		fieldValue = data2.NewDecimal(38, 18, string(v))
+		fieldValue = data.NewDecimal(38, 18, string(v))
 	case datatype.ARRAY:
 		var err error
 		fieldValue, err = r.readArray(dt.(datatype.ArrayType).ElementType)
@@ -317,12 +329,12 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data2.Data, error)
 	return fieldValue, nil
 }
 
-func (r *RecordProtocReader) readArray(t datatype.DataType) (*data2.Array, error) {
+func (r *RecordProtocReader) readArray(t datatype.DataType) (*data.Array, error) {
 	arraySize, err := r.protoReader.ReadUInt32()
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	arrayData := make([]data2.Data, arraySize)
+	arrayData := make([]data.Data, arraySize)
 
 	for i := uint32(0); i < arraySize; i++ {
 		b, err := r.protoReader.ReadBool()
@@ -340,13 +352,13 @@ func (r *RecordProtocReader) readArray(t datatype.DataType) (*data2.Array, error
 		}
 	}
 
-	at := t.(datatype.ArrayType)
-	array := data2.NewArrayWithType(&at)
+	at := datatype.NewArrayType(t)
+	array := data.NewArrayWithType(&at)
 	array.UnSafeAppend(arrayData...)
 	return array, nil
 }
 
-func (r *RecordProtocReader) readMap(t datatype.MapType) (*data2.Map, error) {
+func (r *RecordProtocReader) readMap(t datatype.MapType) (*data.Map, error) {
 	keys, err := r.readArray(t.KeyType)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -361,7 +373,7 @@ func (r *RecordProtocReader) readMap(t datatype.MapType) (*data2.Map, error) {
 		return nil, errors.New("failed to read map")
 	}
 
-	dm := data2.NewMapWithType(&t)
+	dm := data.NewMapWithType(&t)
 	for i, n := 0, keys.Len(); i < n; i++ {
 		key := keys.Index(i)
 		value := values.Index(i)
@@ -371,8 +383,8 @@ func (r *RecordProtocReader) readMap(t datatype.MapType) (*data2.Map, error) {
 	return dm, nil
 }
 
-func (r *RecordProtocReader) readStruct(t datatype.StructType) (*data2.Struct, error) {
-	sd := data2.NewStructWithTyp(&t)
+func (r *RecordProtocReader) readStruct(t datatype.StructType) (*data.Struct, error) {
+	sd := data.NewStructWithTyp(&t)
 
 	for _, ft := range t.Fields {
 		fn := ft.Name
