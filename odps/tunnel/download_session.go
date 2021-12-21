@@ -63,7 +63,7 @@ type DownloadSession struct {
 // SessionCfg.WithDeflateCompressor, using deflate compressor with specific level
 // SessionCfg.WithSnappyFramedCompressor
 // SessionCfg.Overwrite, overwrite data
-// SessionCfg.UseArrow, it is the default config
+// SessionCfg.DisableArrow, disable arrow reader, using protoc reader instead.
 // SessionCfg.ShardId, set the shard id of the table
 // SessionCfg.Async, enable the async mode of the session which can avoiding timeout when there are many small files
 func CreateDownloadSession(
@@ -107,7 +107,7 @@ func CreateDownloadSession(
 // SessionCfg.WithDeflateCompressor, using deflate compressor with specific level
 // SessionCfg.WithSnappyFramedCompressor
 // SessionCfg.Overwrite, overwrite data
-// SessionCfg.UseArrow, it is the default config
+// SessionCfg.DisableArrow, disable arrow reader, using protoc reader instead.
 // SessionCfg.ShardId, set the shard id of the table
 // SessionCfg.Async, enable the async mode of the session which can avoiding timeout when there are many small files
 func AttachToExistedDownloadSession(
@@ -174,6 +174,7 @@ func (ds *DownloadSession) PartitionKey() string {
 
 func (ds *DownloadSession) SetPartitionKey(partitionKey string) {
 	ds.partitionKey = strings.ReplaceAll(partitionKey, "'", "")
+	ds.partitionKey = strings.ReplaceAll(ds.partitionKey, "'", "")
 }
 
 func (ds *DownloadSession) ResourceUrl() string {
@@ -183,19 +184,24 @@ func (ds *DownloadSession) ResourceUrl() string {
 
 func (ds *DownloadSession) OpenRecordReader(start, count int, columnNames []string) (*RecordArrowReader, error) {
 	arrowSchema := ds.arrowSchema
-	if len(columnNames) > 0 {
-		arrowFields := make([]arrow.Field, 0, len(columnNames))
-		for _, columnName := range columnNames {
-			fs, ok := ds.arrowSchema.FieldsByName(columnName)
-			if !ok {
-				return nil, errors.Errorf("no column names %s in table %s", columnName, ds.TableName)
-			}
+	if len(columnNames) == 0 {
+		columnNames = make([]string, len(ds.schema.Columns))
+		for i, c := range ds.schema.Columns {
+			columnNames[i] = c.Name
+		}
+	}
 
-			arrowFields = append(arrowFields, fs...)
+	arrowFields := make([]arrow.Field, 0, len(columnNames))
+	for _, columnName := range columnNames {
+		fs, ok := ds.arrowSchema.FieldsByName(columnName)
+		if !ok {
+			return nil, errors.Errorf("no column names %s in table %s", columnName, ds.TableName)
 		}
 
-		arrowSchema = arrow.NewSchema(arrowFields, nil)
+		arrowFields = append(arrowFields, fs...)
 	}
+
+	arrowSchema = arrow.NewSchema(arrowFields, nil)
 
 	res, err := ds.newDownloadConnection(start, count, columnNames)
 	if err != nil {
@@ -203,6 +209,33 @@ func (ds *DownloadSession) OpenRecordReader(start, count int, columnNames []stri
 	}
 
 	reader := newRecordArrowReader(res, arrowSchema)
+	return &reader, nil
+}
+
+func (ds *DownloadSession) OpenRecordProtocReader(start, count int, columnNames []string) (*RecordProtocReader, error) {
+	if len(columnNames) == 0 {
+		columnNames = make([]string, len(ds.schema.Columns))
+		for i, c := range ds.schema.Columns {
+			columnNames[i] = c.Name
+		}
+	}
+
+	columns := make([]tableschema.Column, len(columnNames))
+	for i, columnName := range columnNames {
+		c, ok := ds.schema.FieldByName(columnName)
+		if !ok {
+			return nil, errors.Errorf("no column names %s in table", columnName)
+		}
+
+		columns[i] = c
+	}
+
+	res, err := ds.newDownloadConnection(start, count, columnNames)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	reader := newRecordProtocReader(res, columns, ds.shouldTransformDate)
 	return &reader, nil
 }
 
