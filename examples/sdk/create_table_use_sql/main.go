@@ -17,11 +17,17 @@ func main() {
 	odpsIns := odps.NewOdps(aliAccount, conf.Endpoint)
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
 
-	sql := "create table if not exists user_test (" +
-		"name string,score int,birthday datetime,addresses array<string>" +
-		") " +
-		"partitioned by (age int,hometown string) " +
-		"lifecycle 2;"
+	//sql := "create table if not exists user_test (" +
+	//	"name string,score int,birthday datetime,addresses array<string>" +
+	//	") " +
+	//	"partitioned by (age int,hometown string) " +
+	//	"lifecycle 2;"
+
+	sql := "create table if not exists user_test(" +
+		"name string, score int, birthday datetime, extra struct<address:array<string>, hobby:string>" +
+		") partitioned by (age int,hometown string) " +
+		"STORED AS ALIORC tblproperties (\"columnar.nested.type\"=\"true\");"
+
 	ins, err := odpsIns.ExecSQl(sql)
 	if err != nil {
 		log.Fatalf("%+v", err)

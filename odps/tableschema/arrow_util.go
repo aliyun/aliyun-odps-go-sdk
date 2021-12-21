@@ -52,9 +52,11 @@ func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error) {
 	case datatype.DATE:
 		return arrow.FixedWidthTypes.Date32, nil
 	case datatype.DATETIME:
-		return arrow.FixedWidthTypes.Date64, nil
+		return arrow.FixedWidthTypes.Timestamp_ns, nil
+		//return &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "UTC"}, nil
 	case datatype.TIMESTAMP:
 		return arrow.FixedWidthTypes.Timestamp_ns, nil
+		//return &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "UTC"}, nil
 	case datatype.IntervalDayTime:
 		return arrow.FixedWidthTypes.DayTimeInterval, nil
 	case datatype.IntervalYearMonth:
@@ -86,18 +88,19 @@ func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error) {
 		if err != nil {
 			return arrow.Null, err
 		}
+
 		return arrow.ListOf(itemType), nil
-	case datatype.MAP:
-		mapType, _ := odpsType.(datatype.MapType)
-		keyType, err := TypeToArrowType(mapType.KeyType)
-		if err != nil {
-			return arrow.Null, err
-		}
-		valueType, err := TypeToArrowType(mapType.ValueType)
-		if err != nil {
-			return arrow.Null, err
-		}
-		return arrow.MapOf(keyType, valueType), nil
+		//case datatype.MAP:
+		//	mapType, _ := odpsType.(datatype.MapType)
+		//	keyType, err := TypeToArrowType(mapType.KeyType)
+		//	if err != nil {
+		//		return arrow.Null, err
+		//	}
+		//	valueType, err := TypeToArrowType(mapType.ValueType)
+		//	if err != nil {
+		//		return arrow.Null, err
+		//	}
+		//	return arrow.MapOf(keyType, valueType), nil
 	}
 
 	return arrow.Null, errors.Errorf("unknown odps data type: %s", odpsType.Name())

@@ -13,3 +13,4 @@ out/
 coverage.*
 .history/
 /document/
+go.sum

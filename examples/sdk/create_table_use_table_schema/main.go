@@ -30,7 +30,13 @@ func main() {
 	}
 
 	arrayType := datatype.NewArrayType(datatype.StringType)
-	//or arrayType, _ := datatype.ParseDataType("array<string>")
+	structType := datatype.NewStructType(
+		datatype.NewStructFieldType("Address", arrayType),
+		datatype.NewStructFieldType("Hobby", datatype.StringType),
+	)
+	// or
+	//structTypeStr := "struct<Address:array<string>, Hobby:string>"
+	//structType, _ := datatype.ParseDataType(structTypeStr)
 
 	c3 := tableschema.Column{
 		Name: "birthday",
@@ -38,8 +44,8 @@ func main() {
 	}
 
 	c4 := tableschema.Column{
-		Name: "addresses",
-		Type: arrayType,
+		Name: "extra",
+		Type: structType,
 	}
 
 	c5 := tableschema.Column{
@@ -60,7 +66,11 @@ func main() {
 
 	schema := schemaBuilder.Build()
 	tablesIns := odpsIns.Tables()
-	err = tablesIns.CreateAndWait(schema, true, nil, nil)
+	hints := make(map[string]string)
+	hints["odps.sql.type.system.odps2"] = "true"
+	hints["odps.sql.decimal.odps2"] = "true"
+
+	err = tablesIns.CreateAndWait(schema, true, hints, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
