@@ -134,8 +134,9 @@ builder.Append(arrow.Timestamp(t.UnixMilli()))
 
 ## 查询数据
 odps sdk中的data package定义了与odps数据类型对应的数据结构，两者之间的对应关系为
+
 | odps go sdk | odps        |
-| ------------|-------------|
+| ----------- | ----------- |
 | Bool        | boolean     |
 | TinyInt     | tinyint     |
 | Int         | int         |
