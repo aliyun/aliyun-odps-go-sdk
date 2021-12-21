@@ -119,24 +119,28 @@ func (is *InstanceResultDownloadSession) ResourceUrl() string {
 	return rb.Instance(is.InstanceId)
 }
 
+// OpenRecordReader open a reader to read result of select. The parameter start is the
+// start position to read the result, count is the max number records to read, sizeLit is the
+// max bytes of the result.
 func (is *InstanceResultDownloadSession) OpenRecordReader(
 	start, count, sizeLimit int,
 	columnNames []string,
 ) (*RecordProtocReader, error) {
-
-	var columns []tableschema.Column
-	if len(columnNames) > 0 {
-		columns = make([]tableschema.Column, len(columnNames))
-		for i, columnName := range columnNames {
-			c, ok := is.schema.FieldByName(columnName)
-			if !ok {
-				return nil, errors.Errorf("no column names %s in table", columnName)
-			}
-
-			columns[i] = c
+	if len(columnNames) == 0 {
+		columnNames = make([]string, len(is.schema.Columns))
+		for i, c := range is.schema.Columns {
+			columnNames[i] = c.Name
 		}
-	} else {
-		columns = is.schema.Columns
+	}
+
+	columns := make([]tableschema.Column, len(columnNames))
+	for i, columnName := range columnNames {
+		c, ok := is.schema.FieldByName(columnName)
+		if !ok {
+			return nil, errors.Errorf("no column names %s in table", columnName)
+		}
+
+		columns[i] = c
 	}
 
 	res, err := is.newDownloadConnection(start, count, sizeLimit, columnNames)
