@@ -3,6 +3,7 @@
 go sdk还没有发布到外网，需要将代码下载到本地后使用。使用方法
 1. 下载代码
 2. 向自己的go.sum添加
+
 ```shell
 replace github.com/aliyun/aliyun-odps-go-sdk/arrow => <代码路径>/arrow
 replace github.com/aliyun/aliyun-odps-go-sdk => <代码路径>/
