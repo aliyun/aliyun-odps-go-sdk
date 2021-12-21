@@ -34,7 +34,7 @@ func (t *SQLTask) TaskType() string {
 	return "SQL"
 }
 
-func (t *SQLTask) runInOdps(odpsIns *Odps, projectName string) (*Instance, error) {
+func (t *SQLTask) RunInOdps(odpsIns *Odps, projectName string) (*Instance, error) {
 	Instances := NewInstances(odpsIns)
 	i, err := Instances.CreateTask(projectName, t)
 	return i, errors.WithStack(err)
