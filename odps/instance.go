@@ -286,6 +286,11 @@ func (instance *Instance) WaitForSuccess() error {
 			return errors.WithStack(err)
 		}
 
+		if len(tasks) == 0 {
+			time.Sleep(time.Second * 1)
+			continue
+		}
+
 		success := true
 
 		for _, task := range tasks {
@@ -302,6 +307,7 @@ func (instance *Instance) WaitForSuccess() error {
 
 				return errors.New(results[0].Result)
 			case TaskSuccess:
+				continue
 			case TaskRunning, TaskWaiting:
 				success = false
 			}
