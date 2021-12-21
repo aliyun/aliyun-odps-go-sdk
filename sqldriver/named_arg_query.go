@@ -36,7 +36,7 @@ func NewNamedArgQuery(query string) NamedArgQuery {
 		s = index[1]
 	}
 
-	if s < len(query)-1 {
+	if s <= len(query)-1 {
 		queryPieces = append(queryPieces, query[s:])
 	}
 

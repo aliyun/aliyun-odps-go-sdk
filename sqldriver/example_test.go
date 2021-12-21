@@ -80,8 +80,6 @@ func ExampleStructField() {
 		if err != nil {
 			log.Fatalf("%+v", err)
 		}
-
-		println(odpsStruct.Sql())
 	}
 
 	// Output:

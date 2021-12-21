@@ -6,17 +6,17 @@ import (
 
 func TestNamedArgQuery(t *testing.T) {
 	queries := []string{
-		"select * from student where name=@name and student.age<@age or name like '@name' or name='cat'",
-		"select * from student where name=@name",
-		"update user set name=@name, age=@age, address=@address where id=1",
+		"select * from student where name=@name and student.age<@age or name like '@name' or name='cat';",
+		"select * from student where name=@name;",
+		"update user set name=@name, age=@age, address=@address where id=1;",
 	}
 
 	expected := []struct {
 		value string
 		isErr bool
 	}{
-		{"select * from student where name=tom and student.age<10 or name like 'tom' or name='cat'", false},
-		{"select * from student where name=tom", false},
+		{"select * from student where name=tom and student.age<10 or name like 'tom' or name='cat';", false},
+		{"select * from student where name=tom;", false},
 		{"", true},
 	}
 
