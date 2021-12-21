@@ -41,15 +41,15 @@ https://github.com/apache/arrow/tree/master/go 的修改版本，ipc package添�
 
 
 # odps model实现列表
-[x] project</br>
-[x] table</br>
-[x] instance</br>
-[x] tunnel</br>
-[x] table arrow tunnel</br>
-    [x] instance tunnel</br>
-    [ ] table protoc tunnel</br>
-[ ] resource</br>
-[ ] function</br>
+<p>[x] project</p>
+<p>[x] table</p>
+<p>[x] instance</p>
+<p>[x] tunnel</p>
+<p>[x] table arrow tunnel</p>
+<p>    [x] instance tunnel</p>
+<p>    [ ] table protoc tunnel</p>
+<p>[ ] resource</p>
+<p>[ ] function</p>
 
 # Examples
 
