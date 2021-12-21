@@ -1,11 +1,30 @@
 # Install
+当前：
+go sdk还没有发布到外网，需要将代码下载到本地后使用。使用方法
+1. 下载代码
+2. 向自己的go.sum添加
+```
+replace github.com/aliyun/aliyun-odps-go-sdk/arrow => <代码路径>/arrow
+replace github.com/aliyun/aliyun-odps-go-sdk => <代码路径>/
+```
+3. go mod tidy
+
+正式发布后：
 ```shell
 go get github.com/aliyun/aliyun-odps-go-sdk
 ```
 
 # 目录说明
 ## odps
-odps sdk的主体目录
+odps sdk的主体目录, 包括子目录
+tunnel: tunnel相关实现
+account
+common
+data: odps数据值的go表示
+datatype: odps数据类型的go表示
+restclient: 用于与odps服务交互的restful client
+security: project相关安全配置
+tableschema: table schema的go表示
 
 ## sqldriver
 go sql/driver 接口的odps实现
@@ -21,15 +40,15 @@ https://github.com/apache/arrow/tree/master/go 的修改版本，ipc package添�
 
 
 # odps model实现列表
-[x] project
-[x] table
-[x] instance
-[x] tunnel
-    [x] table arrow tunnel
-    [x] instance tunnel
-    [ ] table protoc tunnel
-[ ] resource
-[ ] function
+[x] project</br>
+[x] table</br>
+[x] instance</br>
+[x] tunnel</br>
+[x] table arrow tunnel</br>
+    [x] instance tunnel</br>
+    [ ] table protoc tunnel</br>
+[ ] resource</br>
+[ ] function</br>
 
 # Examples
 
@@ -57,7 +76,7 @@ https://github.com/apache/arrow/tree/master/go 的修改版本，ipc package添�
 [示例代码](./examples/sdk/create_table_use_table_schema/main.go)
 
 ### go sql示例
-1  创建dsn(data source name，形如http://user:pass@host:port?param=x)，可以直接使用字符串或通过sqldriver.Config构建
+1  创建dsn(data source name，形如"http://user:pass@host:port?param=x")，可以直接使用字符串或通过sqldriver.Config构建
 2. 调用sql.Open获取db
 3. 使用db执行sql
 
@@ -164,11 +183,12 @@ odps tunnel支持以protoc(自定义)和arrow(自定义)格式下载数据.
 使用protoc格式下载数据时， 获取的record中的字段类型为odps go sdk数据类型。需要注意的是，在创建session的时候要加入DisableArrow选项, 打开reader时，也要显示是使用`OpenRecordProtocReader`
 [示例代码](./examples/sdk/tunnel/download_data_use_protoc/main.go)
 
-## 操作project, table, instance
+## 操作project, table, instance, partition
 相应的操作可以参照文档或示例代码
 [Project(s) 示例代码](./odps/example_project_test.go)
 [Tables 示例代码](./odps/example_tables_test.go)
 [Table 示例代码](./odps/example_table_test.go)
+[Partition 示例代码](./odps/example_partition_test.go)
 [Instance(s) 示例代码](./odps/example_instance_test.go)
 
 # 其他
