@@ -35,6 +35,7 @@ type Option func(cfg *sessionConfig)
 func withPartitionKey(partitionKey string) Option {
 	return func(cfg *sessionConfig) {
 		cfg.PartitionKey = strings.ReplaceAll(partitionKey, "'", "")
+		cfg.PartitionKey = strings.ReplaceAll(cfg.PartitionKey, " ", "")
 	}
 }
 
@@ -68,6 +69,12 @@ func useArrow() Option {
 	}
 }
 
+func disableArrow() Option {
+	return func(cfg *sessionConfig) {
+		cfg.UseArrow = false
+	}
+}
+
 func overWrite() Option {
 	return func(cfg *sessionConfig) {
 		cfg.Overwrite = true
@@ -93,7 +100,7 @@ var SessionCfg = struct {
 	WithDeflateCompressor        func(int) Option
 	WithSnappyFramedCompressor   func() Option
 	Overwrite                    func() Option
-	UseArrow                     func() Option
+	DisableArrow                 func() Option
 	WithShardId                  func(int) Option
 	Async                        func() Option
 }{
@@ -103,7 +110,7 @@ var SessionCfg = struct {
 	WithDeflateCompressor:        withDeflateCompressor,
 	WithSnappyFramedCompressor:   withSnappyFramedCompressor,
 	Overwrite:                    overWrite,
-	UseArrow:                     useArrow,
+	DisableArrow:                 disableArrow,
 	WithShardId:                  withShardId,
 	Async:                        async,
 }

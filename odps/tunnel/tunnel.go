@@ -89,17 +89,17 @@ func (t *Tunnel) CreateDownloadSession(projectName, tableName string, opts ...Op
 	return session, errors.WithStack(err)
 }
 
-func (t *Tunnel) CreateInstanceResultDownloadSession(
-	projectName, instanceId string, opts ...InstanceOption,
-) (*InstanceResultDownloadSession, error) {
-	session, err := CreateInstanceResultDownloadSession(projectName, instanceId, t.getRestClient(), opts...)
-	return session, errors.WithStack(err)
-}
-
 func (t *Tunnel) AttachToExistedDownloadSession(
 	projectName, tableName, sessionId string,
 	opts ...Option) (*DownloadSession, error) {
 	session, err := AttachToExistedDownloadSession(sessionId, projectName, tableName, t.getRestClient(), opts...)
+	return session, errors.WithStack(err)
+}
+
+func (t *Tunnel) CreateInstanceResultDownloadSession(
+	projectName, instanceId string, opts ...InstanceOption,
+) (*InstanceResultDownloadSession, error) {
+	session, err := CreateInstanceResultDownloadSession(projectName, instanceId, t.getRestClient(), opts...)
 	return session, errors.WithStack(err)
 }
 

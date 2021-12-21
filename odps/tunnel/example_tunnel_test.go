@@ -121,7 +121,8 @@ func Example_tunnel_upload_arrow() {
 func Example_tunnel_download_arrow_simple() {
 	session, err := tunnelIns.CreateDownloadSession(
 		"test_new_console_gcc",
-		"upload_sample_arrow",
+		//"upload_sample_arrow",
+		"has_struct",
 	)
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -130,7 +131,7 @@ func Example_tunnel_download_arrow_simple() {
 	recordCount := session.RecordCount()
 	println(fmt.Sprintf("record count is %d", recordCount))
 
-	reader, err := session.OpenRecordReader(0, 2, []string{"payload"})
+	reader, err := session.OpenRecordReader(0, 2, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

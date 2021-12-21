@@ -2,8 +2,8 @@ package tunnel
 
 import (
 	"bytes"
-	data2 "github.com/aliyun/aliyun-odps-go-sdk/odps/data"
-	datatype2 "github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"strings"
 	"testing"
@@ -36,8 +36,8 @@ func TestProtocReadStructType(t *testing.T) {
 	br := bytes.NewReader(structTypeProtocData)
 
 	typeName := "struct<x:int,y:varchar(256),z:struct<a:tinyint,b:date>>"
-	dt, _ := datatype2.ParseDataType(typeName)
-	st := dt.(datatype2.StructType)
+	dt, _ := datatype.ParseDataType(typeName)
+	st := dt.(datatype.StructType)
 	columns := []tableschema.Column{
 		{
 			Name: "struct_field",
@@ -62,7 +62,7 @@ func TestProtocReadStructType(t *testing.T) {
 		t.Fatalf("record has one column, but get %d", record.Len())
 	}
 
-	s := record[0].(*data2.Struct)
+	s := record[0].(*data.Struct)
 	structStr := "struct<x:11,y:hello,z:struct<a:100,b:1970-01-01>>"
 
 	if s.String() != structStr {
@@ -72,22 +72,22 @@ func TestProtocReadStructType(t *testing.T) {
 	expected := []struct {
 		name  string
 		value string
-		typ   datatype2.DataType
+		typ   datatype.DataType
 	}{
-		{"x", "11", datatype2.IntType},
-		{"y", "hello", datatype2.NewVarcharType(256)},
+		{"x", "11", datatype.IntType},
+		{"y", "hello", datatype.NewVarcharType(256)},
 		{"z", "struct<a:100,b:1970-01-01>", st.FieldType("z")},
-		{"z.a", "100", datatype2.TinyIntType},
-		{"z.b", "1970-01-01", datatype2.DateType},
+		{"z.a", "100", datatype.TinyIntType},
+		{"z.b", "1970-01-01", datatype.DateType},
 	}
 
 	x := s.GetField("x")
 	y := s.GetField("y")
-	z := s.GetField("z").(*data2.Struct)
+	z := s.GetField("z").(*data.Struct)
 	a := z.GetField("a")
 	b := z.GetField("b")
 
-	fields := []data2.Data{x, y, z, a, b}
+	fields := []data.Data{x, y, z, a, b}
 	for i, n := 0, len(expected); i < n; i++ {
 		fv := fields[i].String()
 		ft := fields[i].Type()
@@ -99,7 +99,7 @@ func TestProtocReadStructType(t *testing.T) {
 			)
 		}
 
-		if !datatype2.IsTypeEqual(expected[i].typ, ft) {
+		if !datatype.IsTypeEqual(expected[i].typ, ft) {
 			t.Fatalf(
 				"expect type is %s, but get %s for %s",
 				expected[i].typ, ft, expected[i].name,
@@ -114,63 +114,63 @@ func TestProtocReadSimpleType(t *testing.T) {
 	columns := []tableschema.Column{
 		{
 			Name: "ti",
-			Type: datatype2.TinyIntType,
+			Type: datatype.TinyIntType,
 		},
 		{
 			Name: "si",
-			Type: datatype2.SmallIntType,
+			Type: datatype.SmallIntType,
 		},
 		{
 			Name: "i",
-			Type: datatype2.IntType,
+			Type: datatype.IntType,
 		},
 		{
 			Name: "bi",
-			Type: datatype2.BigIntType,
+			Type: datatype.BigIntType,
 		},
 		{
 			Name: "b",
-			Type: datatype2.BinaryType,
+			Type: datatype.BinaryType,
 		},
 		{
 			Name: "f",
-			Type: datatype2.FloatType,
+			Type: datatype.FloatType,
 		},
 		{
 			Name: "d",
-			Type: datatype2.DoubleType,
+			Type: datatype.DoubleType,
 		},
 		{
 			Name: "dc",
-			Type: datatype2.NewDecimalType(38, 18),
+			Type: datatype.NewDecimalType(38, 18),
 		},
 		{
 			Name: "vc",
-			Type: datatype2.NewVarcharType(1000),
+			Type: datatype.NewVarcharType(1000),
 		},
 		{
 			Name: "c",
-			Type: datatype2.NewCharType(100),
+			Type: datatype.NewCharType(100),
 		},
 		{
 			Name: "s",
-			Type: datatype2.StringType,
+			Type: datatype.StringType,
 		},
 		{
 			Name: "da",
-			Type: datatype2.DateType,
+			Type: datatype.DateType,
 		},
 		{
 			Name: "dat",
-			Type: datatype2.DateTimeType,
+			Type: datatype.DateTimeType,
 		},
 		{
 			Name: "t",
-			Type: datatype2.TimestampType,
+			Type: datatype.TimestampType,
 		},
 		{
 			Name: "bl",
-			Type: datatype2.BooleanType,
+			Type: datatype.BooleanType,
 		},
 	}
 
@@ -184,23 +184,23 @@ func TestProtocReadSimpleType(t *testing.T) {
 
 	expected := []struct {
 		value string
-		typ   datatype2.DataType
+		typ   datatype.DataType
 	}{
-		{"1", datatype2.TinyIntType},                                        // 1
-		{"32767", datatype2.SmallIntType},                                   // 2
-		{"100", datatype2.IntType},                                          // 3
-		{"100000000000", datatype2.BigIntType},                              // 4
-		{"unhex('FA34E10293CB42848573A4E39937F479')", datatype2.BinaryType}, // 5
-		{"3.1415926E7", datatype2.FloatType},                                // 6
-		{"3.14159261E7", datatype2.DoubleType},                              // 7
-		{"3.5", datatype2.NewDecimalType(38, 18)},                           // 8
-		{"hello", datatype2.NewVarcharType(1000)},                           // 9
-		{"world", datatype2.NewCharType(100)},                               // 10
-		{"alibaba", datatype2.StringType},                                   // 11
-		{"2017-11-11", datatype2.DateType},                                  // 12
-		{"2017-11-11 00:00:00", datatype2.DateTimeType},                     // 13
-		{"2017-11-11 00:00:00.123", datatype2.TimestampType},                // 14
-		{"true", datatype2.BooleanType},                                     // 15
+		{"1", datatype.TinyIntType},                                        // 1
+		{"32767", datatype.SmallIntType},                                   // 2
+		{"100", datatype.IntType},                                          // 3
+		{"100000000000", datatype.BigIntType},                              // 4
+		{"unhex('FA34E10293CB42848573A4E39937F479')", datatype.BinaryType}, // 5
+		{"3.1415926E7", datatype.FloatType},                                // 6
+		{"3.14159261E7", datatype.DoubleType},                              // 7
+		{"3.5", datatype.NewDecimalType(38, 18)},                           // 8
+		{"hello", datatype.NewVarcharType(1000)},                           // 9
+		{"world", datatype.NewCharType(100)},                               // 10
+		{"alibaba", datatype.StringType},                                   // 11
+		{"2017-11-11", datatype.DateType},                                  // 12
+		{"2017-11-11 00:00:00", datatype.DateTimeType},                     // 13
+		{"2017-11-11 00:00:00.123", datatype.TimestampType},                // 14
+		{"true", datatype.BooleanType},                                     // 15
 	}
 
 	record, err := rp.Read()
@@ -224,7 +224,7 @@ func TestProtocReadSimpleType(t *testing.T) {
 				)
 			}
 
-			if !datatype2.IsTypeEqual(got.Type(), expected[i].typ) {
+			if !datatype.IsTypeEqual(got.Type(), expected[i].typ) {
 				t.Fatalf(
 					"%dth column's type should be %s, but get %s",
 					i+1, expected[i].typ, got.Type(),

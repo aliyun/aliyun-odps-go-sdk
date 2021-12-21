@@ -3,6 +3,7 @@ package tunnel_test
 import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 	"log"
@@ -59,7 +60,13 @@ func Example_tunnel_download_instance_result() {
 	//}
 
 	// 或用iterator遍历读取
-	for record := range reader.Iterator() {
+	for recordOrErr := range reader.Iterator() {
+		if recordOrErr.IsErr() {
+			log.Fatalf("%+v", recordOrErr.Error)
+		}
+
+		record := recordOrErr.Data.(data.Record)
+
 		for i, n := 0, record.Len(); i < n; i++ {
 			f := record.Get(i)
 			println(f.String())
