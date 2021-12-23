@@ -80,11 +80,10 @@ func ExampleTable_Load() {
 	err := table.Load()
 	if err != nil {
 		log.Fatalf("%+v", err)
-	} else {
-		schema := table.Schema()
-		println(fmt.Sprintf("%+v", schema.Columns))
 	}
 
+	schema := table.Schema()
+	println(fmt.Sprintf("%+v", schema.Columns))
 	// Output:
 }
 

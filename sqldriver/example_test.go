@@ -2,6 +2,7 @@ package sqldriver_test
 
 import (
 	"database/sql"
+	"fmt"
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
@@ -114,6 +115,7 @@ func ExampleInsert() {
 	}
 
 	odpsStruct, err := data.StructFromGoStruct(simpleStruct)
+	fmt.Println(odpsStruct)
 
 	if err != nil {
 		log.Fatalf("%+v", err)

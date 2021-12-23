@@ -6,7 +6,7 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/memory"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
-	tunnel2 "github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 	"github.com/pkg/errors"
 	"log"
 	"os"
@@ -28,12 +28,12 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	tunnel := tunnel2.NewTunnel(odpsIns, tunnelEndpoint)
-	session, err := tunnel.CreateUploadSession(
+	tunnelIns := tunnel.NewTunnel(odpsIns, tunnelEndpoint)
+	session, err := tunnelIns.CreateUploadSession(
 		project.Name(),
 		"user_test",
-		tunnel2.SessionCfg.WithPartitionKey("age=20,hometown='hangzhou'"),
-		tunnel2.SessionCfg.WithDefaultDeflateCompressor(),
+		tunnel.SessionCfg.WithPartitionKey("age=20,hometown='hangzhou'"),
+		tunnel.SessionCfg.WithDefaultDeflateCompressor(),
 	)
 
 	if err != nil {
@@ -43,8 +43,8 @@ func main() {
 	schema := session.ArrowSchema()
 
 	dataSet := [][]interface{}{
-		{"n8", int64(65), "2021-11-23 10:20:00", []interface{}{[]string{"cloud_silly", "efc"}, "basketball"}},
-		{"n9", int64(66), "2021-11-24 11:20:00", []interface{}{[]string{"cloud_silly"}, "football"}},
+		{"n1", int64(65), "2021-12-23 10:20:00", []interface{}{[]string{"cloud_silly", "efc"}, "basketball"}},
+		{"n2", int64(66), "2021-12-24 11:20:00", []interface{}{[]string{"west_river"}, "football"}},
 	}
 
 	writeBlock := func(blockId int, data [][]interface{}) error {
