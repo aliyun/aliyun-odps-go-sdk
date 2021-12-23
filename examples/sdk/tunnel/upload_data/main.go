@@ -6,6 +6,7 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/memory"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
+	odpsdata "github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 	"github.com/pkg/errors"
 	"log"
@@ -71,7 +72,7 @@ func main() {
 				case "birthday":
 					builder := fieldBuilder.(*array.TimestampBuilder)
 					l, _ := time.LoadLocation("Local")
-					t, _ := time.ParseInLocation("2006-01-02 15:04:05", d[i].(string), l)
+					t, _ := time.ParseInLocation(odpsdata.DateTimeFormat, d[i].(string), l)
 					builder.Append(arrow.Timestamp(t.UnixMilli()))
 				case "extra":
 					builder := fieldBuilder.(*array.StructBuilder)
