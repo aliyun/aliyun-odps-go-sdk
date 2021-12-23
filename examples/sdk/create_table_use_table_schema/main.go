@@ -70,7 +70,7 @@ func main() {
 	hints["odps.sql.type.system.odps2"] = "true"
 	hints["odps.sql.decimal.odps2"] = "true"
 
-	err = tablesIns.CreateAndWait(schema, true, hints, nil)
+	err = tablesIns.Create(schema, true, hints, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

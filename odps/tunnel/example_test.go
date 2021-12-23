@@ -41,7 +41,7 @@ func createTableWithComplexData() {
 	schema := builder.Build()
 
 	tables := odps.NewTables(odpsIns, ProjectName)
-	err := tables.CreateAndWait(schema, true, nil, nil)
+	err := tables.Create(schema, true, nil, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -81,7 +81,7 @@ func createSaleDetailTable() {
 
 	schema := builder.Build()
 	tables := odps.NewTables(odpsIns, ProjectName)
-	err := tables.CreateAndWait(schema, true, nil, nil)
+	err := tables.Create(schema, true, nil, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

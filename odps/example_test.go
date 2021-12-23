@@ -68,12 +68,7 @@ func createUserTable(tableName string) {
 
 	schema := builder.Build()
 	tables := odps.NewTables(odpsIns, defaultProjectName)
-	instance, err := tables.Create(schema, true, hints, nil)
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-
-	err = instance.WaitForSuccess()
+	err := tables.Create(schema, true, hints, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -91,7 +86,7 @@ func createTableWithComplexData() {
 	schema := builder.Build()
 
 	tables := odps.NewTables(odpsIns, defaultProjectName)
-	err := tables.CreateAndWait(schema, true, nil, nil)
+	err := tables.Create(schema, true, nil, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -131,7 +126,7 @@ func createSaleDetailTable() {
 
 	schema := builder.Build()
 	tables := odps.NewTables(odpsIns, defaultProjectName)
-	err := tables.CreateAndWait(schema, true, nil, nil)
+	err := tables.Create(schema, true, nil, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

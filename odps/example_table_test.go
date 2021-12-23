@@ -89,19 +89,9 @@ func ExampleTable_Load() {
 
 func ExampleTable_AddPartition() {
 	table := odpsIns.Table("sale_detail")
-	instance, err := table.AddPartition(true, "sale_date='202111',region='hangzhou'")
+	err := table.AddPartition(true, "sale_date='202111',region='hangzhou'")
 	if err != nil {
 		log.Fatalf("%+v", err)
-	}
-
-	err = instance.WaitForSuccess()
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-
-	results := instance.TaskResults()
-	for _, result := range results {
-		println(fmt.Sprintf("%+v", result))
 	}
 
 	// Output:

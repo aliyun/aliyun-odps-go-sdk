@@ -96,12 +96,7 @@ func ExampleTables_Create() {
 	println(sql)
 
 	tables := odps.NewTables(odpsIns)
-	instance, err := tables.Create(schema, true, hints, nil)
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-
-	err = instance.WaitForSuccess()
+	err := tables.Create(schema, true, hints, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -109,9 +104,9 @@ func ExampleTables_Create() {
 	// Output:
 }
 
-func ExampleTables_DeleteAndWait() {
+func ExampleTables_Delete() {
 	tables := odps.NewTables(odpsIns, odpsIns.DefaultProjectName())
-	err := tables.DeleteAndWait("user_temp", false)
+	err := tables.Delete("user_temp", false)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

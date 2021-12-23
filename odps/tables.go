@@ -144,11 +144,11 @@ func (ts *Tables) BatchLoadTables(tableNames []string) ([]Table, error) {
 func (ts *Tables) Create(
 	schema tableschema.TableSchema,
 	createIfNotExists bool,
-	hints, alias map[string]string) (*Instance, error) {
+	hints, alias map[string]string) error {
 
 	sql, err := schema.ToSQLString(ts.projectName, createIfNotExists)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return errors.WithStack(err)
 	}
 
 	task := NewSqlTask("SQLCreateTableTask", sql, "", nil)
@@ -165,21 +165,12 @@ func (ts *Tables) Create(
 
 	instances := NewInstances(ts.odpsIns, ts.projectName)
 
-	return instances.CreateTask(ts.projectName, &task)
-}
-
-func (ts *Tables) CreateAndWait(
-	schema tableschema.TableSchema,
-	createIfNotExists bool,
-	hints, alias map[string]string) error {
-
-	instance, err := ts.Create(schema, createIfNotExists, hints, alias)
-
+	ins, err := instances.CreateTask(ts.projectName, &task)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	return errors.WithStack(instance.WaitForSuccess())
+	return errors.WithStack(ins.WaitForSuccess())
 }
 
 // CreateExternal create external table, the schema can be build with tableschema.SchemaBuilder
@@ -188,11 +179,11 @@ func (ts *Tables) CreateExternal(
 	createIfNotExists bool,
 	serdeProperties map[string]string,
 	jars []string,
-	hints, alias map[string]string) (*Instance, error) {
+	hints, alias map[string]string) error {
 
 	sql, err := schema.ToExternalSQLString(ts.projectName, createIfNotExists, serdeProperties, jars)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return errors.WithStack(err)
 	}
 
 	task := NewSqlTask("SQLCreateExternalTableTask", sql, "", nil)
@@ -210,23 +201,10 @@ func (ts *Tables) CreateExternal(
 	instances := NewInstances(ts.odpsIns, ts.projectName)
 
 	i, err := instances.CreateTask(ts.projectName, &task)
-	return i, errors.WithStack(err)
-}
-
-func (ts *Tables) CreateExternalAndWait(
-	schema tableschema.TableSchema,
-	createIfNotExists bool,
-	serdeProperties map[string]string,
-	jars []string,
-	hints, alias map[string]string) error {
-
-	instance, err := ts.CreateExternal(schema, createIfNotExists, serdeProperties, jars, hints, alias)
-
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	return errors.WithStack(instance.WaitForSuccess())
+	return errors.WithStack(i.WaitForSuccess())
 }
 
 func (ts *Tables) CreateWithDataHub(
@@ -234,11 +212,11 @@ func (ts *Tables) CreateWithDataHub(
 	createIfNotExists bool,
 	shardNum,
 	hubLifecycle int,
-) (*Instance, error) {
+) error {
 
 	sql, err := schema.ToBaseSQLString(ts.projectName, createIfNotExists, false)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return errors.WithStack(err)
 	}
 
 	var sb strings.Builder
@@ -255,28 +233,17 @@ func (ts *Tables) CreateWithDataHub(
 	task := NewSqlTask("SQLCreateTableTaskWithDataHub", sb.String(), "", nil)
 
 	instances := NewInstances(ts.odpsIns, ts.projectName)
-
 	i, err := instances.CreateTask(ts.projectName, &task)
-	return i, errors.WithStack(err)
-}
-
-func (ts *Tables) CreateWithDataHubAndWait(
-	schema tableschema.TableSchema,
-	createIfNotExists bool,
-	shardNum,
-	hubLifecycle int,
-) error {
-	instance, err := ts.CreateWithDataHub(schema, createIfNotExists, shardNum, hubLifecycle)
 
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	return errors.WithStack(instance.WaitForSuccess())
+	return errors.WithStack(i.WaitForSuccess())
 }
 
 // Delete delete table
-func (ts *Tables) Delete(tableName string, ifExists bool) (*Instance, error) {
+func (ts *Tables) Delete(tableName string, ifExists bool) error {
 	var sqlBuilder strings.Builder
 	sqlBuilder.WriteString("drop table")
 	if ifExists {
@@ -292,16 +259,10 @@ func (ts *Tables) Delete(tableName string, ifExists bool) (*Instance, error) {
 	sqlTask := NewSqlTask("SQLDropTableTask", sqlBuilder.String(), "", nil)
 	instances := NewInstances(ts.odpsIns, ts.projectName)
 	i, err := instances.CreateTask(ts.projectName, &sqlTask)
-	return i, errors.WithStack(err)
-}
-
-func (ts *Tables) DeleteAndWait(tableName string, ifExists bool) error {
-	instance, err := ts.Delete(tableName, ifExists)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	return errors.WithStack(instance.WaitForSuccess())
+	return errors.WithStack(i.WaitForSuccess())
 }
 
 type TFilterFunc func(url.Values)

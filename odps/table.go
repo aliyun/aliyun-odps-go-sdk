@@ -302,17 +302,8 @@ func (t *Table) ExecSql(taskName, sql string) (*Instance, error) {
 	return i, errors.WithStack(err)
 }
 
-func (t *Table) ExecSqlAndWait(taskName, sql string) error {
-	instance, err := t.ExecSql(taskName, sql)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return errors.WithStack(instance.WaitForSuccess())
-}
-
 // AddPartition Example: AddPartition(true, "region='10026, name='abc'")
-func (t *Table) AddPartition(ifNotExists bool, partitionKey string) (*Instance, error) {
+func (t *Table) AddPartition(ifNotExists bool, partitionKey string) error {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("alter table %s.%s add", t.ProjectName(), t.Name()))
 	if ifNotExists {
@@ -324,15 +315,11 @@ func (t *Table) AddPartition(ifNotExists bool, partitionKey string) (*Instance, 
 	sb.WriteString("\n);")
 
 	i, err := t.ExecSql("SQLAddPartitionTask", sb.String())
-	return i, errors.WithStack(err)
-}
-
-func (t *Table) AddPartitionAndWait(ifNotExists bool, partitionKey string) error {
-	instance, err := t.AddPartition(ifNotExists, partitionKey)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	return errors.WithStack(instance.WaitForSuccess())
+
+	return errors.WithStack(i.WaitForSuccess())
 }
 
 // DeletePartition Example: DeletePartition(true, "region='10026, name='abc'")
@@ -347,7 +334,17 @@ func (t *Table) DeletePartition(ifExists bool, partitionKey string) error {
 	sb.WriteString(partitionKey)
 	sb.WriteString("\n);")
 
-	return errors.WithStack(t.ExecSqlAndWait("SQLDropPartitionTask", sb.String()))
+	ins, err := t.ExecSql("SQLDropPartitionTask", sb.String())
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	err = ins.WaitForSuccess()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return nil
 }
 
 // GetPartitions get partitions with partitionKey like "region='10026, name='abc'"
@@ -466,7 +463,17 @@ func (t *Table) CreateShards(shardCount int) error {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("alter table %s.%s", t.ProjectName(), t.Name()))
 	sb.WriteString(fmt.Sprintf("\ninto %d shards;", shardCount))
-	return errors.WithStack(t.ExecSqlAndWait("SQLCreateShardsTask", sb.String()))
+	ins, err := t.ExecSql("SQLCreateShardsTask", sb.String())
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	err = ins.WaitForSuccess()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return nil
 }
 
 func TableTypeFromStr(s string) TableType {

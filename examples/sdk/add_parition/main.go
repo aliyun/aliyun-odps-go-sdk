@@ -18,7 +18,7 @@ func main() {
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
 
 	table := odpsIns.Table("user_test")
-	err = table.AddPartitionAndWait(true, "age=20, hometown='hangzhou'")
+	err = table.AddPartition(true, "age=20, hometown='hangzhou'")
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

@@ -78,7 +78,7 @@ https://github.com/apache/arrow/tree/master/go 的修改版本，ipc package添�
 [示例代码](./examples/sdk/create_table_use_table_schema/main.go)
 
 ### go sql示例
-1  创建dsn(data source name，形如"http://user:pass@host:port?param=x")，可以直接使用字符串或通过sqldriver.Config构建
+1. 创建dsn(data source name，形如"http://user:pass@host:port?param=x")，可以直接使用字符串或通过sqldriver.Config构建
 2. 调用sql.Open获取db
 3. 使用db执行sql
 
