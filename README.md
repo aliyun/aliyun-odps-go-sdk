@@ -98,7 +98,9 @@ alter table user_test add partition (age=20, hometown='hangzhou');
 ```
 
 ## 插入数据
-### 通过执行sql语句插入数据
+插入数据时，如果只是插入很少量数据，可以使用insert sql语句，如果插入的数量较大，则需使用tunnel上传数据。
+
+### 通过执行sql语句插入数据(不建议使用)
 插入数据用任何一种执行sql语句的方法都可以，但是建议使用go sql, go sql支持named args, 使构造sql语句更简单。
 
 此外建议使用data.Array，data.Struct, data.Datetime等类型表示要插入的值，这些类型可以直接使用Sql()方法获取相应类型的常量或构造方法。
@@ -109,7 +111,7 @@ struct<address:array<string>, hobby<string>>类型的{"address":["apsaras","efc"
 
 [示例代码](./examples/sql/insert_data/main.go)
 
-### 通过tunnel上传数据
+### 通过tunnel上传数据(建议使用)
 **注意** odps tunnel支持以protoc(自定义)和arrow(自定义)格式上传下载数据， 当前odps go sdk只支持以arrow格式上传数据，下载数据支持arrow和protoc.
 
 简单的上传过程为
@@ -197,6 +199,10 @@ odps tunnel支持以protoc(自定义)和arrow(自定义)格式下载数据.
 # 其他
 Example代码中的输出都用了println, 这是因为大多示例虽然在没有配置的情况下当做测试用例运行时会报错，
 但在本地开发的时候希望可以直接运行代码，并让运行结果不报错，所以使用了println, 将字符输出到标准错误。
+
+
+# TODO
+<p>[ ]rest client的重试功能</p>
 
 # License
 licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0.html)
