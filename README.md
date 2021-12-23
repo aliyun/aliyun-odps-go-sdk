@@ -203,6 +203,7 @@ Example代码中的输出都用了println, 这是因为大多示例虽然在没�
 
 # TODO
 <p>[ ]rest client的重试功能</p>
+<p>[ ]log view</p>
 
 # License
 licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0.html)
