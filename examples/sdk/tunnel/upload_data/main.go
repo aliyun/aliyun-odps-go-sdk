@@ -48,7 +48,7 @@ func main() {
 	}
 
 	writeBlock := func(blockId int, data [][]interface{}) error {
-		recordWriter, err := session.OpenRecordWriter(blockId)
+		recordWriter, err := session.OpenRecordArrowWriter(blockId)
 		if err != nil {
 			return errors.WithStack(err)
 		}

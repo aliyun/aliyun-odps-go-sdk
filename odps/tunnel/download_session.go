@@ -182,7 +182,7 @@ func (ds *DownloadSession) ResourceUrl() string {
 	return rb.Table(ds.TableName)
 }
 
-func (ds *DownloadSession) OpenRecordReader(start, count int, columnNames []string) (*RecordArrowReader, error) {
+func (ds *DownloadSession) OpenRecordArrowReader(start, count int, columnNames []string) (*RecordArrowReader, error) {
 	arrowSchema := ds.arrowSchema
 	if len(columnNames) == 0 {
 		columnNames = make([]string, len(ds.schema.Columns))
@@ -212,7 +212,7 @@ func (ds *DownloadSession) OpenRecordReader(start, count int, columnNames []stri
 	return &reader, nil
 }
 
-func (ds *DownloadSession) OpenRecordProtocReader(start, count int, columnNames []string) (*RecordProtocReader, error) {
+func (ds *DownloadSession) OpenRecordReader(start, count int, columnNames []string) (*RecordProtocReader, error) {
 	if len(columnNames) == 0 {
 		columnNames = make([]string, len(ds.schema.Columns))
 		for i, c := range ds.schema.Columns {

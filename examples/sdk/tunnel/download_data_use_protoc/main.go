@@ -40,7 +40,7 @@ func main() {
 	recordCount := session.RecordCount()
 	fmt.Printf("record count is %d", recordCount)
 
-	reader, err := session.OpenRecordProtocReader(0, recordCount, nil)
+	reader, err := session.OpenRecordReader(0, recordCount, nil)
 
 	if err != nil {
 		log.Fatalf("%+v", err)

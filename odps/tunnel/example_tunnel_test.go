@@ -53,7 +53,7 @@ func Example_tunnel_upload_arrow() {
 	blockIds := make([]int, len(rawData))
 
 	writeBlock := func(blockId int, data SaleDetailData) error {
-		recordWriter, err := session.OpenRecordWriter(blockId)
+		recordWriter, err := session.OpenRecordArrowWriter(blockId)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -131,7 +131,7 @@ func Example_tunnel_download_arrow_simple() {
 	recordCount := session.RecordCount()
 	println(fmt.Sprintf("record count is %d", recordCount))
 
-	reader, err := session.OpenRecordReader(0, 2, nil)
+	reader, err := session.OpenRecordArrowReader(0, 2, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -167,7 +167,7 @@ func Example_tunnel_download_arrow_with_partition() {
 	recordCount := session.RecordCount()
 	println(fmt.Sprintf("record count is %d", recordCount))
 
-	reader, err := session.OpenRecordReader(
+	reader, err := session.OpenRecordArrowReader(
 		0, 1000,
 		[]string{"shop_name", "total_price"})
 

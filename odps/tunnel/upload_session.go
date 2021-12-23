@@ -31,7 +31,7 @@ const (
 // UploadSession works as "insert into", multiply sessions for the same table or partition do not affect each other.
 // Session id is the unique identifier of a session。
 //
-// UploadSession uses OpenRecordWriter to create a RecordArrowWriter(it is the only type of RecordWriter now) for
+// UploadSession uses OpenRecordArrowWriter to create a RecordArrowWriter(it is the only type of RecordWriter now) for
 // writing data into a table. Each RecordWriter uses a http connection to transfer data with the tunnel server, and
 // each UploadSession can create multiply RecordWriters, so multiply http connections can be used to upload data
 // in parallel.
@@ -187,7 +187,7 @@ func (u *UploadSession) ResourceUrl() string {
 	return rb.Table(u.TableName)
 }
 
-func (u *UploadSession) OpenRecordWriter(blockId int) (*RecordArrowWriter, error) {
+func (u *UploadSession) OpenRecordArrowWriter(blockId int) (*RecordArrowWriter, error) {
 	conn, err := u.newUploadConnection(blockId, u.UseArrow)
 	if err != nil {
 		return nil, errors.WithStack(err)
