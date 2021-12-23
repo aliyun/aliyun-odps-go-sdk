@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	tunnel2 "github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
@@ -45,7 +46,13 @@ func main() {
 	}
 
 	n := 0
-	for rec := range reader.Iterator() {
+	for recordOrErr := range reader.Iterator() {
+		if recordOrErr.IsErr() {
+			log.Fatalf("%+v", recordOrErr.Error)
+		}
+
+		rec := recordOrErr.Data.(array.Record)
+
 		for i, col := range rec.Columns() {
 			println(fmt.Sprintf("rec[%d][%d]: %v", n, i, col))
 		}

@@ -137,7 +137,13 @@ func Example_tunnel_download_arrow_simple() {
 	}
 
 	n := 0
-	for rec := range reader.Iterator() {
+	for recordOrErr := range reader.Iterator() {
+		if recordOrErr.IsErr() {
+			log.Fatalf("%+v", recordOrErr.Error)
+		}
+
+		rec := recordOrErr.Data.(array.Record)
+
 		for i, col := range rec.Columns() {
 			println(fmt.Sprintf("rec[%d][%d]: %v", n, i, col))
 		}
@@ -176,7 +182,13 @@ func Example_tunnel_download_arrow_with_partition() {
 	}
 
 	n := 0
-	for rec := range reader.Iterator() {
+	for recordOrErr := range reader.Iterator() {
+		if recordOrErr.IsErr() {
+			log.Fatalf("%+v", recordOrErr.Error)
+		}
+
+		rec := recordOrErr.Data.(array.Record)
+
 		for i, col := range rec.Columns() {
 			println(fmt.Sprintf("rec[%d][%d]: %v", n, i, col))
 		}

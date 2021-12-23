@@ -4,7 +4,9 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/ipc"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/pkg/errors"
+	"io"
 	"net/http"
 )
 
@@ -32,17 +34,30 @@ func (r *RecordArrowReader) RecordBatchReader() *ipc.RecordBatchReader {
 	return r.recordBatchReader
 }
 
-func (r *RecordArrowReader) Iterator() <-chan array.Record {
-	records := make(chan array.Record)
+func (r *RecordArrowReader) Iterator() <-chan common.Result {
+	records := make(chan common.Result)
 
 	go func() {
 		defer close(records)
 
-		for r.recordBatchReader.Next() {
-			record := r.recordBatchReader.Record()
-			record.Retain()
-			records <- record
+		record, err := r.recordBatchReader.Read()
+		result := common.Result{}
+
+		isEOF := errors.Is(err, io.EOF)
+
+		if err != nil && !isEOF {
+			result.Error = err
+			records <- result
+			return
 		}
+
+		if isEOF {
+			return
+		}
+
+		record.Retain()
+		result.Data = record
+		records <- result
 	}()
 
 	return records
