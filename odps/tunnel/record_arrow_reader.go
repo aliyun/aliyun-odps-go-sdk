@@ -1,13 +1,13 @@
 package tunnel
 
 import (
+	"io"
+	"net/http"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/ipc"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/pkg/errors"
-	"io"
-	"net/http"
 )
 
 type RecordArrowReader struct {
@@ -34,33 +34,21 @@ func (r *RecordArrowReader) RecordBatchReader() *ipc.RecordBatchReader {
 	return r.recordBatchReader
 }
 
-func (r *RecordArrowReader) Iterator() <-chan common.Result {
-	records := make(chan common.Result)
-
-	go func() {
-		defer close(records)
-
+func (r *RecordArrowReader) Iterator(f func(array.Record, error)) {
+	for {
 		record, err := r.recordBatchReader.Read()
-		result := common.Result{}
-
 		isEOF := errors.Is(err, io.EOF)
-
-		if err != nil && !isEOF {
-			result.Error = err
-			records <- result
+		if isEOF {
 			return
 		}
-
-		if isEOF {
+		if err != nil {
+			f(record, err)
 			return
 		}
 
 		record.Retain()
-		result.Data = record
-		records <- result
-	}()
-
-	return records
+		f(record, err)
+	}
 }
 
 func (r *RecordArrowReader) Read() (array.Record, error) {

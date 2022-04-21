@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"net/url"
+	"strings"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/pkg/errors"
-	"net/url"
-	"strings"
 )
 
 // Tables used for get all the tables in an odps project
@@ -35,9 +36,7 @@ func NewTables(odpsIns *Odps, projectName ...string) Tables {
 
 // List get all the tables, filters can be specified with TableFilter.NamePrefix,
 // TableFilter.Extended, TableFilter.Owner
-func (ts *Tables) List(filters ...TFilterFunc) <-chan TableOrErr {
-	c := make(chan TableOrErr)
-
+func (ts *Tables) List(f func(*Table, error), filters ...TFilterFunc) {
 	queryArgs := make(url.Values, 4)
 	queryArgs.Set("expectmarker", "true")
 
@@ -56,39 +55,32 @@ func (ts *Tables) List(filters ...TFilterFunc) <-chan TableOrErr {
 		MaxItems int
 	}
 
-	go func() {
-		defer close(c)
-
-		var resModel ResModel
-
-		for {
-			err := client.GetWithModel(resource, queryArgs, &resModel)
-			if err != nil {
-				c <- TableOrErr{nil, err}
-				break
-			}
-
-			if len(resModel.Tables) == 0 {
-				break
-			}
-
-			for _, tableModel := range resModel.Tables {
-				table := NewTable(ts.odpsIns, ts.projectName, tableModel.Name)
-				table.model = tableModel
-
-				c <- TableOrErr{&table, nil}
-			}
-
-			if resModel.Marker != "" {
-				queryArgs.Set("marker", resModel.Marker)
-				resModel = ResModel{}
-			} else {
-				break
-			}
+	var resModel ResModel
+	for {
+		err := client.GetWithModel(resource, queryArgs, &resModel)
+		if err != nil {
+			f(nil, err)
+			break
 		}
-	}()
 
-	return c
+		if len(resModel.Tables) == 0 {
+			break
+		}
+
+		for _, tableModel := range resModel.Tables {
+			table := NewTable(ts.odpsIns, ts.projectName, tableModel.Name)
+			table.model = tableModel
+
+			f(&table, nil)
+		}
+
+		if resModel.Marker != "" {
+			queryArgs.Set("marker", resModel.Marker)
+			resModel = ResModel{}
+		} else {
+			break
+		}
+	}
 }
 
 // BatchLoadTables can get at most 100 tables, and the information of table is according to the permission

@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
+	"io"
 	"log"
 	"os"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 )
 
 func main() {
@@ -37,6 +39,9 @@ func main() {
 
 	for {
 		record, err := csvReader.Read()
+		if err == io.EOF {
+			break
+		}
 		if err != nil {
 			log.Fatalf("%+v", err)
 		}

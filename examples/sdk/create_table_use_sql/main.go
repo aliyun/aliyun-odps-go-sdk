@@ -1,10 +1,11 @@
 package main
 
 import (
-	"github.com/aliyun/aliyun-odps-go-sdk/odps"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"log"
 	"os"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 )
 
 func main() {
@@ -17,7 +18,7 @@ func main() {
 	odpsIns := odps.NewOdps(aliAccount, conf.Endpoint)
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
 
-	//sql := "create table if not exists user_test (" +
+	// sql := "create table if not exists user_test (" +
 	//	"name string,score int,birthday datetime,addresses array<string>" +
 	//	") " +
 	//	"partitioned by (age int,hometown string) " +

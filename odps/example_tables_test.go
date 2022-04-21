@@ -2,23 +2,23 @@ package odps_test
 
 import (
 	"fmt"
+	"log"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"log"
 )
 
 func ExampleTables_List() {
 	ts := odps.NewTables(odpsIns)
-	tables := ts.List(odps.TableFilter.Extended())
-	for te := range tables {
-		if te.Err != nil {
-			log.Fatalf("%+v", te.Err)
+	var f = func(t *odps.Table, err error) {
+		if err != nil {
+			log.Fatalf("%+v", err)
 		}
 
-		t := te.Table
 		println(fmt.Sprintf("%s, %s, %s", t.Name(), t.Owner(), t.Type()))
 	}
+	ts.List(f, odps.TableFilter.Extended())
 
 	// Output:
 }

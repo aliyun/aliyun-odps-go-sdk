@@ -2,9 +2,10 @@ package main
 
 import (
 	"database/sql"
-	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 	"log"
 	"os"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 )
 
 func main() {
@@ -21,11 +22,13 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	sqlStr := "create table if not exists user_test (" +
-		"name string,score int,birthday datetime,addresses array<string>" +
-		") " +
-		"partitioned by (age int,hometown string) " +
-		"lifecycle 2;"
+	sqlStr := "create table if not exists user_test(" +
+		"name string, " +
+		"score int, " +
+		"birthday datetime, " +
+		"extra struct<address:array<string>, hobby:string>" +
+		") partitioned by (age int,hometown string) " +
+		"STORED AS ALIORC tblproperties (\"columnar.nested.type\"=\"true\");"
 
 	_, err = db.Exec(sqlStr)
 	if err != nil {

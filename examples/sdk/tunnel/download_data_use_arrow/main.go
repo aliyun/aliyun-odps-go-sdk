@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
-	tunnel2 "github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
-	"log"
-	"os"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 )
 
 func main() {
@@ -25,11 +26,11 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	tunnel := tunnel2.NewTunnel(odpsIns, tunnelEndpoint)
-	session, err := tunnel.CreateDownloadSession(
+	tunnelIns := tunnel.NewTunnel(odpsIns, tunnelEndpoint)
+	session, err := tunnelIns.CreateDownloadSession(
 		project.Name(),
 		"user_test",
-		tunnel2.SessionCfg.WithPartitionKey("age=20,hometown='hangzhou'"),
+		tunnel.SessionCfg.WithPartitionKey("age=20,hometown='hangzhou'"),
 	)
 
 	if err != nil {
@@ -46,12 +47,10 @@ func main() {
 	}
 
 	n := 0
-	for recordOrErr := range reader.Iterator() {
-		if recordOrErr.IsErr() {
-			log.Fatalf("%+v", recordOrErr.Error)
+	reader.Iterator(func(rec array.Record, err error) {
+		if err != nil {
+			log.Fatalf("%+v", err)
 		}
-
-		rec := recordOrErr.Data.(array.Record)
 
 		for i, col := range rec.Columns() {
 			println(fmt.Sprintf("rec[%d][%d]: %v", n, i, col))
@@ -59,7 +58,7 @@ func main() {
 
 		rec.Release()
 		n++
-	}
+	})
 
 	err = reader.Close()
 	if err != nil {

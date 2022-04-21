@@ -1,12 +1,13 @@
 package main
 
 import (
+	"log"
+	"os"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"log"
-	"os"
 )
 
 func main() {
@@ -35,8 +36,8 @@ func main() {
 		datatype.NewStructFieldType("Hobby", datatype.StringType),
 	)
 	// or
-	//structTypeStr := "struct<Address:array<string>, Hobby:string>"
-	//structType, _ := datatype.ParseDataType(structTypeStr)
+	// structTypeStr := "struct<Address:array<string>, Hobby:string>"
+	// structType, _ := datatype.ParseDataType(structTypeStr)
 
 	c3 := tableschema.Column{
 		Name: "birthday",

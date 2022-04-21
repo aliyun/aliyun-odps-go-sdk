@@ -2,9 +2,10 @@ package odps_test
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"log"
 	"time"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 )
 
 func ExampleInstances_List() {
@@ -13,15 +14,10 @@ func ExampleInstances_List() {
 	startTime, _ := time.Parse(timeFormat, "2021-11-15 02:15:30")
 	endTime, _ := time.Parse(timeFormat, "2021-11-18 06:22:02")
 
-	instances := ins.List(odps.InstanceFilter.TimeRange(startTime, endTime))
-	//instances := ins.List()
-
-	for ie := range instances {
-		if ie.Err != nil {
-			log.Fatalf("%+v", ie.Err)
+	var f = func(i *odps.Instance, err error) {
+		if err != nil {
+			log.Fatalf("%+v", err)
 		}
-
-		i := ie.Ins
 
 		println(
 			fmt.Sprintf(
@@ -29,6 +25,7 @@ func ExampleInstances_List() {
 				i.Id(), i.Owner(), i.StartTime().Format(timeFormat), i.EndTime().Format(timeFormat), i.Status(),
 			))
 	}
+	ins.List(f, odps.InstanceFilter.TimeRange(startTime, endTime))
 
 	// Output:
 }
