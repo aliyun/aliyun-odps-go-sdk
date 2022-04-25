@@ -5,7 +5,7 @@ import "strings"
 type Record []Data
 
 func NewRecord(columnNums int) Record {
-	return make([]Data, 0, columnNums)
+	return make([]Data, columnNums)
 }
 
 func (r *Record) Append(d Data) {

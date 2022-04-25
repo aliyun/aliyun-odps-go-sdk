@@ -110,7 +110,7 @@ LOOP:
 				return nil, errors.WithStack(err)
 			}
 
-			record.Append(fv)
+			record[columnIndex-1] = fv
 		}
 	}
 
