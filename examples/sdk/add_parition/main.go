@@ -1,10 +1,11 @@
 package main
 
 import (
-	"github.com/aliyun/aliyun-odps-go-sdk/odps"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"log"
 	"os"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 )
 
 func main() {

@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	tunnel2 "github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
-	"log"
-	"os"
 )
 
 func main() {
@@ -46,13 +47,14 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	for recordOrErr := range reader.Iterator() {
-		if recordOrErr.IsErr() {
-			log.Fatalf("%+v", recordOrErr.Error)
+	reader.Iterator(func(record data.Record, err error) {
+		if err != nil {
+			log.Fatalf("%+v", err)
+		}
+		if record.Len() != 3 {
+			log.Fatalf("only select 3 columns, but get %d", record.Len())
 		}
 
-		record := recordOrErr.Data.(data.Record)
-		fmt.Printf("name:%s, score:%s, birthday:%s, extra:%s\n", record[0], record[1], record[2], record[3])
-	}
-
+		fmt.Printf("name:%s, birthday:%s, extra:%s\n", record[0], record[1], record[2])
+	})
 }

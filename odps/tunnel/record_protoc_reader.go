@@ -1,15 +1,15 @@
 package tunnel
 
 import (
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"io"
+	"net/http"
+	"time"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/encoding/protowire"
-	"io"
-	"net/http"
-	"time"
 )
 
 const (
@@ -118,34 +118,19 @@ LOOP:
 	return record, nil
 }
 
-func (r *RecordProtocReader) Iterator() <-chan common.Result {
-	records := make(chan common.Result)
-
-	go func() {
-		defer close(records)
-
-		for {
-			record, err := r.Read()
-			result := common.Result{}
-
-			isEOF := errors.Is(err, io.EOF)
-
-			if err != nil && !isEOF {
-				result.Error = err
-				records <- result
-				return
-			}
-
-			if isEOF {
-				return
-			}
-
-			result.Data = record
-			records <- result
+func (r *RecordProtocReader) Iterator(f func(record data.Record, err error)) {
+	for {
+		record, err := r.Read()
+		isEOF := errors.Is(err, io.EOF)
+		if isEOF {
+			return
 		}
-	}()
-
-	return records
+		if err != nil {
+			f(record, err)
+			return
+		}
+		f(record, err)
+	}
 }
 
 func (r *RecordProtocReader) Close() error {

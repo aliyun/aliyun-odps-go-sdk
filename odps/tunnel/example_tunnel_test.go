@@ -2,12 +2,13 @@ package tunnel_test
 
 import (
 	"fmt"
+	"log"
+	"time"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/memory"
 	tunnel2 "github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 	"github.com/pkg/errors"
-	"log"
-	"time"
 )
 
 func Example_tunnel_upload_arrow() {
@@ -17,8 +18,8 @@ func Example_tunnel_upload_arrow() {
 		ProjectName,
 		"sale_detail",
 		tunnel2.SessionCfg.WithPartitionKey("sale_date='202111',region='hangzhou'"),
-		//tunnel.SessionCfg.WithSnappyFramedCompressor(),
-		//tunnel.SessionCfg.WithDeflateCompressor(tunnel.DeflateLevel.DefaultCompression),
+		// tunnel.SessionCfg.WithSnappyFramedCompressor(),
+		// tunnel.SessionCfg.WithDeflateCompressor(tunnel.DeflateLevel.DefaultCompression),
 		tunnel2.SessionCfg.WithDefaultDeflateCompressor(),
 	)
 	if err != nil {
@@ -121,7 +122,7 @@ func Example_tunnel_upload_arrow() {
 func Example_tunnel_download_arrow_simple() {
 	session, err := tunnelIns.CreateDownloadSession(
 		"test_new_console_gcc",
-		//"upload_sample_arrow",
+		// "upload_sample_arrow",
 		"has_struct",
 	)
 	if err != nil {
@@ -137,12 +138,10 @@ func Example_tunnel_download_arrow_simple() {
 	}
 
 	n := 0
-	for recordOrErr := range reader.Iterator() {
-		if recordOrErr.IsErr() {
-			log.Fatalf("%+v", recordOrErr.Error)
+	reader.Iterator(func(rec array.Record, err error) {
+		if err != nil {
+			log.Fatalf("%+v", err)
 		}
-
-		rec := recordOrErr.Data.(array.Record)
 
 		for i, col := range rec.Columns() {
 			println(fmt.Sprintf("rec[%d][%d]: %v", n, i, col))
@@ -150,7 +149,7 @@ func Example_tunnel_download_arrow_simple() {
 
 		rec.Release()
 		n++
-	}
+	})
 
 	err = reader.Close()
 	if err != nil {
@@ -182,12 +181,10 @@ func Example_tunnel_download_arrow_with_partition() {
 	}
 
 	n := 0
-	for recordOrErr := range reader.Iterator() {
-		if recordOrErr.IsErr() {
-			log.Fatalf("%+v", recordOrErr.Error)
+	reader.Iterator(func(rec array.Record, err error) {
+		if err != nil {
+			log.Fatalf("%+v", err)
 		}
-
-		rec := recordOrErr.Data.(array.Record)
 
 		for i, col := range rec.Columns() {
 			println(fmt.Sprintf("rec[%d][%d]: %v", n, i, col))
@@ -195,7 +192,7 @@ func Example_tunnel_download_arrow_with_partition() {
 
 		rec.Release()
 		n++
-	}
+	})
 
 	err = reader.Close()
 	if err != nil {

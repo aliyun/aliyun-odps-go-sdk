@@ -1,12 +1,13 @@
 package tunnel_test
 
 import (
+	"log"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
-	"log"
 )
 
 func Example_tunnel_download_instance_result() {
@@ -38,9 +39,9 @@ func Example_tunnel_download_instance_result() {
 		log.Fatalf("%+v", err)
 	}
 
-	//columnNames := []string {
+	// columnNames := []string {
 	//	"ti", "si", "i", "bi", "b", "f", "d", "dc", "vc", "c", "s", "da", "dat", "t", "bl",
-	//}
+	// }
 
 	// set columnNames=nil for get all the columns
 	reader, err := session.OpenRecordReader(0, 100, 0, nil)
@@ -49,29 +50,27 @@ func Example_tunnel_download_instance_result() {
 	}
 
 	// 用read()逐个读取
-	//record, err := reader.Read()
-	//if err != nil && err != io.EOF {
+	// record, err := reader.Read()
+	// if err != nil && err != io.EOF {
 	//	println(err.Error())
-	//} else {
+	// } else {
 	//	for i, n := 0, record.Len(); i < n; i ++ {
 	//		f := record.Get(i)
 	//		println(f.String())
 	//	}
-	//}
+	// }
 
 	// 或用iterator遍历读取
-	for recordOrErr := range reader.Iterator() {
-		if recordOrErr.IsErr() {
-			log.Fatalf("%+v", recordOrErr.Error)
+	reader.Iterator(func(record data.Record, err error) {
+		if err != nil {
+			log.Fatalf("%+v", err)
 		}
-
-		record := recordOrErr.Data.(data.Record)
 
 		for i, n := 0, record.Len(); i < n; i++ {
 			f := record.Get(i)
 			println(f.String())
 		}
-	}
+	})
 
 	// Output:
 }

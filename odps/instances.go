@@ -3,14 +3,15 @@ package odps
 import (
 	"encoding/xml"
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/google/uuid"
-	"github.com/pkg/errors"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/google/uuid"
+	"github.com/pkg/errors"
 )
 
 // Instances is used to get or create instance(s)
@@ -113,9 +114,7 @@ func (instances Instances) CreateTaskWithPriority(projectName string, task Task,
 
 // List Get all instances, the filters can be given with InstanceFilter.Status, InstanceFilter.OnlyOwner,
 // InstanceFilter.QuotaIndex, InstanceFilter.TimeRange
-func (instances Instances) List(filters ...InsFilterFunc) <-chan InstanceOrErr {
-	c := make(chan InstanceOrErr)
-
+func (instances Instances) List(f func(*Instance, error), filters ...InsFilterFunc) {
 	queryArgs := make(url.Values)
 	queryArgs.Set("onlyowner", "no")
 
@@ -140,42 +139,35 @@ func (instances Instances) List(filters ...InsFilterFunc) <-chan InstanceOrErr {
 		} `xml:"Instance"`
 	}
 
-	go func() {
-		defer close(c)
-		var resModel ResModel
-
-		for {
-			err := client.GetWithModel(resources, queryArgs, &resModel)
-
-			if err != nil {
-				c <- InstanceOrErr{nil, errors.WithStack(err)}
-				break
-			}
-
-			if len(resModel.Instances) == 0 {
-				break
-			}
-
-			for _, model := range resModel.Instances {
-				instance := NewInstance(instances.odpsIns, instances.projectName, model.Name)
-				instance.startTime = time.Time(model.StartTime)
-				instance.endTime = time.Time(model.EndTime)
-				instance.status = model.Status
-				instance.owner = model.Owner
-
-				c <- InstanceOrErr{&instance, nil}
-			}
-
-			if resModel.Marker != "" {
-				queryArgs.Set("marker", resModel.Marker)
-				resModel = ResModel{}
-			} else {
-				break
-			}
+	var resModel ResModel
+	for {
+		err := client.GetWithModel(resources, queryArgs, &resModel)
+		if err != nil {
+			f(nil, err)
+			break
 		}
-	}()
 
-	return c
+		if len(resModel.Instances) == 0 {
+			break
+		}
+
+		for _, model := range resModel.Instances {
+			instance := NewInstance(instances.odpsIns, instances.projectName, model.Name)
+			instance.startTime = time.Time(model.StartTime)
+			instance.endTime = time.Time(model.EndTime)
+			instance.status = model.Status
+			instance.owner = model.Owner
+
+			f(&instance, nil)
+		}
+
+		if resModel.Marker != "" {
+			queryArgs.Set("marker", resModel.Marker)
+			resModel = ResModel{}
+		} else {
+			break
+		}
+	}
 }
 
 // ListInstancesQueued Get all instance Queued information, the information is in json string，you need parse it yourself。

@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
-	tunnel2 "github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
-	"log"
-	"os"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 )
 
 func main() {
@@ -36,8 +37,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-	tunnel := tunnel2.NewTunnel(odpsIns, tunnelEndpoint)
-	session, err := tunnel.CreateInstanceResultDownloadSession(project.Name(), ins.Id())
+	tunnelIns := tunnel.NewTunnel(odpsIns, tunnelEndpoint)
+	session, err := tunnelIns.CreateInstanceResultDownloadSession(project.Name(), ins.Id())
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -47,16 +48,13 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	for recordOrErr := range reader.Iterator() {
-		if recordOrErr.IsErr() {
-			log.Fatalf("%+v", recordOrErr.Error)
+	reader.Iterator(func(record data.Record, err error) {
+		if err != nil {
+			log.Fatalf("%+v", err)
 		}
-
-		record := recordOrErr.Data.(data.Record)
 		if record.Len() != 3 {
 			log.Fatalf("only select 3 columns, but get %d", record.Len())
 		}
-
 		fmt.Printf("name:%s, birthday:%s, extra:%s\n", record[0], record[1], record[2])
-	}
+	})
 }
