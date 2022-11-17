@@ -1,0 +1,61 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package tunnel
+
+import (
+	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
+	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
+	"github.com/aliyun/aliyun-odps-go-sdk/arrow/ipc"
+	"github.com/pkg/errors"
+)
+
+type RecordArrowWriter struct {
+	conn              *httpConnection
+	schema            *arrow.Schema
+	recordBatchWriter *ipc.RecordBatchWriter
+	httpWriter        *ArrowStreamWriter
+}
+
+func newRecordArrowWriter(conn *httpConnection, schema *arrow.Schema) RecordArrowWriter {
+	httpWriter := NewArrowStreamWriter(conn.Writer)
+
+	return RecordArrowWriter{
+		conn:              conn,
+		schema:            schema,
+		recordBatchWriter: ipc.NewRecordBatchWriter(httpWriter, ipc.WithSchema(schema)),
+		httpWriter:        httpWriter,
+	}
+}
+
+func (writer *RecordArrowWriter) WriteArrowRecord(record array.Record) error {
+	return writer.recordBatchWriter.Write(record)
+}
+
+func (writer *RecordArrowWriter) Close() error {
+	err1 := writer.recordBatchWriter.Close()
+	err2 := writer.httpWriter.Close()
+
+	if err1 != nil {
+		return errors.WithStack(err1)
+	}
+
+	if err2 != nil {
+		return errors.WithStack(err2)
+	}
+
+	return errors.WithStack(writer.conn.closeRes())
+}
