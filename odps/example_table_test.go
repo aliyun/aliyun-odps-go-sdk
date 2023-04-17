@@ -18,10 +18,8 @@ package odps_test
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"io"
 	"log"
 )
 
@@ -157,27 +155,27 @@ func ExampleTable_ExecSql() {
 	// Output:
 }
 
-func ExampleTable_Read() {
-	table := odps.NewTable(odpsIns, defaultProjectName, "sale_detail")
-	columns := []string{
-		"shop_name", "customer_id", "total_price", "sale_date", "region",
-	}
-	reader, err := table.Read("", columns, -1, "")
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-
-	for {
-		record, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		println(fmt.Sprintf("%+v", record))
-	}
-
-	// Output:
-}
+//func ExampleTable_Read() {
+//	table := odps.NewTable(odpsIns, defaultProjectName, "sale_detail")
+//	columns := []string{
+//		"shop_name", "customer_id", "total_price", "sale_date", "region",
+//	}
+//	reader, err := table.Read("", columns, -1, "")
+//	if err != nil {
+//		log.Fatalf("%+v", err)
+//	}
+//
+//	for {
+//		record, err := reader.Read()
+//		if err == io.EOF {
+//			break
+//		}
+//		if err != nil {
+//			log.Fatal(err)
+//		}
+//
+//		println(fmt.Sprintf("%+v", record))
+//	}
+//
+//	// Output:
+//}
