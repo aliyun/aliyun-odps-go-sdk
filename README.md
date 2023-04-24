@@ -210,7 +210,7 @@ Example代码中的输出都用了println, 这是因为大多示例虽然在没�
 
 
 # TODO
-<p>[ ]tunnel buffered writer</p>
+[comment]: <> (<p>[ ]tunnel buffered writer</p>)
 <p>[ ]request id打印开关</p>
 <p>[ ]sqldirver的dsn支持sql flag</p>
 
