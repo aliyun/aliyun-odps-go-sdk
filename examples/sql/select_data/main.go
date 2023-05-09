@@ -24,7 +24,7 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	selectSql := "select * from user_test where name=@name where age=20 and hometown='hangzhou';"
+	selectSql := "select * from user_test where name=@name and age=20 and hometown='hangzhou';"
 
 	rows, err := db.Query(
 		selectSql,

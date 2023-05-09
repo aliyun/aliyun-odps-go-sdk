@@ -22,6 +22,11 @@ import (
 )
 
 func tryConvertType(src interface{}, dst interface{}) error {
+	if src == nil {
+		dst = nil
+		return nil
+	}
+
 	srcT := reflect.TypeOf(src)
 	srcV := reflect.ValueOf(src)
 
