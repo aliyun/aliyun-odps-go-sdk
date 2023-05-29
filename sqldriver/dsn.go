@@ -33,7 +33,7 @@ var NewConfig = odps.NewConfig
 var NewConfigFromIni = odps.NewConfigFromIni
 
 // ParseDSN dsn格式如下
-// http://AccessId:AccessKey@host:port/path?project=""&sts_token=""&connTimeout=30&opTimeout=60
+// http://AccessId:AccessKey@host:port/path?project=""&stsToken=""&tcpConnectionTimeout=30&httpTimeout=60
 // 其中project参数为必填项
 func ParseDSN(dsn string) (*Config, error) {
 	u, err := url.Parse(dsn)
@@ -68,10 +68,10 @@ func ParseDSN(dsn string) (*Config, error) {
 	config.Endpoint = endpoint
 	config.ProjectName = projectName
 
-	var connTimeout, opTimeout string
+	var connTimeout, httpTimeout string
 
-	optionalParams := []string{"stsToken", "connTimeout", "opTimeout"}
-	paramPointer := []*string{&config.StsToken, &connTimeout, &opTimeout}
+	optionalParams := []string{"stsToken", "tcpConnectionTimeout", "httpTimeout"}
+	paramPointer := []*string{&config.StsToken, &connTimeout, &httpTimeout}
 	for i, p := range optionalParams {
 		v := u.Query().Get(p)
 		if v != "" {
@@ -86,8 +86,8 @@ func ParseDSN(dsn string) (*Config, error) {
 		}
 	}
 
-	if opTimeout != "" {
-		n, err := strconv.ParseInt(opTimeout, 10, 32)
+	if httpTimeout != "" {
+		n, err := strconv.ParseInt(httpTimeout, 10, 32)
 		if err != nil {
 			config.HttpTimeout = time.Duration(n) * time.Second
 		}

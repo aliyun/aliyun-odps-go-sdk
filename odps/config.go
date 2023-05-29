@@ -22,6 +22,7 @@ import (
 	"github.com/pkg/errors"
 	"gopkg.in/ini.v1"
 	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -124,6 +125,21 @@ func (c *Config) FormatDsn() string {
 	}
 	values := make(url.Values)
 	values.Set("project", c.ProjectName)
+
+	if c.StsToken != "" {
+		values.Set("stsToken", c.StsToken)
+	}
+
+	if c.HttpTimeout > 0 {
+		httpTimeout := int64(c.HttpTimeout) / int64(time.Second)
+		values.Set("httpTimeout", strconv.FormatInt(httpTimeout, 10))
+	}
+
+	if c.TcpConnectionTimeout > 0 {
+		connTimeOut := int64(c.TcpConnectionTimeout) / int64(time.Second)
+		values.Set("tcpConnectionTimeout", strconv.FormatInt(connTimeOut, 10))
+	}
+
 	dsn.RawQuery = values.Encode()
 	dsn.User = url.UserPassword(c.AccessId, c.AccessKey)
 
