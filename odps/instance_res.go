@@ -17,6 +17,7 @@
 package odps
 
 import (
+	"encoding/base64"
 	"encoding/xml"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/pkg/errors"
@@ -120,6 +121,19 @@ type TaskSummary struct {
 type TaskResult struct {
 	Type   string `xml:"Type,attr"`
 	Name   string
-	Result string
 	Status TaskStatus
+	Result struct {
+		TransForm string `xml:"Transform,attr"`
+		Format    string `xml:"Format,attr"` // 这个字段没有用到
+		Content   string `xml:",cdata"`
+	} `xml:"Result"`
+}
+
+func (tr *TaskResult) Content() string {
+	if tr.Result.TransForm == "Base64" {
+		bytes, _ := base64.StdEncoding.DecodeString(tr.Result.Content)
+		return string(bytes)
+	}
+
+	return tr.Result.Content
 }

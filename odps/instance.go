@@ -321,7 +321,7 @@ func (instance *Instance) WaitForSuccess() error {
 					return errors.Errorf("get task %s with status %s", task.Name, task.Status)
 				}
 
-				return errors.New(results[0].Result)
+				return errors.New(results[0].Content())
 			case TaskSuccess:
 				continue
 			case TaskRunning, TaskWaiting:

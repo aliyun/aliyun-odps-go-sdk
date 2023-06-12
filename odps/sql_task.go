@@ -75,7 +75,7 @@ func (t *SQLTask) GetSelectResultAsCsv(i *Instance, withColumnName bool) (*csv.R
 		return nil, errors.Errorf("failed to get result from instance %s", i.Id())
 	}
 
-	reader := csv.NewReader(strings.NewReader(results[0].Result))
+	reader := csv.NewReader(strings.NewReader(results[0].Content()))
 	if !withColumnName {
 		_, _ = reader.Read()
 	}
