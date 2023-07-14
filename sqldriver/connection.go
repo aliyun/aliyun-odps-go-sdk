@@ -92,20 +92,18 @@ func (c *connection) query(query string) (driver.Rows, error) {
 	}
 
 	recordCount := session.RecordCount()
+	if recordCount == 0 {
+		recordCount = 1
+	}
+
 	reader, err := session.OpenRecordReader(0, recordCount, 0, nil)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
 	schema := session.Schema()
-	columns := make([]string, len(schema.Columns))
-
-	for i, col := range schema.Columns {
-		columns[i] = col.Name
-	}
-
 	rows := &rowsReader{
-		columns: columns,
+		columns: schema.Columns,
 		inner:   reader,
 	}
 
