@@ -2,6 +2,7 @@
 Please note that this is far from production ready, it is still under active development
 
 # Install
+required >= go1.15
 ```shell
 go get github.com/aliyun/aliyun-odps-go-sdk
 ```

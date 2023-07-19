@@ -184,7 +184,15 @@ func (r *RecordProtocWriter) writeField(val data.Data) error {
 		return errors.WithStack(r.protocWriter.WriteBytes(val))
 	case data.DateTime:
 		t := val.Time()
-		milliSeconds := t.UnixMilli()
+		// 应该直接写成： milliSeconds := t.UnixMilli()
+		// 但是 Time.UnixMilli is added in go.1.17
+		// func (t Time) UnixMilli() int64 {
+		//	return t.unixSec()*1e3 + int64(t.nsec())/1e6
+		// }
+		unixSec := t.Unix()
+		nanoSec := t.Nanosecond()
+		milliSeconds := unixSec*1e3 + int64(nanoSec)/1e6
+
 		// TODO 需要根据schema中的shouldTransform，来确定是否将时间转换为本地时区的时间
 		r.recordCrc.Update(milliSeconds)
 		return errors.WithStack(r.protocWriter.WriteSInt64(milliSeconds))

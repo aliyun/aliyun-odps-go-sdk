@@ -143,7 +143,10 @@ func (client *RestClient) Do(req *http.Request) (*http.Response, error) {
 	req.Header.Set(common.HttpHeaderDate, gmtTime)
 	query := req.URL.Query()
 
-	if !query.Has("curr_project") && client.defaultProject != "" {
+	_, ok := query["current_project"]
+	// in go1.17, 下面的语句应该这样写：if !query.Has("curr_project") && client.defaultProject != "" {
+	// 但values.Has方法是在go1.17才引入的，为了兼容go1.15，所以不用Has方法
+	if !ok && client.defaultProject != "" {
 		query.Set("curr_project", client.defaultProject)
 	}
 	req.URL.RawQuery = query.Encode()
