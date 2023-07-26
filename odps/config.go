@@ -35,6 +35,7 @@ type Config struct {
 	ProjectName          string
 	TcpConnectionTimeout time.Duration
 	HttpTimeout          time.Duration
+	TunnelEndpoint       string
 }
 
 func NewConfig() *Config {
@@ -79,6 +80,11 @@ func NewConfigFromIni(iniPath string) (*Config, error) {
 		if err == nil {
 			conf.HttpTimeout = time.Duration(v) * time.Second
 		}
+	}
+
+	tunnelEndpoint, err := section.GetKey("tunnel_endpoint")
+	if err == nil {
+		conf.TunnelEndpoint = tunnelEndpoint.String()
 	}
 
 	return conf, nil
@@ -138,6 +144,10 @@ func (c *Config) FormatDsn() string {
 	if c.TcpConnectionTimeout > 0 {
 		connTimeOut := int64(c.TcpConnectionTimeout) / int64(time.Second)
 		values.Set("tcpConnectionTimeout", strconv.FormatInt(connTimeOut, 10))
+	}
+
+	if c.TunnelEndpoint != "" {
+		values.Set("tunnelEndpoint", c.TunnelEndpoint)
 	}
 
 	dsn.RawQuery = values.Encode()

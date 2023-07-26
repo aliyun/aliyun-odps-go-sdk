@@ -70,8 +70,8 @@ func ParseDSN(dsn string) (*Config, error) {
 
 	var connTimeout, httpTimeout string
 
-	optionalParams := []string{"stsToken", "tcpConnectionTimeout", "httpTimeout"}
-	paramPointer := []*string{&config.StsToken, &connTimeout, &httpTimeout}
+	optionalParams := []string{"stsToken", "tcpConnectionTimeout", "httpTimeout", "tunnelEndpoint"}
+	paramPointer := []*string{&config.StsToken, &connTimeout, &httpTimeout, &config.TunnelEndpoint}
 	for i, p := range optionalParams {
 		v := u.Query().Get(p)
 		if v != "" {

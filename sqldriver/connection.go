@@ -25,11 +25,12 @@ import (
 )
 
 type connection struct {
-	odpsIns *odps.Odps
+	odpsIns        *odps.Odps
+	tunnelEndpoint string
 }
 
-func newConnection(odpsIns *odps.Odps) *connection {
-	return &connection{odpsIns: odpsIns}
+func newConnection(odpsIns *odps.Odps, tunnelEndpoint string) *connection {
+	return &connection{odpsIns: odpsIns, tunnelEndpoint: tunnelEndpoint}
 }
 
 // Begin sql/driver.Conn接口实现，由于odps不支持实物，方法的实现为空
@@ -80,11 +81,18 @@ func (c *connection) query(query string) (driver.Rows, error) {
 	}
 
 	// 调用instance tunnel, 下载结果
-	tunnelIns, err := tunnel.NewTunnelFromProject(c.odpsIns.DefaultProject())
-	if err != nil {
-		return nil, err
+	tunnelEndpoint := c.tunnelEndpoint
+
+	if tunnelEndpoint == "" {
+		project := c.odpsIns.DefaultProject()
+		tunnelEndpoint, err = project.GetTunnelEndpoint()
+
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
 	}
 
+	tunnelIns := tunnel.NewTunnel(c.odpsIns, tunnelEndpoint)
 	projectName := c.odpsIns.DefaultProjectName()
 	session, err := tunnelIns.CreateInstanceResultDownloadSession(projectName, ins.Id())
 	if err != nil {
