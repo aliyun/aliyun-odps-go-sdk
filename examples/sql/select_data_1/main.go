@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 	"log"
 	"os"
@@ -17,7 +16,6 @@ func main() {
 	}
 
 	dsn := config.FormatDsn()
-	fmt.Println("%s", dsn)
 	// or dsn := "http://<accessId>:<accessKey>@<endpoint>?project=<project>"
 
 	db, err := sql.Open("odps", dsn)
@@ -42,7 +40,10 @@ func main() {
 	}
 
 	values := make([]interface{}, len(columnTypes))
+
 	for i, columnType := range columnTypes {
+		fmt.Println(columnType.ScanType())
+
 		values[i] = reflect.New(columnType.ScanType()).Interface()
 	}
 
@@ -51,9 +52,10 @@ func main() {
 		if err != nil {
 			log.Fatalf("%+v", err)
 		}
+
 		fmt.Printf(
-			"name:%s, score:%d, birthday:%s, extra:%s, age:%d, hometown: %s",
-			values[0], *(values[1].(*data.Int)), values[2], values[3], *(values[4].(*data.Int)), values[5],
+			"name:%v, score:%v, birthday:%v, extra:%v, age:%v, hometown: %v\n",
+			values[0], values[1], values[2], values[3], values[4], values[5],
 		)
 	}
 }

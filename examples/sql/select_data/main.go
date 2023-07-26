@@ -35,12 +35,12 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	var name data.String
-	var score int64
-	var birthday data.DateTime
+	var name sql.NullString
+	var score sql.NullInt64
+	var birthday sql.NullTime
 	extra := data.NewStruct()
-	var age int64
-	var hometown data.String
+	var age sql.NullInt64
+	var hometown sql.NullString
 
 	for rows.Next() {
 		err = rows.Scan(&name, &score, &birthday, &extra, &age, &hometown)

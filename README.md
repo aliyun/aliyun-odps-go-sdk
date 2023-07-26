@@ -166,6 +166,29 @@ odps sdk中的data package定义了与odps数据类型对应的数据结构，�
 | Map         | map         |
 | Struct      | struct      |
 
+通过sql driver获取到的数据类型与odps数据类型的对应关系如下
+| odps列类型 | not nullable      | nullable          |
+|-----------|-------------------|-------------------|
+| bigint    | int64             | sql.NullInt64     |
+| int       | int               | sql.NullInt64     |
+| smallint  | int16             | sql.NullInt64     |
+| tinyint   | int8              | sql.NullInt64     |
+| double    | float64           | sql.NullFloat64   |
+| float     | float32           | sql.NullFloat64   |
+| string    | string            | sql.NullString    |
+| boolean   | bool              | sql.NullBool      |
+| char      | string            | sql.NullString    |
+| varchar   | string            | sql.NullString    |
+| datetime  | time.Time         | sql.NullTime      |
+| date      | time.Time         | sql.NullTime      |
+| timestamp | time.Time         | sql.NullTime      |
+| binary    | sql.RawByte       | RawBytes          |
+| decimal   | odps data.Decimal | odps data.Decimal |
+| map       | odps data.Map     | odps data.Map     |
+| array     | odps data.Array   | odps data.Array   |
+| struct    | odps data.Struct  | odps data.Struct  |
+
+
 ### 使用instance执行select语句，获取select结果
 使用instance执行select语句后, 可以
 1. 使用获取instance结果的接口获取instance的结果，这个结果就是select的返回值。instance结果接口返回的select数据有数量限制， 默认为1W条，而且返回的record的每个字段都是string类型
