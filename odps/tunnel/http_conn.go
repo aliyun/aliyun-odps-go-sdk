@@ -42,13 +42,13 @@ func (conn *httpConnection) closeRes() error {
 
 	res := rOrE.res
 
+	if res.StatusCode/100 != 2 {
+		return errors.WithStack(restclient.NewHttpNotOk(res))
+	}
+
 	err := res.Body.Close()
 	if err != nil {
 		return errors.WithStack(err)
-	}
-
-	if res.StatusCode/100 != 2 {
-		return errors.WithStack(restclient.NewHttpNotOk(res))
 	}
 
 	return nil

@@ -42,6 +42,7 @@ func NewHttpNotOk(res *http.Response) HttpNotOk {
 
 	if res.Body != nil {
 		body, _ = ioutil.ReadAll(res.Body)
+		_ = res.Body.Close()
 	}
 
 	return HttpNotOk{
