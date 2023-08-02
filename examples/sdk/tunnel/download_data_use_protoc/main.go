@@ -29,8 +29,8 @@ func main() {
 	tunnel := tunnel2.NewTunnel(odpsIns, tunnelEndpoint)
 	session, err := tunnel.CreateDownloadSession(
 		project.Name(),
-		"user_test",
-		tunnel2.SessionCfg.WithPartitionKey("age=20,hometown='hangzhou'"),
+		"all_types_demo",
+		tunnel2.SessionCfg.WithPartitionKey("p1=20,p2='hangzhou'"),
 	)
 
 	if err != nil {
@@ -38,9 +38,10 @@ func main() {
 	}
 
 	recordCount := session.RecordCount()
-	fmt.Printf("record count is %d", recordCount)
+	fmt.Printf("record count is %d\n", recordCount)
 
 	reader, err := session.OpenRecordReader(0, recordCount, nil)
+	schema := session.Schema()
 
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -51,7 +52,19 @@ func main() {
 			log.Fatalf("%+v", err)
 		}
 
-		fmt.Printf("name:%s, birthday:%s, extra:%s\n", record[0], record[1], record[2])
+		for i, d := range record {
+			if d == nil {
+				fmt.Printf("%s=null", schema.Columns[i].Name)
+			} else {
+				fmt.Printf("%s=%s", schema.Columns[i].Name, d.Sql())
+			}
+
+			if i < record.Len()-1 {
+				fmt.Printf(", ")
+			} else {
+				fmt.Println()
+			}
+		}
 	})
 
 	if err = reader.Close(); err != nil {

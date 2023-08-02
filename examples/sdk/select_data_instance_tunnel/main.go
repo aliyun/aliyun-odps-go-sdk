@@ -20,7 +20,7 @@ func main() {
 	aliAccount := account.NewAliyunAccount(conf.AccessId, conf.AccessKey)
 	odpsIns := odps.NewOdps(aliAccount, conf.Endpoint)
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
-	sql := "select * from data_type_demo where p1=20 and p2='hangzhou';"
+	sql := "select * from all_types_demo where p1=20 and p2='hangzhou';"
 
 	ins, err := odpsIns.ExecSQl(sql)
 	if err != nil {
@@ -56,14 +56,25 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
+	schema := session.Schema()
+
 	reader.Iterator(func(record data.Record, err error) {
 		if err != nil {
 			log.Fatalf("%+v", err)
 		}
-		if record.Len() != 18 {
-			log.Fatalf("only select 3 columns, but get %d", record.Len())
-		}
 
-		fmt.Printf("%v\n", record)
+		for i, d := range record {
+			if d == nil {
+				fmt.Printf("%s=null", schema.Columns[i].Name)
+			} else {
+				fmt.Printf("%s=%s", schema.Columns[i].Name, d.Sql())
+			}
+
+			if i < record.Len()-1 {
+				fmt.Printf(", ")
+			} else {
+				fmt.Println()
+			}
+		}
 	})
 }

@@ -23,11 +23,11 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	selectSql := "select * from user_test where name=@name and age=20 and hometown='hangzhou';"
+	selectSql := "select * from all_types_demo where bigint_type=@bigint_type and p1=20 and p2='hangzhou';"
 
 	rows, err := db.Query(
 		selectSql,
-		sql.Named("name", "'xiaoming'"),
+		sql.Named("bigint_type", 100000000000),
 	)
 
 	if err != nil {
@@ -39,23 +39,70 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	values := make([]interface{}, len(columnTypes))
+	record := make([]interface{}, len(columnTypes))
 
 	for i, columnType := range columnTypes {
-		fmt.Println(columnType.ScanType())
+		record[i] = reflect.New(columnType.ScanType()).Interface()
+		t := reflect.TypeOf(record[i])
 
-		values[i] = reflect.New(columnType.ScanType()).Interface()
+		fmt.Printf("kind=%s, name=%s\n", t.Kind(), t.String())
 	}
 
+	columns, err := rows.Columns()
+
 	for rows.Next() {
-		err = rows.Scan(values...)
+		err = rows.Scan(record...)
 		if err != nil {
 			log.Fatalf("%+v", err)
 		}
 
-		fmt.Printf(
-			"name:%v, score:%v, birthday:%v, extra:%v, age:%v, hometown: %v\n",
-			values[0], values[1], values[2], values[3], values[4], values[5],
-		)
+		for i, r := range record {
+			rr := r.(sqldriver.NullAble)
+
+			if rr.IsNull() {
+				fmt.Printf("%s=NULL", columns[i])
+			} else {
+				switch r.(type) {
+				case *sqldriver.NullInt8:
+					fmt.Printf("%s=%d", columns[i], r.(*sqldriver.NullInt8).Int8)
+				case *sqldriver.NullInt16:
+					fmt.Printf("%s=%d", columns[i], r.(*sqldriver.NullInt16).Int16)
+				case *sqldriver.NullInt32:
+					fmt.Printf("%s=%d", columns[i], r.(*sqldriver.NullInt32).Int32)
+				case *sqldriver.NullInt64:
+					fmt.Printf("%s=%d", columns[i], r.(*sqldriver.NullInt64).Int64)
+				case *sqldriver.Binary:
+					fmt.Printf("%s=%s", columns[i], r)
+				case *sqldriver.NullFloat32:
+					fmt.Printf("%s=%f", columns[i], r.(*sqldriver.NullFloat32).Float32)
+				case *sqldriver.NullFloat64:
+					fmt.Printf("%s=%f", columns[i], r.(*sqldriver.NullFloat64).Float64)
+				case *sqldriver.Decimal:
+					fmt.Printf("%s=%s", columns[i], r)
+				case *sqldriver.NullString:
+					fmt.Printf("%s=%s", columns[i], r.(*sqldriver.NullString).String)
+				case *sqldriver.NullDate:
+					fmt.Printf("%s=%s", columns[i], r)
+				case *sqldriver.NullDateTime:
+					fmt.Printf("%s=%s", columns[i], r)
+				case *sqldriver.NullTimeStamp:
+					fmt.Printf("%s=%s", columns[i], r)
+				case *sqldriver.NullBool:
+					fmt.Printf("%s=%v", columns[i], r.(*sqldriver.NullBool).Bool)
+				case *sqldriver.Map:
+					fmt.Printf("%s=%s", columns[i], r)
+				case *sqldriver.Array:
+					fmt.Printf("%s=%s", columns[i], r)
+				case *sqldriver.Struct:
+					fmt.Printf("%s=%s", columns[i], r)
+				}
+			}
+
+			if i < len(record)-1 {
+				fmt.Printf(", ")
+			} else {
+				fmt.Print("\n\n")
+			}
+		}
 	}
 }

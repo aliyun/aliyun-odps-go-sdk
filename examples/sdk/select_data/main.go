@@ -19,7 +19,7 @@ func main() {
 	aliAccount := account.NewAliyunAccount(conf.AccessId, conf.AccessKey)
 	odpsIns := odps.NewOdps(aliAccount, conf.Endpoint)
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
-	sql := "select * from data_type_demo where p1=20 and p2='hangzhou';"
+	sql := "select * from all_types_demo where p1>0 or p2 > '';"
 
 	sqlTask := odps.NewSqlTask("select", sql, "", nil)
 	ins, err := sqlTask.RunInOdps(odpsIns, odpsIns.DefaultProjectName())

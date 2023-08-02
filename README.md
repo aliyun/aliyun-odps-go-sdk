@@ -22,9 +22,6 @@ go get github.com/aliyun/aliyun-odps-go-sdk
 ## sqldriver
 go sql/driver 接口的odps实现
 
-## arrow
-https://github.com/apache/arrow/tree/master/go 的修改版本，ipc package添加了RecordBatch message的reader和writer方法。
-在使用odps sdk操作arrow时，需使用"github.com/aliyun/aliyun-odps-go-sdk/arrow"作为arrow的import path。
 
 # 使用注意事项
 1. Project, Table, Instance, Partition等需要从odps后台加载数据的对象，在除使用Name, Id等基本属性的Getter外, 需要先调用Load方法。
@@ -39,7 +36,6 @@ https://github.com/apache/arrow/tree/master/go 的修改版本，ipc package添�
 <p>[x] instance</p>
 <p>[x] tunnel</p>
 <p>[x] table tunnel</p>
-<p>    [x] table arrow tunnel</p>
 <p>    [x] table protoc tunnel</p>
 <p>    [x] table stream tunnel</p>
 <p>[ ] resource</p>
@@ -105,42 +101,18 @@ struct<address:array<string>, hobby<string>>类型的{"address":["apsaras","efc"
 [示例代码](./examples/sql/insert_data/main.go)
 
 ### 通过tunnel上传数据(建议使用)
-#### 通过protoc协议上传数据(建议使用)
+#### 通过protoc协议上传数据
 简单的上传过程为
 1. 构建Tunnel
 2. 使用Tunnel创建UploadSession, 创建Session时，可以指定Partition Key, 压缩方法等
 3. 通过UploadSession获取schema
 4. 使用schema创建record
 5. 使用UploadSession创建record writer， 注意创建record writer的时候要指定block id。服务端这时会将写入的数据存入block id相关的文件
-6. 使用record writer写arrow record
-7. 使用UploadSession的commit方法向tunnel server指示可以将写入的数据写进table。commit时要指定block id
+6. 使用UploadSession的commit方法向tunnel server指示可以将写入的数据写进table。commit时要指定block id
    
 在上传数据量较大时，可以用一批block ids创建多个record writer, 用这些writer并行写入数据。这时，再commit的时候，要传入这批block ids。
-
-
-#### 通过arrow协议上传数据
-简单的上传过程为
-1. 构建Tunnel
-2. 使用Tunnel创建UploadSession, 创建Session时，可以指定Partition Key, 压缩方法等
-3. 通过UploadSession获取arrow schema
-4. 使用arrow schema创建arrow record
-5. 使用UploadSession创建record writer， 注意创建record writer的时候要指定block id。服务端这时会将写入的数据存入block id相关的文件
-6. 使用record writer写arrow record
-7. 使用UploadSession的commit方法向tunnel server指示可以将写入的数据写进table。commit时要指定block id
-
-在上传数据量较大时，可以用一批block ids创建多个record writer, 用这些writer并行写入数据。这时，再commit的时候，要传入这批block ids。
-
 [示例代码](./examples/sdk/tunnel/upload_data_use_protoc/main.go)
 
-**注意**: 在构造arrow timestamp类型的数据时，要注意取time的UnixMilli时间戳，并且解析时间字符串是需要传入location对象，示例代码如下
-```go
-builder := fieldBuilder.(*array.TimestampBuilder)
-l, _ := time.LoadLocation("Local")
-t, _ := time.ParseInLocation("2006-01-02 15:04:05", "2021-12-20 10:00:00", l)
-builder.Append(arrow.Timestamp(t.UnixMilli()))
-```
-
-[示例代码](./examples/sdk/tunnel/upload_data_use_arrow/main.go)
 
 ## 查询数据
 odps sdk中的data package定义了与odps数据类型对应的数据结构，两者之间的对应关系为
@@ -167,26 +139,26 @@ odps sdk中的data package定义了与odps数据类型对应的数据结构，�
 | Struct      | struct      |
 
 通过sql driver获取到的数据类型与odps数据类型的对应关系如下
-| odps列类型 | not nullable      | nullable          |
-|-----------|-------------------|-------------------|
-| bigint    | int64             | sql.NullInt64     |
-| int       | int               | sql.NullInt64     |
-| smallint  | int16             | sql.NullInt64     |
-| tinyint   | int8              | sql.NullInt64     |
-| double    | float64           | sql.NullFloat64   |
-| float     | float32           | sql.NullFloat64   |
-| string    | string            | sql.NullString    |
-| boolean   | bool              | sql.NullBool      |
-| char      | string            | sql.NullString    |
-| varchar   | string            | sql.NullString    |
-| datetime  | time.Time         | sql.NullTime      |
-| date      | time.Time         | sql.NullTime      |
-| timestamp | time.Time         | sql.NullTime      |
-| binary    | sql.RawByte       | RawBytes          |
-| decimal   | odps data.Decimal | odps data.Decimal |
-| map       | odps data.Map     | odps data.Map     |
-| array     | odps data.Array   | odps data.Array   |
-| struct    | odps data.Struct  | odps data.Struct  |
+| odps  列类型 | not nullable         | nullable                     |
+|-----------|------------------------|------------------------------|
+| bigint    | int64                  | odps/sqldriver.NullInt64     |
+| int       | int                    | odps/sqldriver.NullInt32     |
+| smallint  | int16                  | odps/sqldriver.NullInt16     |
+| tinyint   | int8                   | odps/sqldriver.NullInt8      |
+| double    | float64                | odps/sqldriver.NullFloat64  |
+| float     | float32                | odps/sqldriver.NullFloat32   |
+| string    | string                 | odps/sqldriver.NullString    |
+| boolean   | bool                   | odps/sqldriver.NullBool      |
+| char      | string                 | odps/sqldriver.NullString    |
+| varchar   | string                 | odps/sqldriver.NullString    |
+| datetime  | time.Time              | odps/sqldriver.NullDateTime  |
+| date      | time.Time              | odps/sqldriver.NullDate      |
+| timestamp | time.Time              | odps/sqldriver.NullTimestamp |
+| binary    | odps/sqldriver.Binary  | odps/sqldriver.Binary        |
+| decimal   | odps/sqldriver.Decimal | odps/sqldriver.Decimal       |
+| map       | odps/sqldriver.Map     | odps/sqldriver.Map           |
+| array     | odps/sqldriver.Array   | odps/sqldriver.Array         |
+| struct    | odps/sqldriver.Struct  | odps/sqldriver.Struct        |
 
 
 ### 使用instance执行select语句，获取select结果
@@ -198,13 +170,11 @@ odps sdk中的data package定义了与odps数据类型对应的数据结构，�
 
 ### 使用go sql执行select语句并获取结果
 **这种方式是建议使用的执行select并获取结果的方法**。go sql使用instance tunnel获取select结果。需要注意的是，Query方法返回Rows，Row需要调用scan方法提取各个字段。
-在Scan时，int32, int8, int16, int64, float32, float64, []byte可以作为go sdk的Int, TinyInt, SmallInt, BigInt, Float, Double类型类使用。
-其他类型需要先定义相应类型的变量，然后把变量的指针传递个Scan方法。
-
-[示例代码](./examples/sql/select_data/main.go)
+[示例代码1](./examples/sql/select_data/main.go)
+[示例代码2](./examples/sql/select_data_1/main.go)
 
 ## 通过tunnel下载table数据
-odps tunnel支持以protoc(自定义)和arrow(自定义)格式下载数据.
+odps tunnel支持以protoc(自定义)格式下载数据.
 
 简单的下载过程如下:
 1. 构建Tunnel
@@ -215,9 +185,6 @@ odps tunnel支持以protoc(自定义)和arrow(自定义)格式下载数据.
 使用protoc格式下载数据时， 获取的record中的字段类型为odps go sdk数据类型
 [示例代码](./examples/sdk/tunnel/download_data_use_protoc/main.go)
 
-
-使用arrow格式下载数据时，获取的record为Arrow.Record类，目前需自行对Arrow.Record数据进行解析。
-[示例代码](./examples/sdk/tunnel/download_data_use_arrow/main.go)
 
 ## 操作project, table, instance, partition
 相应的操作可以参照文档或示例代码</br>

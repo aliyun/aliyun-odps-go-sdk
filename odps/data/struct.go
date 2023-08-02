@@ -38,32 +38,34 @@ func NewStructField(name string, value Data) StructField {
 
 // Struct 这里用slice而不用map，是要保持Field顺序
 type Struct struct {
-	typ          *datatype.StructType
+	typ          datatype.StructType
 	fields       []StructField
 	fieldIndexes map[string]int
+	Valid        bool
 }
 
 func NewStruct() *Struct {
 	return &Struct{
-		typ:          nil,
+		typ:          datatype.StructType{},
 		fields:       make([]StructField, 0),
 		fieldIndexes: make(map[string]int),
 	}
 }
 
-func NewStructWithTyp(typ *datatype.StructType) *Struct {
+func NewStructWithTyp(typ datatype.StructType) *Struct {
 	return &Struct{
 		typ:          typ,
 		fields:       make([]StructField, 0),
 		fieldIndexes: make(map[string]int),
+		Valid:        true,
 	}
 }
 
-func (s *Struct) Type() datatype.DataType {
-	return *s.typ
+func (s Struct) Type() datatype.DataType {
+	return s.typ
 }
 
-func (s *Struct) String() string {
+func (s Struct) String() string {
 	var sb strings.Builder
 	sb.WriteString("struct<")
 	n := len(s.fields) - 1
@@ -82,7 +84,7 @@ func (s *Struct) String() string {
 	return sb.String()
 }
 
-func (s *Struct) Sql() string {
+func (s Struct) Sql() string {
 	var sb strings.Builder
 	sb.WriteString("named_struct(")
 	n := len(s.fields) - 1
@@ -143,7 +145,7 @@ func (s *Struct) SetField(fieldName string, a interface{}) error {
 }
 
 func (s *Struct) SafeSetField(fieldName string, i interface{}) error {
-	if s.typ == nil {
+	if s.typ.Fields == nil {
 		return errors.New("type of Struct has not be set")
 	}
 
@@ -161,11 +163,11 @@ func (s *Struct) SafeSetField(fieldName string, i interface{}) error {
 	}
 
 	if fieldType == nil {
-		return errors.Errorf("cannot set %s to %s", fieldName, *s.typ)
+		return errors.Errorf("cannot set %s to %s", fieldName, s.typ)
 	}
 
 	if !datatype.IsTypeEqual(fieldType, d.Type()) {
-		return errors.Errorf("cannot set type %s to %s of %s", d.Type(), fieldName, *s.typ)
+		return errors.Errorf("cannot set type %s to %s of %s", d.Type(), fieldName, s.typ)
 	}
 
 	_ = s.SetField(fieldName, d)

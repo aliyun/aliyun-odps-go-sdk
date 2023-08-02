@@ -23,7 +23,7 @@ import (
 
 func tryConvertType(src interface{}, dst interface{}) error {
 	if src == nil {
-		dst = nil
+		// TODO 这个地方要看一下, 要不要做: dst = nil
 		return nil
 	}
 

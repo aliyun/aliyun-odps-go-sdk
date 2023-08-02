@@ -167,15 +167,23 @@ func (r *RecordProtocWriter) writeField(val data.Data) error {
 	case data.TinyInt:
 		r.recordCrc.Update(int64(val))
 		return errors.WithStack(r.protocWriter.WriteSInt64(int64(val)))
-	case *data.String:
-		b := []byte(string(*val))
+	case data.String:
+		b := []byte(string(val))
 		r.recordCrc.Update(b)
 		return errors.WithStack(r.protocWriter.WriteBytes(b))
 	case *data.VarChar:
 		b := []byte(val.Data())
 		r.recordCrc.Update(b)
 		return errors.WithStack(r.protocWriter.WriteBytes(b))
+	case data.VarChar:
+		b := []byte(val.Data())
+		r.recordCrc.Update(b)
+		return errors.WithStack(r.protocWriter.WriteBytes(b))
 	case *data.Char:
+		b := []byte(val.Data())
+		r.recordCrc.Update(b)
+		return errors.WithStack(r.protocWriter.WriteBytes(b))
+	case data.Char:
 		b := []byte(val.Data())
 		r.recordCrc.Update(b)
 		return errors.WithStack(r.protocWriter.WriteBytes(b))
@@ -228,19 +236,29 @@ func (r *RecordProtocWriter) writeField(val data.Data) error {
 		}
 
 		return errors.WithStack(r.protocWriter.WriteSInt32(nanoSeconds))
+	case data.Decimal:
+		b := []byte(val.Value())
+		r.recordCrc.Update(b)
+		return errors.WithStack(r.protocWriter.WriteBytes(b))
 	case *data.Decimal:
 		b := []byte(val.Value())
 		r.recordCrc.Update(b)
 		return errors.WithStack(r.protocWriter.WriteBytes(b))
+	case data.Array:
+		return errors.WithStack(r.writeArray(val.ToSlice()))
 	case *data.Array:
 		return errors.WithStack(r.writeArray(val.ToSlice()))
+	case data.Map:
+		return errors.WithStack(r.writeMap(&val))
 	case *data.Map:
 		return errors.WithStack(r.writeMap(val))
+	case data.Struct:
+		return errors.WithStack(r.writeStruct(&val))
 	case *data.Struct:
 		return errors.WithStack(r.writeStruct(val))
 	}
 
-	return errors.Errorf("invalid data type %t", val)
+	return errors.Errorf("invalid data type %v", val.Type())
 }
 
 func (r *RecordProtocWriter) writeArray(val []data.Data) error {

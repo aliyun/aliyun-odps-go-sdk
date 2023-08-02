@@ -50,6 +50,8 @@ func tryConvertGoToOdpsData(v reflect.Value) (Data, error) {
 		return Bool(v.Interface().(bool)), nil
 	case reflect.Int8:
 		return TinyInt(v.Interface().(int8)), nil
+	case reflect.Int:
+		return Int(v.Interface().(int)), nil
 	case reflect.Int32:
 		return Int(v.Interface().(int32)), nil
 	case reflect.Int16:
@@ -62,7 +64,7 @@ func tryConvertGoToOdpsData(v reflect.Value) (Data, error) {
 		return Double(v.Interface().(float64)), nil
 	case reflect.String:
 		s := String(v.Interface().(string))
-		return &s, nil
+		return s, nil
 	case reflect.Array, reflect.Slice:
 		arr := NewArray()
 		for i, n := 0, v.Len(); i < n; i++ {

@@ -24,58 +24,42 @@ import (
 )
 
 type Map struct {
-	typ  *datatype.MapType
-	data map[Data]Data
+	typ   datatype.MapType
+	data  map[Data]Data
+	Valid bool
 }
 
 func NewMap() *Map {
 	return &Map{
-		typ:  nil,
+		typ:  datatype.MapType{},
 		data: make(map[Data]Data),
 	}
 }
 
-func NewMapWithType(typ *datatype.MapType) *Map {
+func NewMapWithType(typ datatype.MapType) *Map {
 	return &Map{
-		typ:  typ,
-		data: make(map[Data]Data),
+		typ:   typ,
+		data:  make(map[Data]Data),
+		Valid: true,
 	}
 }
 
-func (m *Map) Type() datatype.DataType {
-	return *m.typ
+func (m Map) Type() datatype.DataType {
+	return m.typ
 }
 
-func (m *Map) String() string {
+func (m Map) String() string {
+	return m.Sql()
+}
+
+func (m Map) Sql() string {
 	i, n := 0, len(m.data)
 	if n == 0 {
 		return "map()"
 	}
 
 	sb := strings.Builder{}
-
-	for key, value := range m.data {
-		sb.WriteString(key.String())
-		sb.WriteString(", ")
-		sb.WriteString(value.String())
-
-		i += 1
-		if i < n {
-			sb.WriteString(", ")
-		}
-	}
-
-	sb.WriteString(")")
-	return sb.String()
-}
-
-func (m *Map) Sql() string {
-	i, n := 0, len(m.data)
-	if n == 0 {
-		return "map()"
-	}
-
-	sb := strings.Builder{}
+	sb.WriteString("map(")
 
 	for key, value := range m.data {
 		sb.WriteString(key.Sql())
@@ -108,7 +92,7 @@ func (m *Map) Set(keyI interface{}, valueI interface{}) error {
 }
 
 func (m *Map) SafeSet(keyI Data, valueI Data) error {
-	if m.typ == nil {
+	if m.typ.KeyType == nil || m.typ.ValueType == nil {
 		return errors.New("element type of Map has not be set")
 	}
 
@@ -123,11 +107,11 @@ func (m *Map) SafeSet(keyI Data, valueI Data) error {
 	}
 
 	if !datatype.IsTypeEqual(key.Type(), m.typ.KeyType) {
-		return errors.Errorf("fail to set key of type %s to %s", key.Type(), *m.typ)
+		return errors.Errorf("fail to set key of type %s to %s", key.Type(), m.typ)
 	}
 
 	if !datatype.IsTypeEqual(value.Type(), m.typ.ValueType) {
-		return errors.Errorf("fail to set key of type %s to %s", value.Type(), *m.typ)
+		return errors.Errorf("fail to set key of type %s to %s", value.Type(), m.typ)
 	}
 
 	m.data[key] = value

@@ -57,15 +57,27 @@ func NewChar(length int, data string) (*Char, error) {
 	return &Char{length: length, data: data}, nil
 }
 
-func (c *Char) Type() datatype.DataType {
+func MakeChar(length int, data string) (Char, error) {
+	if length > 255 {
+		return Char{}, errors.Errorf("max length of char is 255, not %d is given", length)
+	}
+
+	if len(data) > length {
+		return Char{}, errors.WithStack(NewCharOverflowError(length, len(data)))
+	}
+
+	return Char{length: length, data: data}, nil
+}
+
+func (c Char) Type() datatype.DataType {
 	return datatype.NewCharType(c.length)
 }
 
-func (c *Char) String() string {
+func (c Char) String() string {
 	return c.data
 }
 
-func (c *Char) Sql() string {
+func (c Char) Sql() string {
 	return fmt.Sprintf("cast('%s' as char(%d))", c.data, c.length)
 }
 
@@ -89,22 +101,34 @@ func NewVarChar(length int, data string) (*VarChar, error) {
 	return &VarChar{length: length, data: data}, nil
 }
 
-func (v *VarChar) Type() datatype.DataType {
+func MakeVarChar(length int, data string) (VarChar, error) {
+	if length > 65536 {
+		return VarChar{}, errors.Errorf("max length of char is 65536, not %d is given", length)
+	}
+
+	if len(data) > length {
+		return VarChar{}, errors.WithStack(NewCharOverflowError(length, len(data)))
+	}
+
+	return VarChar{length: length, data: data}, nil
+}
+
+func (v VarChar) Type() datatype.DataType {
 	return datatype.NewVarcharType(v.length)
 }
 
-func (v *VarChar) String() string {
+func (v VarChar) String() string {
 	return v.data
 }
 
-func (v *VarChar) Sql() string {
+func (v VarChar) Sql() string {
 	return fmt.Sprintf("cast('%s' as varchar(%d))", v.data, v.length)
-}
-
-func (v *VarChar) Scan(value interface{}) error {
-	return errors.WithStack(tryConvertType(value, v))
 }
 
 func (v *VarChar) Data() string {
 	return v.data
+}
+
+func (v *VarChar) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, v))
 }

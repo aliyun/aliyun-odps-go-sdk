@@ -18,25 +18,27 @@ func main() {
 	odpsIns := odps.NewOdps(aliAccount, conf.Endpoint)
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
 
-	sql := "CREATE TABLE IF NOT EXISTS data_type_demo (" +
-		"ti TINYINT, " +
-		"si SMALLINT, " +
-		"i INT, " +
-		"bi BIGINT, " +
-		"b BINARY, " +
-		"f FLOAT, " +
-		"d DOUBLE, " +
-		"dc DECIMAL(38,18), " +
-		"vc VARCHAR(1000), " +
-		"c CHAR(100), " +
-		"s STRING, " +
-		"da DATE, " +
-		"dat DATETIME, " +
-		"t TIMESTAMP, " +
-		"bl BOOLEAN, " +
-		"st STRUCT<arr:ARRAY<STRING>, name:STRING> " +
+	sql := "create table if not exists all_types_demo (" +
+		"    tiny_int_type         tinyint," +
+		"    small_int_type        smallint," +
+		"    int_type              int," +
+		"    bigint_type           bigint," +
+		"    binary_type           binary," +
+		"    float_type            float," +
+		"    double_type           double," +
+		"    decimal_type          decimal(10, 8)," +
+		"    varchar_type          varchar(500)," +
+		"    char_type             varchar(254)," +
+		"    string_type           string," +
+		"    date_type             date," +
+		"    datetime_type         datetime," +
+		"    timestamp_type        timestamp," +
+		"    boolean_type          boolean," +
+		"    map_type              map<string, bigint>," +
+		"    array_type            array< string>," +
+		"    struct_type           struct<arr:ARRAY<STRING>, name:STRING>" +
 		") " +
-		"partitioned by (p1 int, p2 string); "
+		"partitioned by (p1 bigint, p2 string);"
 
 	// 如果project的数据类型版本是1.0，需要通过下面的hints使用mc 2.0数据类型
 	//hints := make(map[string]string)

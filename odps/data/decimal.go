@@ -30,6 +30,7 @@ type Decimal struct {
 	precision int
 	scale     int
 	value     string
+	Valid     bool
 }
 
 func (d *Decimal) Precision() int {
@@ -49,6 +50,7 @@ func NewDecimal(precision, scale int, value string) *Decimal {
 		precision: precision,
 		scale:     scale,
 		value:     value,
+		Valid:     true,
 	}
 }
 
@@ -84,18 +86,19 @@ func DecimalFromStr(value string) (*Decimal, error) {
 	}
 
 	d.value = value
+	d.Valid = true
 	return &d, nil
 }
 
-func (d *Decimal) Type() datatype.DataType {
+func (d Decimal) Type() datatype.DataType {
 	return datatype.NewDecimalType(int32(d.precision), int32(d.scale))
 }
 
-func (d *Decimal) String() string {
+func (d Decimal) String() string {
 	return fmt.Sprintf("%s", d.value)
 }
 
-func (d *Decimal) Sql() string {
+func (d Decimal) Sql() string {
 	return fmt.Sprintf("%sBD", d.value)
 }
 

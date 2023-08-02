@@ -28,7 +28,7 @@ func main() {
 	tunnelIns := tunnel.NewTunnel(odpsIns, tunnelEndpoint)
 	session, err := tunnelIns.CreateUploadSession(
 		project.Name(),
-		"data_type_demo",
+		"all_types_demo",
 		tunnel.SessionCfg.WithPartitionKey("p1=20,p2='hangzhou'"),
 		tunnel.SessionCfg.WithDefaultDeflateCompressor(),
 	)
@@ -40,20 +40,57 @@ func main() {
 	recordWriter, err := session.OpenRecordWriter(0)
 	schema := session.Schema()
 
-	varchar, _ := data.NewVarChar(1000, "varchar")
-	char, _ := data.NewVarChar(100, "char")
-	s := data.String("alibaba")
+	varchar, _ := data.NewVarChar(500, "varchar")
+	char, _ := data.NewVarChar(254, "char")
+	s := data.String("hello world")
 	date, _ := data.NewDate("2022-10-19")
 	datetime, _ := data.NewDateTime("2022-10-19 17:00:00")
 	timestamp, _ := data.NewTimestamp("2022-10-19 17:00:00.000")
-	structType := schema.Columns[15].Type.(datatype.StructType)
-	structData := data.NewStructWithTyp(&structType)
-	arrayType := structType.FieldType("arr").(datatype.ArrayType)
-	arr := data.NewArrayWithType(&arrayType)
-	_ = arr.Append("a")
-	_ = arr.Append("b")
-	_ = structData.SetField("arr", arr)
-	_ = structData.SetField("name", "tom")
+
+	mapType := schema.Columns[15].Type.(datatype.MapType)
+	mapData := data.NewMapWithType(mapType)
+	err = mapData.Set("hello", 1)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	err = mapData.Set("world", 2)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	arrayType := schema.Columns[16].Type.(datatype.ArrayType)
+	arrayData := data.NewArrayWithType(arrayType)
+	err = arrayData.Append("a")
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	err = arrayData.Append("b")
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	structType := schema.Columns[17].Type.(datatype.StructType)
+	structData := data.NewStructWithTyp(structType)
+
+	arr := data.NewArrayWithType(structType.FieldType("arr").(datatype.ArrayType))
+	err = arr.Append("x")
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+	err = arr.Append("y")
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+	err = structData.SetField("arr", arr)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+	err = structData.SetField("name", "tom")
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
 
 	record := []data.Data{
 		data.TinyInt(1),
@@ -66,17 +103,21 @@ func main() {
 		data.NewDecimal(38, 18, "3.1415926"),
 		varchar,
 		char,
-		&s,
+		s,
 		date,
 		datetime,
 		timestamp,
 		data.Bool(true),
+		mapData,
+		arrayData,
 		structData,
 	}
 
-	err = recordWriter.Write(record)
-	if err != nil {
-		log.Fatalf("%+v", err)
+	for i := 0; i < 1; i++ {
+		err = recordWriter.Write(record)
+		if err != nil {
+			log.Fatalf("%+v", err)
+		}
 	}
 
 	err = recordWriter.Close()

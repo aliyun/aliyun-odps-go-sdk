@@ -219,8 +219,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 			return nil, errors.WithStack(err)
 		}
 		r.recordCrc.Update(v)
-		s := data.String(v)
-		fieldValue = &s
+		fieldValue = data.String(v)
 	case datatype.VARCHAR:
 		v, err := r.protocReader.ReadBytes()
 		if err != nil {
@@ -228,7 +227,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 		}
 		r.recordCrc.Update(v)
 		t := dt.(datatype.VarcharType)
-		fieldValue, _ = data.NewVarChar(t.Length, string(v))
+		fieldValue, _ = data.MakeVarChar(t.Length, string(v))
 	case datatype.CHAR:
 		v, err := r.protocReader.ReadBytes()
 		if err != nil {
@@ -236,7 +235,7 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 		}
 		r.recordCrc.Update(v)
 		t := dt.(datatype.CharType)
-		fieldValue, _ = data.NewChar(t.Length, string(v))
+		fieldValue, _ = data.MakeChar(t.Length, string(v))
 	case datatype.BINARY:
 		v, err := r.protocReader.ReadBytes()
 		if err != nil {
@@ -348,7 +347,7 @@ func (r *RecordProtocReader) readArray(t datatype.DataType) (*data.Array, error)
 	}
 
 	at := datatype.NewArrayType(t)
-	array := data.NewArrayWithType(&at)
+	array := data.NewArrayWithType(at)
 	array.UnSafeAppend(arrayData...)
 	return array, nil
 }
@@ -368,7 +367,7 @@ func (r *RecordProtocReader) readMap(t datatype.MapType) (*data.Map, error) {
 		return nil, errors.New("failed to read map")
 	}
 
-	dm := data.NewMapWithType(&t)
+	dm := data.NewMapWithType(t)
 	for i, n := 0, keys.Len(); i < n; i++ {
 		key := keys.Index(i)
 		value := values.Index(i)
@@ -379,7 +378,7 @@ func (r *RecordProtocReader) readMap(t datatype.MapType) (*data.Map, error) {
 }
 
 func (r *RecordProtocReader) readStruct(t datatype.StructType) (*data.Struct, error) {
-	sd := data.NewStructWithTyp(&t)
+	sd := data.NewStructWithTyp(t)
 
 	for _, ft := range t.Fields {
 		fn := ft.Name

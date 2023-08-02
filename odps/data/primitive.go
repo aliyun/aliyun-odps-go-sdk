@@ -139,16 +139,16 @@ func (d *Double) Scan(value interface{}) error {
 	return errors.WithStack(tryConvertType(value, d))
 }
 
-func (s *String) Type() datatype.DataType {
+func (s String) Type() datatype.DataType {
 	return datatype.StringType
 }
 
-func (s *String) String() string {
-	return *((*string)(s))
+func (s String) String() string {
+	return string(s)
 }
 
-func (s *String) Sql() string {
-	return fmt.Sprintf("'%s'", *((*string)(s)))
+func (s String) Sql() string {
+	return fmt.Sprintf("'%s'", s)
 }
 
 func (s *String) Scan(value interface{}) error {

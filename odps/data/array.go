@@ -23,29 +23,31 @@ import (
 )
 
 type Array struct {
-	typ  *datatype.ArrayType // 考虑到很多数据都会用到同一个类型，所以多个数据用指针指向相同的类型，TODO 后面可能要去掉
-	data []Data
+	typ   datatype.ArrayType
+	data  []Data
+	Valid bool
 }
 
 func NewArray() *Array {
 	return &Array{
-		typ:  nil,
+		typ:  datatype.ArrayType{},
 		data: make([]Data, 0),
 	}
 }
 
-func NewArrayWithType(typ *datatype.ArrayType) *Array {
+func NewArrayWithType(typ datatype.ArrayType) *Array {
 	return &Array{
-		typ:  typ,
-		data: make([]Data, 0),
+		typ:   typ,
+		data:  make([]Data, 0),
+		Valid: true,
 	}
 }
 
-func (a *Array) Type() datatype.DataType {
-	return *a.typ
+func (a Array) Type() datatype.DataType {
+	return a.typ
 }
 
-func (a *Array) String() string {
+func (a Array) String() string {
 	n := len(a.data)
 
 	if n == 0 {
@@ -68,7 +70,7 @@ func (a *Array) String() string {
 	return sb.String()
 }
 
-func (a *Array) Sql() string {
+func (a Array) Sql() string {
 	n := len(a.data)
 
 	if n == 0 {
@@ -95,7 +97,7 @@ func (a *Array) Scan(value interface{}) error {
 	return errors.WithStack(tryConvertType(value, a))
 }
 
-func (a *Array) SetType(typ *datatype.ArrayType) {
+func (a *Array) SetType(typ datatype.ArrayType) {
 	a.typ = typ
 }
 
@@ -117,7 +119,7 @@ func (a *Array) Append(data ...interface{}) error {
 }
 
 func (a *Array) SafeAppend(data ...interface{}) error {
-	if a.typ == nil {
+	if a.typ.ElementType == nil {
 		return errors.New("element type of Array has not be set")
 	}
 

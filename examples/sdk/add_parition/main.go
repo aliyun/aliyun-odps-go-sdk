@@ -18,7 +18,7 @@ func main() {
 	odpsIns := odps.NewOdps(aliAccount, conf.Endpoint)
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
 
-	table := odpsIns.Table("data_type_demo")
+	table := odpsIns.Table("all_types_demo")
 	err = table.AddPartition(true, "p1=20,p2='hangzhou'")
 	if err != nil {
 		log.Fatalf("%+v", err)

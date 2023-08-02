@@ -17,7 +17,6 @@
 package sqldriver
 
 import (
-	"database/sql"
 	"database/sql/driver"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
@@ -65,9 +64,9 @@ func (rr *rowsReader) Next(dst []driver.Value) error {
 
 	for i := range dst {
 		ri := record.Get(i)
+		dst[i] = ri
 
 		if ri == nil {
-			dst[i] = nil
 			continue
 		}
 
@@ -85,11 +84,13 @@ func (rr *rowsReader) Next(dst []driver.Value) error {
 		case datatype.FLOAT:
 			dst[i] = float32(ri.(data.Float))
 		case datatype.STRING:
-			dst[i] = string(*ri.(*data.String))
+			dst[i] = string(ri.(data.String))
 		case datatype.CHAR:
-			dst[i] = ri.(*data.Char).Data()
+			char := ri.(data.Char)
+			dst[i] = char.Data()
 		case datatype.VARCHAR:
-			dst[i] = ri.(*data.VarChar).Data()
+			char := ri.(data.VarChar)
+			dst[i] = char.Data()
 		case datatype.BINARY:
 			dst[i] = []byte(ri.(data.Binary))
 		case datatype.BOOLEAN:
@@ -100,20 +101,20 @@ func (rr *rowsReader) Next(dst []driver.Value) error {
 			dst[i] = time.Time(ri.(data.Date))
 		case datatype.TIMESTAMP:
 			dst[i] = time.Time(ri.(data.Timestamp))
-		case datatype.DECIMAL:
-			dst[i] = ri
-		case datatype.MAP:
-			dst[i] = ri
-		case datatype.ARRAY:
-			dst[i] = ri
-		case datatype.STRUCT:
-			dst[i] = ri
-		case datatype.VOID:
-			dst[i] = ri
-		case datatype.IntervalDayTime:
-			dst[i] = ri
-		case datatype.IntervalYearMonth:
-			dst[i] = ri
+		//case datatype.DECIMAL:
+		//	dst[i] = ri
+		//case datatype.MAP:
+		//	dst[i] = ri
+		//case datatype.ARRAY:
+		//	dst[i] = ri
+		//case datatype.STRUCT:
+		//	dst[i] = ri
+		//case datatype.VOID:
+		//	dst[i] = ri
+		//case datatype.IntervalDayTime:
+		//	dst[i] = ri
+		//case datatype.IntervalYearMonth:
+		//	dst[i] = ri
 		default:
 			dst[i] = ri
 		}
@@ -134,65 +135,69 @@ func (rr *rowsReader) ColumnTypeScanType(index int) reflect.Type {
 	switch dataType.ID() {
 	case datatype.BIGINT:
 		if nullable {
-			return reflect.TypeOf(sql.NullInt64{})
+			return reflect.TypeOf(NullInt64{})
 		}
 
 		return reflect.TypeOf(int64(0))
 	case datatype.INT:
 		if nullable {
-			return reflect.TypeOf(sql.NullInt64{})
+			return reflect.TypeOf(NullInt32{})
 		}
 
 		return reflect.TypeOf(int(0))
 	case datatype.SMALLINT:
 		if nullable {
-			return reflect.TypeOf(sql.NullInt64{})
+			return reflect.TypeOf(NullInt16{})
 		}
 
 		return reflect.TypeOf(int16(0))
 	case datatype.TINYINT:
 		if nullable {
-			return reflect.TypeOf(sql.NullInt64{})
+			return reflect.TypeOf(NullInt8{})
 		}
 
 		return reflect.TypeOf(int8(0))
 	case datatype.DOUBLE:
 		if nullable {
-			return reflect.TypeOf(sql.NullFloat64{})
+			return reflect.TypeOf(NullFloat64{})
 		}
 
 		return reflect.TypeOf(float64(0))
 	case datatype.FLOAT:
 		if nullable {
-			return reflect.TypeOf(sql.NullFloat64{})
+			return reflect.TypeOf(NullFloat32{})
 		}
 
 		return reflect.TypeOf(float32(0))
 
 	case datatype.STRING, datatype.CHAR, datatype.VARCHAR:
 		if nullable {
-			return reflect.TypeOf(sql.NullString{})
+			return reflect.TypeOf(NullString{})
 		}
 
 		return reflect.TypeOf("")
 	case datatype.BINARY:
-		return reflect.TypeOf(sql.RawBytes{})
+		return reflect.TypeOf(Binary{})
 	case datatype.BOOLEAN:
 		if nullable {
-			return reflect.TypeOf(sql.NullBool{})
+			return reflect.TypeOf(NullBool{})
 		}
 
 		return reflect.TypeOf(false)
-	case datatype.DATETIME, datatype.DATE, datatype.TIMESTAMP:
-		return reflect.TypeOf(sql.NullTime{})
+	case datatype.DATETIME:
+		return reflect.TypeOf(NullDateTime{})
+	case datatype.DATE:
+		return reflect.TypeOf(NullDate{})
+	case datatype.TIMESTAMP:
+		return reflect.TypeOf(NullTimeStamp{})
 	case datatype.DECIMAL:
-		return reflect.TypeOf(data.Decimal{})
+		return reflect.TypeOf(Decimal{})
 	case datatype.MAP:
-		return reflect.TypeOf(data.Map{})
+		return reflect.TypeOf(Map{})
 	case datatype.ARRAY:
-		return reflect.TypeOf(data.Array{})
+		return reflect.TypeOf(Array{})
 	case datatype.STRUCT:
-		return reflect.TypeOf(data.Struct{})
+		return reflect.TypeOf(Struct{})
 	case datatype.VOID:
 		return reflect.TypeOf(data.Null)
 	case datatype.IntervalDayTime:
