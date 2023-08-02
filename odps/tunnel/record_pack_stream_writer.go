@@ -46,7 +46,13 @@ func (rsw *RecordPackStreamWriter) Append(record data.Record) error {
 		return errors.New("There's an unsuccessful flush called, you should call flush to retry or call reset to drop the data")
 	}
 
-	return errors.WithStack(rsw.protocWriter.Write(record))
+	err := errors.WithStack(rsw.protocWriter.Write(record))
+
+	if err != nil {
+		rsw.recordCount += 1
+	}
+
+	return err
 }
 
 func (rsw *RecordPackStreamWriter) Flush(timeout_ ...time.Duration) (string, error) {
