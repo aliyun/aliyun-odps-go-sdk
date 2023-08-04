@@ -300,7 +300,9 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 			return nil, errors.WithStack(err)
 		}
 		r.recordCrc.Update(v)
-		fieldValue = data.NewDecimal(38, 18, string(v))
+		decimalType := dt.(datatype.DecimalType)
+
+		fieldValue = data.NewDecimal(int(decimalType.Precision), int(decimalType.Scale), string(v))
 	case datatype.ARRAY:
 		var err error
 		fieldValue, err = r.readArray(dt.(datatype.ArrayType).ElementType)
