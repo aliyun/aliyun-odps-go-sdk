@@ -36,6 +36,7 @@ type Config struct {
 	TcpConnectionTimeout time.Duration
 	HttpTimeout          time.Duration
 	TunnelEndpoint       string
+	QuotaName            string
 }
 
 func NewConfig() *Config {
@@ -58,6 +59,7 @@ func NewConfigFromIni(iniPath string) (*Config, error) {
 	conf.AccessKey = section.Key("access_key").String()
 	conf.StsToken = section.Key("sts_token").String()
 	conf.Endpoint = section.Key("endpoint").String()
+	conf.QuotaName = section.Key("tunnel_quota").String()
 
 	_, err = url.Parse(conf.Endpoint)
 	if err != nil {

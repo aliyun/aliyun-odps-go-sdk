@@ -54,6 +54,7 @@ type DownloadSession struct {
 	// TODO use schema to get the resource url of a table
 	SchemaName string
 	TableName  string
+	QuotaName  string
 	// The partition keys used by a session can not contain "'", for example, "region=hangzhou" is a
 	// positive case, and "region='hangzhou'" is a negative case. But the partition keys like "region='hangzhou'" are more
 	// common, to avoid the users use the error format, the partitionKey of UploadSession is private, it can be set when
@@ -82,7 +83,7 @@ type DownloadSession struct {
 // SessionCfg.ShardId, set the shard id of the table
 // SessionCfg.Async, enable the async mode of the session which can avoiding timeout when there are many small files
 func CreateDownloadSession(
-	projectName, tableName string,
+	projectName, tableName, quotaName string,
 	restClient restclient.RestClient,
 	opts ...Option,
 ) (*DownloadSession, error) {
@@ -93,6 +94,7 @@ func CreateDownloadSession(
 		ProjectName:  projectName,
 		SchemaName:   cfg.SchemaName,
 		TableName:    tableName,
+		QuotaName:    quotaName,
 		RestClient:   restClient,
 		partitionKey: cfg.PartitionKey,
 		ShardId:      cfg.ShardId,
@@ -269,6 +271,9 @@ func (ds *DownloadSession) newInitiationRequest() (*http.Request, error) {
 		queryArgs.Set("shard", strconv.Itoa(ds.ShardId))
 	}
 
+	if ds.QuotaName != "" {
+		queryArgs.Set("quotaName", ds.QuotaName)
+	}
 	req, err := ds.RestClient.NewRequestWithUrlQuery(common.HttpMethod.PostMethod, resource, nil, queryArgs)
 	if err != nil {
 		return nil, errors.WithStack(err)

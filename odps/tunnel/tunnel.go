@@ -42,6 +42,7 @@ import (
 type Tunnel struct {
 	odpsIns              *odps.Odps
 	endpoint             string
+	quotaName            string
 	httpTimeout          time.Duration
 	tcpConnectionTimeout time.Duration
 }
@@ -88,7 +89,7 @@ func (t *Tunnel) SetTcpConnectionTimeout(tcpConnectionTimeout time.Duration) {
 }
 
 func (t *Tunnel) CreateUploadSession(projectName, tableName string, opts ...Option) (*UploadSession, error) {
-	session, err := CreateUploadSession(projectName, tableName, t.getRestClient(), opts...)
+	session, err := CreateUploadSession(projectName, tableName, t.quotaName, t.getRestClient(), opts...)
 
 	return session, errors.WithStack(err)
 }
@@ -107,7 +108,7 @@ func (t *Tunnel) AttachToExistedUploadSession(
 }
 
 func (t *Tunnel) CreateDownloadSession(projectName, tableName string, opts ...Option) (*DownloadSession, error) {
-	session, err := CreateDownloadSession(projectName, tableName, t.getRestClient(), opts...)
+	session, err := CreateDownloadSession(projectName, tableName, t.quotaName, t.getRestClient(), opts...)
 	return session, errors.WithStack(err)
 }
 
@@ -121,7 +122,7 @@ func (t *Tunnel) AttachToExistedDownloadSession(
 func (t *Tunnel) CreateInstanceResultDownloadSession(
 	projectName, instanceId string, opts ...InstanceOption,
 ) (*InstanceResultDownloadSession, error) {
-	session, err := CreateInstanceResultDownloadSession(projectName, instanceId, t.getRestClient(), opts...)
+	session, err := CreateInstanceResultDownloadSession(projectName, instanceId, t.quotaName, t.getRestClient(), opts...)
 	return session, errors.WithStack(err)
 }
 
@@ -131,4 +132,23 @@ func (t *Tunnel) getRestClient() restclient.RestClient {
 	client.TcpConnectionTimeout = t.TcpConnectionTimeout()
 
 	return client
+}
+
+func (t *Tunnel) GetEndpoint() string {
+	return t.endpoint
+}
+
+func (t *Tunnel) SetQuotaName(quotaName string) error {
+	project := t.odpsIns.DefaultProject()
+	endpoint, err := (&project).GetTunnelEndpoint(t.quotaName)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	t.quotaName = quotaName
+	t.endpoint = endpoint
+	return nil
+}
+
+func (t *Tunnel) GetQuotaName() string {
+	return t.quotaName
 }

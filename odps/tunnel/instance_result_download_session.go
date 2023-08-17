@@ -33,6 +33,7 @@ type InstanceResultDownloadSession struct {
 	Id                  string
 	InstanceId          string
 	ProjectName         string
+	QuotaName           string
 	TaskName            string
 	QueryId             int
 	LimitEnabled        bool
@@ -46,7 +47,7 @@ type InstanceResultDownloadSession struct {
 }
 
 func CreateInstanceResultDownloadSession(
-	projectName, instanceId string,
+	projectName, instanceId, quotaName string,
 	restClient restclient.RestClient,
 	opts ...InstanceOption,
 ) (*InstanceResultDownloadSession, error) {
@@ -55,6 +56,7 @@ func CreateInstanceResultDownloadSession(
 	session := InstanceResultDownloadSession{
 		InstanceId:   instanceId,
 		ProjectName:  projectName,
+		QuotaName:    quotaName,
 		RestClient:   restClient,
 		TaskName:     cfg.TaskName,
 		QueryId:      cfg.QueryId,
@@ -186,6 +188,9 @@ func (is *InstanceResultDownloadSession) newInitiationRequest() (*http.Request, 
 		}
 	}
 
+	if is.QuotaName != "" {
+		queryArgs.Set("quotaName", is.QuotaName)
+	}
 	req, err := is.RestClient.NewRequestWithUrlQuery(common.HttpMethod.PostMethod, resource, nil, queryArgs)
 	if err != nil {
 		return nil, errors.WithStack(err)

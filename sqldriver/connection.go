@@ -27,10 +27,15 @@ import (
 type connection struct {
 	odpsIns        *odps.Odps
 	tunnelEndpoint string
+	config         *odps.Config
 }
 
-func newConnection(odpsIns *odps.Odps, tunnelEndpoint string) *connection {
-	return &connection{odpsIns: odpsIns, tunnelEndpoint: tunnelEndpoint}
+func newConnection(config *odps.Config, tunnelEncpoint string) *connection {
+	return &connection{
+		odpsIns:        config.GenOdps(),
+		tunnelEndpoint: tunnelEncpoint,
+		config:         config,
+	}
 }
 
 // Begin sql/driver.Conn接口实现，由于odps不支持实物，方法的实现为空
@@ -83,9 +88,9 @@ func (c *connection) query(query string) (driver.Rows, error) {
 	// 调用instance tunnel, 下载结果
 	tunnelEndpoint := c.tunnelEndpoint
 
-	if tunnelEndpoint == "" {
+	if tunnelEndpoint == "" || c.config.QuotaName != "" {
 		project := c.odpsIns.DefaultProject()
-		tunnelEndpoint, err = project.GetTunnelEndpoint()
+		tunnelEndpoint, err = project.GetTunnelEndpoint(c.config.QuotaName)
 
 		if err != nil {
 			return nil, errors.WithStack(err)
