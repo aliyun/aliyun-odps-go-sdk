@@ -16,7 +16,7 @@ func main() {
 	}
 
 	dsn := config.FormatDsn()
-	// or dsn := "http://<accessId>:<accessKey>@<endpoint>?project=<project>"
+	// or dsn := "http://<accessId>:<accessKey>@<endpoint>?project=<project>&tunnelQuotaName=<quota_name>"
 
 	db, err := sql.Open("odps", dsn)
 	if err != nil {

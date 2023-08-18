@@ -1,13 +1,15 @@
 package main
 
 import (
+	"fmt"
+	"log"
+	"os"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
-	"log"
-	"os"
 )
 
 func main() {
@@ -24,7 +26,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-
+	fmt.Println("tunnel endpoint: " + tunnelEndpoint)
 	tunnelIns := tunnel.NewTunnel(odpsIns, tunnelEndpoint)
 	session, err := tunnelIns.CreateUploadSession(
 		project.Name(),

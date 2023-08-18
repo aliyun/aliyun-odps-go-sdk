@@ -18,11 +18,12 @@ package tunnel
 
 import (
 	"bytes"
+	"reflect"
+	"testing"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"reflect"
-	"testing"
 )
 
 var simpleTypeProtocEncodedData = []byte{

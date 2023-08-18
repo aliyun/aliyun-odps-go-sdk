@@ -17,10 +17,11 @@
 package tunnel
 
 import (
+	"time"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/pkg/errors"
-	"time"
 )
 
 // Tunnel is used to upload or download data in odps, it can also be used to download the result
@@ -47,11 +48,16 @@ type Tunnel struct {
 	tcpConnectionTimeout time.Duration
 }
 
-func NewTunnel(odpsIns *odps.Odps, endpoint string) Tunnel {
-	return Tunnel{
-		odpsIns:  odpsIns,
-		endpoint: endpoint,
+// Once the tunnel endpoint is set, it cannot be modified anymore.
+func NewTunnel(odpsIns *odps.Odps, endpoint ...string) Tunnel {
+	tunnel := Tunnel{
+		odpsIns: odpsIns,
 	}
+	if len(endpoint) > 0 {
+		tunnel.endpoint = endpoint[0]
+	}
+
+	return tunnel
 }
 
 func NewTunnelFromProject(project odps.Project) (Tunnel, error) {
@@ -89,13 +95,21 @@ func (t *Tunnel) SetTcpConnectionTimeout(tcpConnectionTimeout time.Duration) {
 }
 
 func (t *Tunnel) CreateUploadSession(projectName, tableName string, opts ...Option) (*UploadSession, error) {
-	session, err := CreateUploadSession(projectName, tableName, t.quotaName, t.getRestClient(), opts...)
+	client, err := t.getRestClient(projectName)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	session, err := CreateUploadSession(projectName, tableName, t.quotaName, client, opts...)
 
 	return session, errors.WithStack(err)
 }
 
 func (t *Tunnel) CreateStreamUploadSession(projectName, tableName string, opts ...Option) (*StreamUploadSession, error) {
-	session, err := CreateStreamUploadSession(projectName, tableName, t.getRestClient(), opts...)
+	client, err := t.getRestClient(projectName)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	session, err := CreateStreamUploadSession(projectName, tableName, client, opts...)
 
 	return session, errors.WithStack(err)
 }
@@ -103,35 +117,60 @@ func (t *Tunnel) CreateStreamUploadSession(projectName, tableName string, opts .
 func (t *Tunnel) AttachToExistedUploadSession(
 	projectName, tableName, sessionId string,
 	opts ...Option) (*UploadSession, error) {
-	session, err := AttachToExistedUploadSession(sessionId, projectName, tableName, t.getRestClient(), opts...)
+	client, err := t.getRestClient(projectName)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	session, err := AttachToExistedUploadSession(sessionId, projectName, tableName, client, opts...)
 	return session, errors.WithStack(err)
 }
 
 func (t *Tunnel) CreateDownloadSession(projectName, tableName string, opts ...Option) (*DownloadSession, error) {
-	session, err := CreateDownloadSession(projectName, tableName, t.quotaName, t.getRestClient(), opts...)
+	client, err := t.getRestClient(projectName)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	session, err := CreateDownloadSession(projectName, tableName, t.quotaName, client, opts...)
 	return session, errors.WithStack(err)
 }
 
 func (t *Tunnel) AttachToExistedDownloadSession(
 	projectName, tableName, sessionId string,
 	opts ...Option) (*DownloadSession, error) {
-	session, err := AttachToExistedDownloadSession(sessionId, projectName, tableName, t.getRestClient(), opts...)
+	client, err := t.getRestClient(projectName)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	session, err := AttachToExistedDownloadSession(sessionId, projectName, tableName, client, opts...)
 	return session, errors.WithStack(err)
 }
 
 func (t *Tunnel) CreateInstanceResultDownloadSession(
 	projectName, instanceId string, opts ...InstanceOption,
 ) (*InstanceResultDownloadSession, error) {
-	session, err := CreateInstanceResultDownloadSession(projectName, instanceId, t.quotaName, t.getRestClient(), opts...)
+	client, err := t.getRestClient(projectName)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	session, err := CreateInstanceResultDownloadSession(projectName, instanceId, t.quotaName, client, opts...)
 	return session, errors.WithStack(err)
 }
 
-func (t *Tunnel) getRestClient() restclient.RestClient {
-	client := restclient.NewOdpsRestClient(t.odpsIns.Account(), t.endpoint)
+func (t *Tunnel) getRestClient(projectName string) (restclient.RestClient, error) {
+	tunnelEndpoint := t.endpoint
+	if tunnelEndpoint == "" {
+		project := t.odpsIns.Project(projectName)
+		endpoint, err := project.GetTunnelEndpoint(t.quotaName)
+		if err != nil {
+			return restclient.RestClient{}, errors.WithStack(err)
+		}
+		tunnelEndpoint = endpoint
+	}
+	client := restclient.NewOdpsRestClient(t.odpsIns.Account(), tunnelEndpoint)
 	client.HttpTimeout = t.HttpTimeout()
 	client.TcpConnectionTimeout = t.TcpConnectionTimeout()
 
-	return client
+	return client, nil
 }
 
 func (t *Tunnel) GetEndpoint() string {
@@ -140,7 +179,7 @@ func (t *Tunnel) GetEndpoint() string {
 
 func (t *Tunnel) SetQuotaName(quotaName string) error {
 	project := t.odpsIns.DefaultProject()
-	endpoint, err := (&project).GetTunnelEndpoint(t.quotaName)
+	endpoint, err := project.GetTunnelEndpoint(quotaName)
 	if err != nil {
 		return errors.WithStack(err)
 	}

@@ -40,16 +40,14 @@ func main() {
 
 	println(lvUrl)
 
-	project := odpsIns.DefaultProject()
-	tunnelEndpoint, err := project.GetTunnelEndpoint(conf.QuotaName)
-
+	tunnelIns := tunnel.NewTunnel(odpsIns)
+	err = tunnelIns.SetQuotaName(conf.TunnelQuotaName)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-	fmt.Println("tunnelEndpoint: " + tunnelEndpoint)
+	fmt.Println("tunnel endpoint: " + tunnelIns.GetEndpoint())
 
-	tunnelIns := tunnel.NewTunnel(odpsIns, tunnelEndpoint)
-	session, err := tunnelIns.CreateInstanceResultDownloadSession(project.Name(), ins.Id())
+	session, err := tunnelIns.CreateInstanceResultDownloadSession(conf.ProjectName, ins.Id())
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

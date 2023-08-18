@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	tunnel2 "github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
-	"log"
-	"os"
 )
 
 func main() {
@@ -19,16 +20,14 @@ func main() {
 	aliAccount := account.NewAliyunAccount(conf.AccessId, conf.AccessKey)
 	odpsIns := odps.NewOdps(aliAccount, conf.Endpoint)
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
-	project := odpsIns.DefaultProject()
-	tunnelEndpoint, err := project.GetTunnelEndpoint(conf.QuotaName)
+	tunnel := tunnel2.NewTunnel(odpsIns)
+	err = tunnel.SetQuotaName(conf.TunnelQuotaName)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-	fmt.Println("endpoint: " + tunnelEndpoint)
-
-	tunnel := tunnel2.NewTunnel(odpsIns, tunnelEndpoint)
+	fmt.Printf("tunnel endpoint: %+v\n", tunnel.GetEndpoint())
 	session, err := tunnel.CreateDownloadSession(
-		project.Name(),
+		conf.ProjectName,
 		"mf_test",
 	)
 	if err != nil {

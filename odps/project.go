@@ -19,16 +19,17 @@ package odps
 import (
 	"encoding/xml"
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/security"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/security"
+	"github.com/pkg/errors"
 )
 
 // TODO 将status转换为enum
@@ -319,13 +320,15 @@ func (p *Project) GetTunnelEndpoint(quotaNames ...string) (string, error) {
 	resource := p.rb.Tunnel()
 	queryArgs := make(url.Values, 1)
 	queryArgs.Set("service", "")
+	//queryArgs.Set("current_project", p.Name())
 
 	if len(quotaNames) > 0 {
 		quotaName := quotaNames[0]
-		if quotaName == "" {
+		if quotaName != "" {
 			queryArgs.Set("quotaName", quotaName)
 		}
 	}
+
 	req, err := client.NewRequestWithUrlQuery(common.HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
 		return "", errors.WithStack(err)

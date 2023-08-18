@@ -18,10 +18,11 @@ package sqldriver
 
 import (
 	"errors"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 )
 
 // Config is a configuration parsed from a DSN string.
@@ -33,7 +34,7 @@ var NewConfig = odps.NewConfig
 var NewConfigFromIni = odps.NewConfigFromIni
 
 // ParseDSN dsn格式如下
-// http://AccessId:AccessKey@host:port/path?project=""&stsToken=""&tcpConnectionTimeout=30&httpTimeout=60
+// http://AccessId:AccessKey@host:port/path?project=<project_name>&stsToken=<sts_token>&tcpConnectionTimeout=30&httpTimeout=60&tunnelQuotaName=<quota_name>
 // 其中project参数为必填项
 func ParseDSN(dsn string) (*Config, error) {
 	u, err := url.Parse(dsn)
@@ -56,6 +57,8 @@ func ParseDSN(dsn string) (*Config, error) {
 		return nil, errors.New("project name is not set")
 	}
 
+	tunnelQuotaName := u.Query().Get("tunnelQuotaName")
+
 	endpoint := (&url.URL{
 		Scheme: u.Scheme,
 		Host:   u.Host,
@@ -67,6 +70,7 @@ func ParseDSN(dsn string) (*Config, error) {
 	config.AccessKey = accessKey
 	config.Endpoint = endpoint
 	config.ProjectName = projectName
+	config.TunnelQuotaName = tunnelQuotaName
 
 	var connTimeout, httpTimeout string
 

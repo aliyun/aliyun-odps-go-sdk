@@ -25,16 +25,14 @@ import (
 )
 
 type connection struct {
-	odpsIns        *odps.Odps
-	tunnelEndpoint string
-	config         *odps.Config
+	odpsIns *odps.Odps
+	config  *odps.Config
 }
 
-func newConnection(config *odps.Config, tunnelEncpoint string) *connection {
+func newConnection(config *odps.Config) *connection {
 	return &connection{
-		odpsIns:        config.GenOdps(),
-		tunnelEndpoint: tunnelEncpoint,
-		config:         config,
+		odpsIns: config.GenOdps(),
+		config:  config,
 	}
 }
 
@@ -86,12 +84,20 @@ func (c *connection) query(query string) (driver.Rows, error) {
 	}
 
 	// 调用instance tunnel, 下载结果
-	tunnelEndpoint := c.tunnelEndpoint
+	tunnelEndpoint := c.config.TunnelEndpoint
 
-	if tunnelEndpoint == "" || c.config.QuotaName != "" {
+	if c.config.TunnelQuotaName == "" {
 		project := c.odpsIns.DefaultProject()
-		tunnelEndpoint, err = project.GetTunnelEndpoint(c.config.QuotaName)
-
+		tunnelEndpoint, err = project.GetTunnelEndpoint()
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+	} else {
+		if tunnelEndpoint != "" {
+			return nil, errors.New("TunnelEndpoint and TunnelQuotaName cannot be configured simultaneously")
+		}
+		project := c.odpsIns.DefaultProject()
+		tunnelEndpoint, err = project.GetTunnelEndpoint(c.config.TunnelQuotaName)
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}

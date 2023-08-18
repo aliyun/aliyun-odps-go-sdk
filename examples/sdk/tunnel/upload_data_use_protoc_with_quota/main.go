@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
-	"log"
-	"os"
 )
 
 func main() {
@@ -19,17 +20,15 @@ func main() {
 	aliAccount := account.NewAliyunAccount(conf.AccessId, conf.AccessKey)
 	odpsIns := odps.NewOdps(aliAccount, conf.Endpoint)
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
-	project := odpsIns.DefaultProject()
-	tunnelEndpoint, err := project.GetTunnelEndpoint(conf.QuotaName)
-
+	tunnelIns := tunnel.NewTunnel(odpsIns)
+	err = tunnelIns.SetQuotaName(conf.TunnelQuotaName)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-	fmt.Println("tunnelEndpoint: " + tunnelEndpoint)
+	fmt.Println("tunnel endpoint: " + tunnelIns.GetEndpoint())
 
-	tunnelIns := tunnel.NewTunnel(odpsIns, tunnelEndpoint)
 	session, err := tunnelIns.CreateUploadSession(
-		project.Name(),
+		conf.ProjectName,
 		"mf_test",
 	)
 
@@ -45,7 +44,7 @@ func main() {
 		str,
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 1; i++ {
 		err = recordWriter.Write(record)
 		if err != nil {
 			log.Fatalf("%+v", err)
