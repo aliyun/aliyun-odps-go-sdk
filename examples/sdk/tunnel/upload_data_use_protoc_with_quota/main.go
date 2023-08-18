@@ -21,11 +21,7 @@ func main() {
 	odpsIns := odps.NewOdps(aliAccount, conf.Endpoint)
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
 	tunnelIns := tunnel.NewTunnel(odpsIns)
-	err = tunnelIns.SetQuotaName(conf.TunnelQuotaName)
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-	fmt.Println("tunnel endpoint: " + tunnelIns.GetEndpoint())
+	tunnelIns.SetQuotaName(conf.TunnelQuotaName)
 
 	session, err := tunnelIns.CreateUploadSession(
 		conf.ProjectName,
@@ -35,6 +31,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
+	fmt.Println("tunnel endpoint: " + tunnelIns.GetEndpoint())
 
 	recordWriter, err := session.OpenRecordWriter(0)
 	str := data.String("maxcompute")

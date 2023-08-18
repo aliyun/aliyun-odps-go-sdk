@@ -157,16 +157,16 @@ func (t *Tunnel) CreateInstanceResultDownloadSession(
 }
 
 func (t *Tunnel) getRestClient(projectName string) (restclient.RestClient, error) {
-	tunnelEndpoint := t.endpoint
-	if tunnelEndpoint == "" {
+	if t.endpoint == "" {
 		project := t.odpsIns.Project(projectName)
 		endpoint, err := project.GetTunnelEndpoint(t.quotaName)
 		if err != nil {
 			return restclient.RestClient{}, errors.WithStack(err)
 		}
-		tunnelEndpoint = endpoint
+		t.endpoint = endpoint
 	}
-	client := restclient.NewOdpsRestClient(t.odpsIns.Account(), tunnelEndpoint)
+
+	client := restclient.NewOdpsRestClient(t.odpsIns.Account(), t.endpoint)
 	client.HttpTimeout = t.HttpTimeout()
 	client.TcpConnectionTimeout = t.TcpConnectionTimeout()
 
@@ -177,15 +177,8 @@ func (t *Tunnel) GetEndpoint() string {
 	return t.endpoint
 }
 
-func (t *Tunnel) SetQuotaName(quotaName string) error {
-	project := t.odpsIns.DefaultProject()
-	endpoint, err := project.GetTunnelEndpoint(quotaName)
-	if err != nil {
-		return errors.WithStack(err)
-	}
+func (t *Tunnel) SetQuotaName(quotaName string) {
 	t.quotaName = quotaName
-	t.endpoint = endpoint
-	return nil
 }
 
 func (t *Tunnel) GetQuotaName() string {

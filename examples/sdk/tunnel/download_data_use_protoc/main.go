@@ -26,6 +26,7 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 	fmt.Println("tunnel endpoint: ", tunnelEndpoint)
+
 	tunnel := tunnel2.NewTunnel(odpsIns, tunnelEndpoint)
 	session, err := tunnel.CreateDownloadSession(
 		project.Name(),

@@ -21,11 +21,8 @@ func main() {
 	odpsIns := odps.NewOdps(aliAccount, conf.Endpoint)
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
 	tunnel := tunnel2.NewTunnel(odpsIns)
-	err = tunnel.SetQuotaName(conf.TunnelQuotaName)
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-	fmt.Printf("tunnel endpoint: %+v\n", tunnel.GetEndpoint())
+	tunnel.SetQuotaName(conf.TunnelQuotaName)
+
 	session, err := tunnel.CreateDownloadSession(
 		conf.ProjectName,
 		"mf_test",
@@ -33,6 +30,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
+	fmt.Printf("tunnel endpoint: %+v\n", tunnel.GetEndpoint())
+
 	schema := session.Schema()
 	recordCount := session.RecordCount()
 

@@ -3,10 +3,11 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 	"log"
 	"os"
 	"reflect"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 )
 
 func main() {

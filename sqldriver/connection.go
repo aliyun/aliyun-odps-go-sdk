@@ -85,19 +85,21 @@ func (c *connection) query(query string) (driver.Rows, error) {
 
 	// 调用instance tunnel, 下载结果
 	tunnelEndpoint := c.config.TunnelEndpoint
+	if tunnelEndpoint != "" && c.config.TunnelQuotaName != "" {
+		return nil, errors.New("TunnelEndpoint and TunnelQuotaName cannot be configured both")
+	}
 
-	if c.config.TunnelQuotaName == "" {
+	if c.config.TunnelQuotaName != "" {
 		project := c.odpsIns.DefaultProject()
-		tunnelEndpoint, err = project.GetTunnelEndpoint()
+		tunnelEndpoint, err = project.GetTunnelEndpoint(c.config.TunnelQuotaName)
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
-	} else {
-		if tunnelEndpoint != "" {
-			return nil, errors.New("TunnelEndpoint and TunnelQuotaName cannot be configured simultaneously")
-		}
+	}
+
+	if tunnelEndpoint == "" {
 		project := c.odpsIns.DefaultProject()
-		tunnelEndpoint, err = project.GetTunnelEndpoint(c.config.TunnelQuotaName)
+		tunnelEndpoint, err = project.GetTunnelEndpoint()
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
