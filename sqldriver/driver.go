@@ -19,6 +19,7 @@ package sqldriver
 import (
 	"database/sql"
 	"database/sql/driver"
+
 	"github.com/pkg/errors"
 )
 
@@ -34,5 +35,5 @@ func (d OdpsDriver) Open(name string) (driver.Conn, error) {
 		return nil, errors.WithStack(err)
 	}
 
-	return newConnection(config.GenOdps(), config.TunnelEndpoint), nil
+	return newConnection(config), nil
 }

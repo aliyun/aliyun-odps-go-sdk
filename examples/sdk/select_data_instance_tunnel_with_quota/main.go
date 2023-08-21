@@ -8,7 +8,7 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
-	tunnel2 "github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 )
 
 func main() {
@@ -20,33 +20,41 @@ func main() {
 	aliAccount := account.NewAliyunAccount(conf.AccessId, conf.AccessKey)
 	odpsIns := odps.NewOdps(aliAccount, conf.Endpoint)
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
-	project := odpsIns.DefaultProject()
-	tunnelEndpoint, err := project.GetTunnelEndpoint()
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-	fmt.Println("tunnel endpoint: ", tunnelEndpoint)
+	sql := `select * from mf_test;`
 
-	tunnel := tunnel2.NewTunnel(odpsIns, tunnelEndpoint)
-	session, err := tunnel.CreateDownloadSession(
-		project.Name(),
-		"all_types_demo",
-		tunnel2.SessionCfg.WithPartitionKey("p1=20,p2='hangzhou'"),
-	)
-
+	ins, err := odpsIns.ExecSQl(sql)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
 
-	recordCount := session.RecordCount()
-	fmt.Printf("record count is %d\n", recordCount)
+	err = ins.WaitForSuccess()
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
 
-	reader, err := session.OpenRecordReader(0, recordCount, nil)
+	lv := odpsIns.LogView()
+	lvUrl, err := lv.GenerateLogView(ins, 10)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	println(lvUrl)
+
+	tunnelIns := tunnel.NewTunnel(odpsIns)
+	tunnelIns.SetQuotaName(conf.TunnelQuotaName)
+
+	session, err := tunnelIns.CreateInstanceResultDownloadSession(conf.ProjectName, ins.Id())
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+	fmt.Println("tunnel endpoint: " + tunnelIns.GetEndpoint())
+
+	reader, err := session.OpenRecordReader(0, session.RecordCount(), 1000, nil)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
 	schema := session.Schema()
-
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
 
 	reader.Iterator(func(record data.Record, err error) {
 		if err != nil {
@@ -67,8 +75,4 @@ func main() {
 			}
 		}
 	})
-
-	if err = reader.Close(); err != nil {
-		log.Fatalf("%+v", err)
-	}
 }

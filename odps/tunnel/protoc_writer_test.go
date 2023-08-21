@@ -18,11 +18,12 @@ package tunnel
 
 import (
 	"bytes"
+	"reflect"
+	"testing"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"reflect"
-	"testing"
 )
 
 var simpleTypeProtocEncodedData = []byte{
@@ -138,9 +139,9 @@ func TestEncodeProtocSimpleType(t *testing.T) {
 	datetime, _ := data.NewDateTime("2022-10-19 17:00:00")
 	timestamp, _ := data.NewTimestamp("2022-10-19 17:00:00.000")
 
-	structData := data.NewStructWithTyp(&stColumnType)
+	structData := data.NewStructWithTyp(stColumnType)
 	arrayType := stColumnType.FieldType("arr").(datatype.ArrayType)
-	arr := data.NewArrayWithType(&arrayType)
+	arr := data.NewArrayWithType(arrayType)
 	_ = arr.Append("a")
 	_ = arr.Append("b")
 	_ = structData.SetField("arr", arr)
@@ -210,9 +211,9 @@ func TestEncodeProtocComplexType(t *testing.T) {
 	pw := newRecordProtocWriter(bw, columns, false)
 	name := data.String("alibaba")
 	birthday, _ := data.NewDateTime("2022-10-19 17:00:00")
-	extra := data.NewStructWithTyp(&extraColumnType)
+	extra := data.NewStructWithTyp(extraColumnType)
 	arrayType := extraColumnType.FieldType("address").(datatype.ArrayType)
-	address := data.NewArrayWithType(&arrayType)
+	address := data.NewArrayWithType(arrayType)
 	_ = address.Append("cloud_silly")
 	_ = address.Append("efc")
 	_ = extra.SetField("address", address)

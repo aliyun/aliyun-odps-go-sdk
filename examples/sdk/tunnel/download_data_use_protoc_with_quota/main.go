@@ -20,35 +20,24 @@ func main() {
 	aliAccount := account.NewAliyunAccount(conf.AccessId, conf.AccessKey)
 	odpsIns := odps.NewOdps(aliAccount, conf.Endpoint)
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
-	project := odpsIns.DefaultProject()
-	tunnelEndpoint, err := project.GetTunnelEndpoint()
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-	fmt.Println("tunnel endpoint: ", tunnelEndpoint)
+	tunnel := tunnel2.NewTunnel(odpsIns)
+	tunnel.SetQuotaName(conf.TunnelQuotaName)
 
-	tunnel := tunnel2.NewTunnel(odpsIns, tunnelEndpoint)
 	session, err := tunnel.CreateDownloadSession(
-		project.Name(),
-		"all_types_demo",
-		tunnel2.SessionCfg.WithPartitionKey("p1=20,p2='hangzhou'"),
+		conf.ProjectName,
+		"mf_test",
 	)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
+	fmt.Printf("tunnel endpoint: %+v\n", tunnel.GetEndpoint())
 
-	recordCount := session.RecordCount()
-	fmt.Printf("record count is %d\n", recordCount)
-
-	reader, err := session.OpenRecordReader(0, recordCount, nil)
 	schema := session.Schema()
+	recordCount := session.RecordCount()
 
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
+	recordReader, err := session.OpenRecordReader(0, recordCount, nil)
 
-	reader.Iterator(func(record data.Record, err error) {
+	recordReader.Iterator(func(record data.Record, err error) {
 		if err != nil {
 			log.Fatalf("%+v", err)
 		}
@@ -68,7 +57,7 @@ func main() {
 		}
 	})
 
-	if err = reader.Close(); err != nil {
+	if err = recordReader.Close(); err != nil {
 		log.Fatalf("%+v", err)
 	}
 }

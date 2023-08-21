@@ -17,13 +17,14 @@
 package odps
 
 import (
+	"net/url"
+	"strconv"
+	"time"
+
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/pkg/errors"
 	"gopkg.in/ini.v1"
-	"net/url"
-	"strconv"
-	"time"
 )
 
 // Config is the basic config for odps. The NewConfig function should be used, which sets default values.
@@ -36,6 +37,7 @@ type Config struct {
 	TcpConnectionTimeout time.Duration
 	HttpTimeout          time.Duration
 	TunnelEndpoint       string
+	TunnelQuotaName      string
 }
 
 func NewConfig() *Config {
@@ -46,7 +48,8 @@ func NewConfig() *Config {
 }
 
 func NewConfigFromIni(iniPath string) (*Config, error) {
-	cfg, err := ini.Load(iniPath)
+	cfg, err := ini.LoadSources(ini.LoadOptions{IgnoreInlineComment: true}, iniPath)
+
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -58,6 +61,7 @@ func NewConfigFromIni(iniPath string) (*Config, error) {
 	conf.AccessKey = section.Key("access_key").String()
 	conf.StsToken = section.Key("sts_token").String()
 	conf.Endpoint = section.Key("endpoint").String()
+	conf.TunnelQuotaName = section.Key("tunnel_quota_name").String()
 
 	_, err = url.Parse(conf.Endpoint)
 	if err != nil {
@@ -144,6 +148,10 @@ func (c *Config) FormatDsn() string {
 	if c.TcpConnectionTimeout > 0 {
 		connTimeOut := int64(c.TcpConnectionTimeout) / int64(time.Second)
 		values.Set("tcpConnectionTimeout", strconv.FormatInt(connTimeOut, 10))
+	}
+
+	if c.TunnelQuotaName != "" {
+		values.Set("tunnelQuotaName", c.TunnelQuotaName)
 	}
 
 	if c.TunnelEndpoint != "" {
