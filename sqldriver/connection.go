@@ -19,6 +19,7 @@ package sqldriver
 import (
 	"context"
 	"database/sql/driver"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 	"github.com/pkg/errors"
@@ -86,7 +87,7 @@ func (c *connection) query(query string) (driver.Rows, error) {
 	// 调用instance tunnel, 下载结果
 	tunnelEndpoint := c.config.TunnelEndpoint
 	if tunnelEndpoint != "" && c.config.TunnelQuotaName != "" {
-		return nil, errors.New("TunnelEndpoint and TunnelQuotaName cannot be configured both")
+		return nil, errors.New(`"tunnelEndpoint" and "tunnelQuotaName" cannot be configured both`)
 	}
 
 	if c.config.TunnelQuotaName != "" {
