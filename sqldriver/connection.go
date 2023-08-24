@@ -73,7 +73,7 @@ func (c *connection) Query(query string, args []driver.Value) (driver.Rows, erro
 
 func (c *connection) query(query string) (driver.Rows, error) {
 	// 执行sql task，获取instance
-	ins, err := c.odpsIns.ExecSQl(query)
+	ins, err := c.odpsIns.ExecSQlWithHints(query, c.config.Hints)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -152,7 +152,7 @@ func (c *connection) Exec(query string, args []driver.Value) (driver.Result, err
 
 func (c *connection) exec(query string) (driver.Result, error) {
 	// 执行sql task，获取instance
-	ins, err := c.odpsIns.ExecSQl(query)
+	ins, err := c.odpsIns.ExecSQlWithHints(query, c.config.Hints)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}

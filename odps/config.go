@@ -19,6 +19,7 @@ package odps
 import (
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
@@ -38,6 +39,7 @@ type Config struct {
 	HttpTimeout          time.Duration
 	TunnelEndpoint       string
 	TunnelQuotaName      string
+	Hints                map[string]string
 }
 
 func NewConfig() *Config {
@@ -89,6 +91,19 @@ func NewConfigFromIni(iniPath string) (*Config, error) {
 	tunnelEndpoint, err := section.GetKey("tunnel_endpoint")
 	if err == nil {
 		conf.TunnelEndpoint = tunnelEndpoint.String()
+	}
+
+	hints := make(map[string]string)
+	keys := section.Keys()
+	for _, key := range keys {
+		if strings.HasPrefix(key.Name(), "hints") {
+			splits := strings.SplitN(key.Name(), ".", 2)
+			hint := splits[1]
+			hints[hint] = key.Value()
+		}
+	}
+	if len(hints) > 0 {
+		conf.Hints = hints
 	}
 
 	return conf, nil
@@ -156,6 +171,12 @@ func (c *Config) FormatDsn() string {
 
 	if c.TunnelEndpoint != "" {
 		values.Set("tunnelEndpoint", c.TunnelEndpoint)
+	}
+
+	if c.Hints != nil {
+		for k, v := range c.Hints {
+			values.Set(k, v)
+		}
 	}
 
 	dsn.RawQuery = values.Encode()
