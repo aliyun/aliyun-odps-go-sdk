@@ -4,19 +4,12 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 )
 
 func main() {
-	config, err := sqldriver.NewConfigFromIni(os.Args[1])
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-
-	dsn := config.FormatDsn()
-	// or dsn := "http://<accessId>:<accessKey>@<endpoint>?project=<project>&odps.namespace.schema=true&odps.default.schema=<schema_name>&other.odps.flag=<flag>"
+	dsn := "http://<accessId>:<accessKey>@<endpoint>?project=<project>&odps.namespace.schema=true&odps.default.schema=<schema_name>&other.odps.flag=<flag>"
 
 	db, err := sql.Open("odps", dsn)
 	if err != nil {
