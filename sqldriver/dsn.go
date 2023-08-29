@@ -52,12 +52,13 @@ func ParseDSN(dsn string) (*Config, error) {
 		return nil, errors.New("AccessKey is not set")
 	}
 
-	projectName := u.Query().Get("project")
+	queryParams := u.Query()
+
+	projectName := queryParams.Get("project")
 	if projectName == "" {
 		return nil, errors.New("project name is not set")
 	}
-
-	tunnelQuotaName := u.Query().Get("tunnelQuotaName")
+	queryParams.Del("project")
 
 	endpoint := (&url.URL{
 		Scheme: u.Scheme,
@@ -70,16 +71,23 @@ func ParseDSN(dsn string) (*Config, error) {
 	config.AccessKey = accessKey
 	config.Endpoint = endpoint
 	config.ProjectName = projectName
-	config.TunnelQuotaName = tunnelQuotaName
 
 	var connTimeout, httpTimeout string
 
-	optionalParams := []string{"stsToken", "tcpConnectionTimeout", "httpTimeout", "tunnelEndpoint"}
-	paramPointer := []*string{&config.StsToken, &connTimeout, &httpTimeout, &config.TunnelEndpoint}
+	optionalParams := []string{"stsToken", "tcpConnectionTimeout", "httpTimeout", "tunnelEndpoint", "tunnelQuotaName"}
+	paramPointer := []*string{&config.StsToken, &connTimeout, &httpTimeout, &config.TunnelEndpoint, &config.TunnelQuotaName}
 	for i, p := range optionalParams {
-		v := u.Query().Get(p)
+		v := queryParams.Get(p)
 		if v != "" {
 			*paramPointer[i] = v
+		}
+		queryParams.Del(p)
+	}
+
+	if len(queryParams) > 0 {
+		config.Hints = make(map[string]string)
+		for k, params := range queryParams {
+			config.Hints[k] = params[0]
 		}
 	}
 
