@@ -17,12 +17,13 @@
 package tunnel
 
 import (
+	"io"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/encoding/protowire"
-	"io"
 )
 
 type RecordProtocWriter struct {
@@ -207,7 +208,7 @@ func (r *RecordProtocWriter) writeField(val data.Data) error {
 	case data.Date:
 		t := val.Time()
 		// 获取从1970年以来的天数
-		days := int64(t.Sub(epochDay).Hours() / 24)
+		days := t.Unix() / data.SecondsPerDay
 		r.recordCrc.Update(days)
 		return errors.WithStack(r.protocWriter.WriteSInt64(days))
 	case data.IntervalDayTime:
