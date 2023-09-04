@@ -24,7 +24,7 @@ import (
 var epochDay time.Time
 
 func init() {
-	epochDay, _ = time.ParseInLocation("2006-01-02", "1970-01-01", time.Local)
+	epochDay, _ = time.ParseInLocation("2006-01-02", "1970-01-01", time.UTC)
 }
 
 const (
