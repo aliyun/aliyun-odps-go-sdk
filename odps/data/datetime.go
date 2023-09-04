@@ -18,9 +18,10 @@ package data
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/pkg/errors"
-	"time"
 )
 
 const (
@@ -29,12 +30,18 @@ const (
 	TimeStampFormat = "2006-01-02 15:04:05.000"
 )
 
+const (
+	SecondsPerMinute = 60
+	SecondsPerHour   = 60 * SecondsPerMinute
+	SecondsPerDay    = 24 * SecondsPerHour
+)
+
 type Date time.Time
 type DateTime time.Time
 type Timestamp time.Time
 
 func NewDate(s string) (Date, error) {
-	t, err := time.ParseInLocation(DateFormat, s, time.Local)
+	t, err := time.ParseInLocation(DateFormat, s, time.UTC)
 	if err != nil {
 		return Date(time.Time{}), err
 	}
