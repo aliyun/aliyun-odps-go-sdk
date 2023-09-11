@@ -19,6 +19,8 @@ package sqldriver
 import (
 	"context"
 	"database/sql/driver"
+	"log"
+	"strings"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
@@ -82,6 +84,19 @@ func (c *connection) query(query string) (driver.Rows, error) {
 	err = ins.WaitForSuccess()
 	if err != nil {
 		return nil, errors.WithStack(err)
+	}
+
+	// 如果dsn中配置了enableLogview=true，将打印相应logView
+	if c.config.Hints != nil {
+		if value, ok := c.config.Hints["enableLogview"]; ok && strings.ToLower(value) == "true" {
+			lv := c.odpsIns.LogView()
+			lvUrl, err := lv.GenerateLogView(ins, 10)
+			if err != nil {
+				log.Fatalf("%+v", err)
+			}
+
+			println(lvUrl)
+		}
 	}
 
 	// 调用instance tunnel, 下载结果

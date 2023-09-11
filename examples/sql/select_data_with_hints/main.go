@@ -9,7 +9,8 @@ import (
 )
 
 func main() {
-	dsn := "http://<accessId>:<accessKey>@<endpoint>?project=<project>&odps.namespace.schema=true&odps.default.schema=<schema_name>&other.odps.flag=<flag>"
+	dsn := "http://<accessId>:<accessKey>@<endpoint>" +
+		"?project=<project>&odps.namespace.schema=true&odps.default.schema=<schema_name>&other.odps.flag=<flag>&enableLogview=true"
 
 	db, err := sql.Open("odps", dsn)
 	if err != nil {
