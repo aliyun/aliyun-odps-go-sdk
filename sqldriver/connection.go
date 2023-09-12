@@ -91,10 +91,10 @@ func (c *connection) query(query string) (driver.Rows, error) {
 		lv := c.odpsIns.LogView()
 		lvUrl, err := lv.GenerateLogView(ins, 10)
 		if err != nil {
-			log.Fatalf("%+v", err)
+			return nil, errors.Wrapf(err, "Generate logView failed.")
 		}
 
-		println(lvUrl)
+		log.Printf("%s\n", lvUrl)
 	}
 
 	// 调用instance tunnel, 下载结果
