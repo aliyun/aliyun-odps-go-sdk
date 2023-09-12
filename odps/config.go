@@ -40,6 +40,7 @@ type Config struct {
 	TunnelEndpoint       string
 	TunnelQuotaName      string
 	Hints                map[string]string
+	Others               map[string]string
 }
 
 func NewConfig() *Config {
@@ -120,7 +121,16 @@ func NewConfigFromIni(iniPath string) (*Config, error) {
 		}
 	}
 
-	hints := make(map[string]string)
+	otherParams := []string{"enableLogview"}
+	conf.Others = make(map[string]string)
+	for _, p := range otherParams {
+		if key, err := section.GetKey(p); err == nil {
+			conf.Others[p] = key.String()
+			section.DeleteKey(p)
+		}
+	}
+
+	conf.Hints = make(map[string]string)
 	keys := section.Keys()
 	for _, key := range keys {
 		hint := key.Name()
@@ -128,10 +138,7 @@ func NewConfigFromIni(iniPath string) (*Config, error) {
 			splits := strings.SplitN(key.Name(), ".", 2)
 			hint = splits[1]
 		}
-		hints[hint] = key.Value()
-	}
-	if len(hints) > 0 {
-		conf.Hints = hints
+		conf.Hints[hint] = key.Value()
 	}
 
 	return conf, nil
@@ -203,6 +210,12 @@ func (c *Config) FormatDsn() string {
 
 	if c.Hints != nil {
 		for k, v := range c.Hints {
+			values.Set(k, v)
+		}
+	}
+
+	if c.Others != nil {
+		for k, v := range c.Others {
 			values.Set(k, v)
 		}
 	}

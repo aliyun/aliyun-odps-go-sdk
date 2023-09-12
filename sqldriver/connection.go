@@ -87,16 +87,14 @@ func (c *connection) query(query string) (driver.Rows, error) {
 	}
 
 	// 如果dsn中配置了enableLogview=true，将打印相应logView
-	if c.config.Hints != nil {
-		if value, ok := c.config.Hints["enableLogview"]; ok && strings.ToLower(value) == "true" {
-			lv := c.odpsIns.LogView()
-			lvUrl, err := lv.GenerateLogView(ins, 10)
-			if err != nil {
-				log.Fatalf("%+v", err)
-			}
-
-			println(lvUrl)
+	if value, ok := c.config.Others["enableLogview"]; ok && strings.ToLower(value) == "true" {
+		lv := c.odpsIns.LogView()
+		lvUrl, err := lv.GenerateLogView(ins, 10)
+		if err != nil {
+			log.Fatalf("%+v", err)
 		}
+
+		println(lvUrl)
 	}
 
 	// 调用instance tunnel, 下载结果
