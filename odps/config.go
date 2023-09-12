@@ -40,6 +40,7 @@ type Config struct {
 	TunnelEndpoint       string
 	TunnelQuotaName      string
 	Hints                map[string]string
+	Others               map[string]string
 }
 
 func NewConfig() *Config {
@@ -51,7 +52,6 @@ func NewConfig() *Config {
 
 func NewConfigFromIni(iniPath string) (*Config, error) {
 	cfg, err := ini.LoadSources(ini.LoadOptions{IgnoreInlineComment: true}, iniPath)
-
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -59,51 +59,86 @@ func NewConfigFromIni(iniPath string) (*Config, error) {
 	section := cfg.Section("odps")
 	conf := NewConfig()
 
-	conf.AccessId = section.Key("access_id").String()
-	conf.AccessKey = section.Key("access_key").String()
-	conf.StsToken = section.Key("sts_token").String()
-	conf.Endpoint = section.Key("endpoint").String()
-	conf.TunnelQuotaName = section.Key("tunnel_quota_name").String()
+	requiredParams := []string{
+		"access_id",
+		"access_key",
+		"endpoint",
+		"project",
+	}
+	paramPointer := []*string{
+		&conf.AccessId,
+		&conf.AccessKey,
+		&conf.Endpoint,
+		&conf.ProjectName,
+	}
+	for i, p := range requiredParams {
+		key, err := section.GetKey(p)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		*paramPointer[i] = key.String()
+		section.DeleteKey(p)
+	}
 
 	_, err = url.Parse(conf.Endpoint)
 	if err != nil {
 		return nil, errors.Wrapf(err, "invalid endpoint: \"%s\"", conf.Endpoint)
 	}
 
-	conf.ProjectName = section.Key("project").String()
-
-	connTimeout, err := section.GetKey("tcp_connection_timeout")
-	if err == nil {
-		v, err := connTimeout.Int()
-		if err == nil {
-			conf.TcpConnectionTimeout = time.Duration(v) * time.Second
+	var connTimeout, httpTimeout string
+	optionalParams := []string{
+		"sts_token",
+		"tcp_connection_timeout",
+		"http_timeout",
+		"tunnel_endpoint",
+		"tunnel_quota_name",
+	}
+	paramPointer = []*string{
+		&conf.StsToken,
+		&connTimeout,
+		&httpTimeout,
+		&conf.TunnelEndpoint,
+		&conf.TunnelQuotaName,
+	}
+	for i, p := range optionalParams {
+		if key, err := section.GetKey(p); err == nil {
+			*paramPointer[i] = key.String()
+			section.DeleteKey(p)
 		}
 	}
 
-	httpTimeout, err := section.GetKey("http_timeout")
-	if err == nil {
-		v, err := httpTimeout.Int()
+	if connTimeout != "" {
+		n, err := strconv.ParseInt(connTimeout, 10, 32)
 		if err == nil {
-			conf.HttpTimeout = time.Duration(v) * time.Second
+			conf.TcpConnectionTimeout = time.Duration(n) * time.Second
 		}
 	}
 
-	tunnelEndpoint, err := section.GetKey("tunnel_endpoint")
-	if err == nil {
-		conf.TunnelEndpoint = tunnelEndpoint.String()
+	if httpTimeout != "" {
+		n, err := strconv.ParseInt(httpTimeout, 10, 32)
+		if err == nil {
+			conf.HttpTimeout = time.Duration(n) * time.Second
+		}
 	}
 
-	hints := make(map[string]string)
+	otherParams := []string{"enableLogview"}
+	conf.Others = make(map[string]string)
+	for _, p := range otherParams {
+		if key, err := section.GetKey(p); err == nil {
+			conf.Others[p] = key.String()
+			section.DeleteKey(p)
+		}
+	}
+
+	conf.Hints = make(map[string]string)
 	keys := section.Keys()
 	for _, key := range keys {
-		if strings.HasPrefix(key.Name(), "hints") {
+		hint := key.Name()
+		if strings.HasPrefix(hint, "hints") {
 			splits := strings.SplitN(key.Name(), ".", 2)
-			hint := splits[1]
-			hints[hint] = key.Value()
+			hint = splits[1]
 		}
-	}
-	if len(hints) > 0 {
-		conf.Hints = hints
+		conf.Hints[hint] = key.Value()
 	}
 
 	return conf, nil
@@ -175,6 +210,12 @@ func (c *Config) FormatDsn() string {
 
 	if c.Hints != nil {
 		for k, v := range c.Hints {
+			values.Set(k, v)
+		}
+	}
+
+	if c.Others != nil {
+		for k, v := range c.Others {
 			values.Set(k, v)
 		}
 	}

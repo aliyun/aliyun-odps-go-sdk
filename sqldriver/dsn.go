@@ -84,24 +84,33 @@ func ParseDSN(dsn string) (*Config, error) {
 		queryParams.Del(p)
 	}
 
-	if len(queryParams) > 0 {
-		config.Hints = make(map[string]string)
-		for k, params := range queryParams {
-			config.Hints[k] = params[0]
-		}
-	}
-
 	if connTimeout != "" {
 		n, err := strconv.ParseInt(connTimeout, 10, 32)
-		if err != nil {
+		if err == nil {
 			config.TcpConnectionTimeout = time.Duration(n) * time.Second
 		}
 	}
 
 	if httpTimeout != "" {
 		n, err := strconv.ParseInt(httpTimeout, 10, 32)
-		if err != nil {
+		if err == nil {
 			config.HttpTimeout = time.Duration(n) * time.Second
+		}
+	}
+
+	otherParams := []string{"enableLogview"}
+	config.Others = make(map[string]string)
+	for _, p := range otherParams {
+		if v := queryParams.Get(p); v != "" {
+			config.Others[p] = v
+			queryParams.Del(p)
+		}
+	}
+
+	config.Hints = make(map[string]string)
+	if len(queryParams) > 0 {
+		for k, params := range queryParams {
+			config.Hints[k] = params[0]
 		}
 	}
 
