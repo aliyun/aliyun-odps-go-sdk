@@ -20,13 +20,14 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"github.com/pkg/errors"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
+	"github.com/pkg/errors"
 )
 
 type TableType int
@@ -65,6 +66,7 @@ type tableModel struct {
 	TableLabel  string
 	CryptoAlgo  string
 	Type        TableType
+	SchemaName  string `xml:"SchemaName"`
 }
 
 func NewTable(odpsIns *Odps, projectName string, tableName string) Table {
@@ -139,6 +141,10 @@ func (t *Table) CryptoAlgo() string {
 
 func (t *Table) ProjectName() string {
 	return t.model.ProjectName
+}
+
+func (t *Table) SchemaName() string {
+	return t.model.SchemaName
 }
 
 func (t *Table) Type() TableType {

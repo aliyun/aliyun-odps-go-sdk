@@ -17,10 +17,17 @@
 package tunnel
 
 import (
+	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
+	_ "github.com/aliyun/aliyun-odps-go-sdk/odps"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
+
 	"github.com/pkg/errors"
 )
 
@@ -183,4 +190,107 @@ func (t *Tunnel) SetQuotaName(quotaName string) {
 
 func (t *Tunnel) GetQuotaName() string {
 	return t.quotaName
+}
+
+func (t *Tunnel) Preview(projectName, schemaName, tableName string,
+	limit int64, opt ...Option) (*http.Response, error) {
+	if limit < 0 {
+		limit = -1
+	}
+	//
+	cfg := newSessionConfig(opt...)
+	//
+	queryArgs := make(url.Values, 2)
+	queryArgs.Set("limit", strconv.FormatInt(limit, 10))
+	if cfg.PartitionKey != "" {
+		queryArgs.Set("partition", cfg.PartitionKey)
+	}
+	resource := common.NewResourceBuilder(projectName)
+	var resourceUrl string
+	if schemaName != "" {
+		resourceUrl = resource.TableWithSchemaName(tableName, schemaName)
+	} else {
+		resourceUrl = resource.Table(tableName)
+	}
+	resourceUrl += "/preview"
+	//
+	client, err := t.getRestClient(projectName)
+	if err != nil {
+		return nil, err
+	}
+	req, err := client.NewRequestWithUrlQuery(
+		common.HttpMethod.GetMethod,
+		resourceUrl,
+		nil,
+		queryArgs,
+	)
+	if err != nil {
+		return nil, err
+	}
+	//
+	addCommonSessionHttpHeader(req.Header)
+	//
+	if cfg.Compressor != nil {
+		req.Header.Set(common.HttpHeaderAcceptEncoding, cfg.Compressor.Name())
+	}
+	req.Header.Set(common.HttpHeaderContentLength, "0")
+	//
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode/100 != 2 {
+		return nil, restclient.NewHttpNotOk(res)
+	}
+	//
+	contentEncoding := res.Header.Get(common.HttpHeaderContentEncoding)
+	if contentEncoding != "" {
+		res.Body = WrapByCompressor(res.Body, contentEncoding)
+	}
+	return res, nil
+}
+
+// read table records from tabletunnel, max 10000 rows
+func (t *Tunnel) ReadTable(table *odps.Table, partition string, limit int64) (*ArrowStreamRecordReader, error) {
+	if !table.IsLoaded() {
+		if err := table.Load(); err != nil {
+			return nil, err
+		}
+	}
+	//
+	tableSchema := table.Schema()
+	//if len(columnNames) == 0 {
+	//	columnNames = make([]string, len(tableSchema.Columns))
+	//	for i, c := range tableSchema.Columns {
+	//		columnNames[i] = c.Name
+	//	}
+	//	if tableSchema.PartitionColumns != nil {
+	//		for _, c := range tableSchema.PartitionColumns {
+	//			columnNames = append(columnNames, c.Name)
+	//		}
+	//	}
+	//}
+	//
+	opt := tableschema.ToArrowSchemaOption{
+		WithExtensionTimeStamp: true,
+		WithPartitionColumns:   true,
+	}
+	arrowSchema := tableSchema.ToArrowSchema(opt)
+	//arrowFields := make([]arrow.Field, 0, len(columnNames))
+	//for _, columnName := range columnNames {
+	//	fs, ok := arrowSchema.FieldsByName(columnName)
+	//	if !ok {
+	//		return nil, errors.Errorf("no column names %s in table %s", columnName, table.Name())
+	//	}
+	//	arrowFields = append(arrowFields, fs...)
+	//}
+	//arrowSchema = arrow.NewSchema(arrowFields, nil)
+	//
+	httpResp, err :=
+		t.Preview(table.ProjectName(), table.SchemaName(), table.Name(), limit, SessionCfg.WithPartitionKey(partition))
+	if err != nil {
+		return nil, err
+	}
+
+	return newArrowStreamRecordReader(httpResp, arrowSchema)
 }
