@@ -51,7 +51,7 @@ func (rr *rowsReader) Next(dst []driver.Value) error {
 	record, err := rr.inner.Read()
 
 	if errors.Is(err, io.EOF) {
-		return err
+		return io.EOF
 	}
 
 	if err != nil {
