@@ -50,7 +50,7 @@ func (rr *rowsReader) Close() error {
 func (rr *rowsReader) Next(dst []driver.Value) error {
 	record, err := rr.inner.Read()
 
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		return err
 	}
 
