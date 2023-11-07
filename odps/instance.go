@@ -19,6 +19,7 @@ package odps
 import (
 	"encoding/json"
 	"encoding/xml"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -401,6 +402,33 @@ func (instance *Instance) UpdateInfo(taskName, infoKey, infoValue string) (Updat
 	)
 	//
 	return res, err
+}
+
+// GetTaskInfo get the specific info of a task in the instance
+func (instance *Instance) GetTaskInfo(taskName, infoKey string) (string, error) {
+	queryArgs := make(url.Values, 3)
+	queryArgs.Set("info", "")
+	queryArgs.Set("taskname", taskName)
+	queryArgs.Set("key", infoKey)
+
+	client := instance.odpsIns.RestClient()
+	var bodyStr string
+	err := client.DoXmlWithParseRes(
+		common.HttpMethod.GetMethod,
+		instance.resourceUrl,
+		queryArgs,
+		nil,
+		func(httpRes *http.Response) error {
+			body, err := io.ReadAll(httpRes.Body)
+			if err != nil {
+				return errors.Wrapf(err, "Parse http response failed, body: %+v", httpRes.Body)
+			}
+			bodyStr = string(body)
+			return nil
+		},
+	)
+
+	return bodyStr, err
 }
 
 func InstancesStatusFromStr(s string) InstanceStatus {

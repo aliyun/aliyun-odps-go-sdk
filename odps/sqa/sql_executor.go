@@ -6,6 +6,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
@@ -17,6 +18,13 @@ import (
 const (
 	DEFAULT_TASK_NAME = "sqlrt_task"
 	DEFAULT_SERVICE   = "public.default"
+
+	SESSION_TIMEOUT = 60
+
+	OBJECT_STATUS_RUNNING    = 2
+	OBJECT_STATUS_FAILED     = 4
+	OBJECT_STATUS_TERMINATED = 5
+	OBJECT_STATUS_CANCELLED  = 6
 )
 
 type SQLExecutor interface {
@@ -83,6 +91,11 @@ func (ie *InteractiveSQLExecutor) Run(sql string, queryHints map[string]string) 
 	if err != nil {
 		return errors.Wrapf(err, "Get error when creating instance")
 	}
+	// wait for attach success
+	err = ie.waitAttachSuccess(SESSION_TIMEOUT)
+	if err != nil {
+		return err
+	}
 	//
 	err = ie.runQueryInternal()
 	if err != nil {
@@ -95,6 +108,8 @@ func (ie *InteractiveSQLExecutor) createInstance() (*odps.Instance, error) {
 	if ie.serviceName != "" {
 		ie.hints["odps.sql.session.share.id"] = ie.serviceName
 		ie.hints["odps.sql.session.name"] = strings.TrimSpace(ie.serviceName)
+	} else {
+		return nil, errors.New("service name cannot be empty.")
 	}
 
 	if ie.taskName == "" {
@@ -113,7 +128,60 @@ func (ie *InteractiveSQLExecutor) createInstance() (*odps.Instance, error) {
 	}
 	//
 	instances := odps.NewInstances(ie.odpsIns, projectName)
-	return instances.CreateTask(projectName, &task)
+	instance, err := instances.CreateTask(projectName, &task)
+	if err != nil {
+		return nil, err
+	}
+	return instance, err
+}
+
+type SubQueryResponse struct {
+	Status     int
+	Result     string
+	warnings   string
+	SubQueryId int
+}
+
+func (ie *InteractiveSQLExecutor) waitAttachSuccess(timeout int64) error {
+	if timeout < 1 {
+		timeout = SESSION_TIMEOUT
+	}
+	//
+	start := time.Now()
+	end := start.Add(time.Second * time.Duration(timeout))
+	//
+	for time.Now().Before(end) {
+		infoStr, err := ie.instance.GetTaskInfo(ie.taskName, "wait_attach_success")
+		//
+		var subQueryResp SubQueryResponse
+		_ = json.Unmarshal([]byte(infoStr), &subQueryResp)
+		if err != nil || subQueryResp.Status == 0 {
+			// check task status
+			tasks, err := ie.instance.GetTasks()
+			if err != nil {
+				return err
+			}
+			//
+			var status odps.TaskStatus
+			for _, task := range tasks {
+				if task.Name == ie.taskName {
+					status = task.Status
+					break
+				}
+			}
+			if status != odps.TaskRunning {
+				return errors.New(fmt.Sprintf("instance id: %v, task name: %s, status: %v",
+					ie.instance.Id(), ie.taskName, status.String()))
+			}
+		} else if subQueryResp.Status == OBJECT_STATUS_FAILED || subQueryResp.Status == OBJECT_STATUS_TERMINATED {
+			return errors.New(fmt.Sprintf("attach instance [id: %v] failed, %s", ie.instance.Id(), subQueryResp.Result))
+		}
+		// running
+		return nil
+	}
+	//
+	_ = ie.instance.Terminate()
+	return errors.New(fmt.Sprintf("attach instance [id: %v] timeout.", ie.instance.Id()))
 }
 
 type SubQueryInfo struct {
