@@ -17,6 +17,7 @@
 package tunnel
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"time"
@@ -402,4 +403,43 @@ func (r *RecordProtocReader) readStruct(t datatype.StructType) (*data.Struct, er
 	}
 
 	return sd, nil
+}
+
+func (r *RecordProtocReader) readTableSchema() (*tableschema.TableSchema, error) {
+	var schemaJson string
+	for {
+		tag, _, err := r.protocReader.ReadTag()
+		if err != nil {
+			return nil, err
+		}
+		// todo: validate crc failed, checking
+		if tag == SchemaEndTag {
+			crc := r.recordCrc.Value()
+			readUInt32, _ := r.protocReader.ReadUInt32()
+			if readUInt32 != crc {
+				return nil, errors.New("crc value is error")
+			}
+			r.recordCrc.Reset()
+			break
+		}
+		//
+		if tag > 1 {
+			return nil, errors.New("invalid tag")
+		}
+		//
+		r.recordCrc.Update(tag)
+
+		v, err := r.protocReader.ReadBytes()
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+
+		r.recordCrc.Update(v)
+		schemaJson = string(v)
+	}
+
+	var tableSchema tableschema.TableSchema
+	err := json.Unmarshal([]byte(schemaJson), &tableSchema)
+
+	return &tableSchema, err
 }

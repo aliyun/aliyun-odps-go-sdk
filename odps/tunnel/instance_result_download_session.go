@@ -65,18 +65,19 @@ func CreateInstanceResultDownloadSession(
 		Compressor:   cfg.Compressor,
 	}
 
+	// long pooling session
 	if cfg.QueryId != -1 {
 		session.IsLongPolling = true
-	}
+	} else {
+		req, err := session.newInitiationRequest()
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
 
-	req, err := session.newInitiationRequest()
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	err = session.loadInformation(req)
-	if err != nil {
-		return nil, errors.WithStack(err)
+		err = session.loadInformation(req)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
 	}
 
 	return &session, nil
@@ -145,6 +146,11 @@ func (is *InstanceResultDownloadSession) OpenRecordReader(
 	start, count, sizeLimit int,
 	columnNames []string,
 ) (*RecordProtocReader, error) {
+	res, err := is.newDownloadConnection(start, count, sizeLimit, columnNames)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
 	if len(columnNames) == 0 {
 		columnNames = make([]string, len(is.schema.Columns))
 		for i, c := range is.schema.Columns {
@@ -162,11 +168,6 @@ func (is *InstanceResultDownloadSession) OpenRecordReader(
 		columns[i] = c
 	}
 
-	res, err := is.newDownloadConnection(start, count, sizeLimit, columnNames)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
 	reader := newRecordProtocReader(res, columns, is.shouldTransformDate)
 	return &reader, nil
 }
@@ -182,7 +183,7 @@ func (is *InstanceResultDownloadSession) newInitiationRequest() (*http.Request, 
 
 	if is.TaskName != "" {
 		queryArgs.Set("cached", "")
-		queryArgs.Set("taskname", "")
+		queryArgs.Set("taskname", is.TaskName)
 
 		if is.QueryId != -1 {
 			queryArgs.Set("queryid", strconv.Itoa(is.QueryId))
@@ -267,10 +268,15 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 		queryArgs.Set("instance_tunnel_limit_enabled", "")
 	}
 
+	if is.QuotaName != "" {
+		queryArgs.Set("quotaName", is.QuotaName)
+	}
+
 	queryArgs.Set("data", "")
 	if is.IsLongPolling {
+		queryArgs.Set("schema_in_stream", "")
 		queryArgs.Set("cached", "")
-		queryArgs.Set("taskname", "")
+		queryArgs.Set("taskname", is.TaskName)
 
 		if is.QueryId != -1 {
 			queryArgs.Set("queryid", strconv.Itoa(is.QueryId))
@@ -322,5 +328,44 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 		res.Body = WrapByCompressor(res.Body, contentEncoding)
 	}
 
+	if is.IsLongPolling {
+		err = is.procLongPollingResp(res)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return res, nil
+}
+
+func (is *InstanceResultDownloadSession) procLongPollingResp(res *http.Response) error {
+	//
+	if res.Header.Get("odps-tunnel-record-count") != "" {
+		recordCount, err := strconv.ParseInt(res.Header.Get("odps-tunnel-record-count"), 10, 32)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		is.recordCount = int(recordCount)
+	}
+	//
+	var tableSchema tableschema.TableSchema
+	if res.Header.Get("odps-tunnel-schema") != "" {
+		schemaStr := res.Header.Get("odps-tunnel-schema")
+
+		err := json.Unmarshal([]byte(schemaStr), &tableSchema)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+	} else {
+		reader := newRecordProtocReader(res, nil, false)
+		tableSchemaPtr, err := reader.readTableSchema()
+		if err != nil {
+			return err
+		}
+		tableSchema = *tableSchemaPtr
+	}
+	//
+	is.schema = tableSchema
+
+	return nil
 }

@@ -19,13 +19,14 @@ package odps
 import (
 	"encoding/json"
 	"encoding/xml"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/pkg/errors"
 )
 
 type InstanceStatus int
@@ -270,6 +271,10 @@ func (instance *Instance) Id() string {
 	return instance.id
 }
 
+func (instance *Instance) ResourceUrl() string {
+	return instance.resourceUrl
+}
+
 func (instance *Instance) Owner() string {
 	return instance.owner
 }
@@ -356,6 +361,46 @@ func (instance *Instance) GetResult() ([]TaskResult, error) {
 	}
 
 	return resModel.Tasks, nil
+}
+
+type UpdateInfoResult struct {
+	Result string `json:"result"`
+	Status string `json:"status"`
+}
+
+// UpdateInfo set information to running instance
+func (instance *Instance) UpdateInfo(taskName, infoKey, infoValue string) (UpdateInfoResult, error) {
+	// instance set information
+	queryArgs := make(url.Values, 2)
+	queryArgs.Set("info", "")
+	queryArgs.Set("taskname", taskName)
+	//
+	instanceTaskInfoModel := struct {
+		XMLName xml.Name `xml:"Instance"`
+		Key     string   `xml:"Key"`
+		Value   string   `xml:"Value"`
+	}{
+		Key:   infoKey,
+		Value: infoValue,
+	}
+	//
+	var res UpdateInfoResult
+	client := instance.odpsIns.RestClient()
+	err := client.DoXmlWithParseRes(
+		common.HttpMethod.PutMethod,
+		instance.resourceUrl,
+		queryArgs,
+		instanceTaskInfoModel,
+		func(httpRes *http.Response) error {
+			err := json.NewDecoder(httpRes.Body).Decode(&res)
+			if err != nil {
+				return errors.Wrapf(err, "Parse http response failed, body: %+v", httpRes.Body)
+			}
+			return nil
+		},
+	)
+	//
+	return res, err
 }
 
 func InstancesStatusFromStr(s string) InstanceStatus {
