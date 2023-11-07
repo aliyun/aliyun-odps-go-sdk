@@ -208,12 +208,12 @@ func positionArgQueryToSql(query string, args []driver.Value) (string, error) {
 // Ping Pinger is an optional interface that may be implemented by a Conn.
 // If a Conn does not implement Pinger, the sql package's DB.Ping and DB.PingContext will check if there is at least one Conn available.
 // If Conn.Ping returns ErrBadConn, DB.Ping and DB.PingContext will remove the Conn from pool.
-func (c *connection) Ping(ctx context.Context) error {
-	return driver.ErrBadConn
-}
+//func (c *connection) Ping(ctx context.Context) error {
+//	return driver.ErrBadConn
+//}
 
 // IsValid Validator may be implemented by Conn to allow drivers to signal if a connection is valid or if it should be discarded.
 // If implemented, drivers may return the underlying error from queries, even if the connection should be discarded by the connection pool.
-func (c *connection) IsValid() bool {
-	return false
-}
+//func (c *connection) IsValid() bool {
+//	return false
+//}

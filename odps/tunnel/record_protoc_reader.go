@@ -99,7 +99,7 @@ LOOP:
 			crcOfCrc, err := r.protocReader.ReadUInt32()
 			if err == nil {
 				_, err = r.protocReader.inner.Read([]byte{'0'})
-				if err != io.EOF && err != io.ErrUnexpectedEOF {
+				if (!errors.Is(err, io.EOF)) && (!errors.Is(err, io.ErrUnexpectedEOF)) {
 					return nil, errors.New("expect end of stream, but not")
 				}
 			}
