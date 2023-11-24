@@ -28,6 +28,7 @@ type RecordArrowWriter struct {
 	schema            *arrow.Schema
 	recordBatchWriter *ipc.RecordBatchWriter
 	httpWriter        *ArrowStreamWriter
+	closed            bool
 }
 
 func newRecordArrowWriter(conn *httpConnection, schema *arrow.Schema) RecordArrowWriter {
@@ -46,6 +47,22 @@ func (writer *RecordArrowWriter) WriteArrowRecord(record array.Record) error {
 }
 
 func (writer *RecordArrowWriter) Close() error {
+	if writer.closed {
+		return errors.New("try to close a closed RecordArrowWriter")
+	}
+
+	writer.closed = true
+	err := writer.close()
+
+	httpCloseErr := errors.WithStack(writer.conn.closeRes())
+	if httpCloseErr != nil {
+		return errors.WithStack(httpCloseErr)
+	}
+
+	return errors.WithStack(err)
+}
+
+func (writer *RecordArrowWriter) close() error {
 	err1 := writer.recordBatchWriter.Close()
 	err2 := writer.httpWriter.Close()
 
@@ -57,5 +74,5 @@ func (writer *RecordArrowWriter) Close() error {
 		return errors.WithStack(err2)
 	}
 
-	return errors.WithStack(writer.conn.closeRes())
+	return nil
 }

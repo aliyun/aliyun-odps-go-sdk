@@ -208,72 +208,66 @@ func (su *StreamUploadSession) loadInformation(req *http.Request, inited bool) e
 	return nil
 }
 
-func (su *StreamUploadSession) flushStream(streamWriter *RecordPackStreamWriter, timeout time.Duration) (string, error) {
+func (su *StreamUploadSession) flushStream(streamWriter *RecordPackStreamWriter, timeout time.Duration) (string, int, error) {
 	conn, err := su.newUploadConnection(streamWriter.DataSize(), streamWriter.RecordCount(), timeout)
 	if err != nil {
-		return "", errors.WithStack(err)
-	}
-
-	// close protoc stream writer
-	err = streamWriter.protocWriter.Close()
-	if err != nil {
-		return "", errors.WithStack(err)
+		return "", 0, errors.WithStack(err)
 	}
 
 	// write bytes to http uploading connection
-	_, err = conn.Writer.Write(streamWriter.buffer.Bytes())
+	n, err := conn.Writer.Write(streamWriter.buffer.Bytes())
 	if err != nil {
-		return "", errors.WithStack(err)
-	}
+		// 显示关闭打开的连接，并在http返回非200状态时，获取实际的http错误
+		closeError := conn.closeRes()
+		if closeError != nil {
+			return "", 0, errors.WithStack(closeError)
+		}
 
+		return "", 0, errors.WithStack(err)
+	}
 	// close http writer
 	err = conn.Writer.Close()
 	if err != nil {
-		defer func() {
-			rOrE := <-conn.resChan
+		closeError := conn.closeRes()
+		if closeError != nil {
+			return "", 0, errors.WithStack(closeError)
+		}
 
-			if rOrE.err != nil {
-				return
-			}
-
-			res := rOrE.res
-			_ = res.Body.Close()
-		}()
-
-		return "", errors.WithStack(err)
+		return "", 0, errors.WithStack(err)
 	}
 
 	// get and close response
+
 	rOrE := <-conn.resChan
 
 	if rOrE.err != nil {
-		return "", errors.WithStack(rOrE.err)
+		return "", 0, errors.WithStack(rOrE.err)
 	}
 
 	res := rOrE.res
 	err = res.Body.Close()
 	if err != nil {
-		return "", errors.WithStack(err)
+		return "", 0, errors.WithStack(err)
 	}
 
 	if res.StatusCode/100 != 2 {
-		return "", errors.WithStack(restclient.NewHttpNotOk(res))
+		return "", 0, errors.WithStack(restclient.NewHttpNotOk(res))
 	}
 
 	slotNumStr := res.Header.Get(common.HttpHeaderOdpsSlotNum)
 	newSlotNum, err := strconv.Atoi(slotNumStr)
 	if err != nil {
-		return "", errors.WithMessage(err, "invalid slot num get from http odps-tunnel-slot-num header")
+		return "", 0, errors.WithMessage(err, "invalid slot num get from http odps-tunnel-slot-num header")
 	}
 
 	if newSlotNum != su.slotSelector.SlotNum() {
 		err = su.reloadSlotNum()
 		if err != nil {
-			return "", errors.WithStack(err)
+			return "", 0, errors.WithStack(err)
 		}
 	}
 
-	return res.Header.Get(common.HttpHeaderOdpsRequestId), nil
+	return res.Header.Get(common.HttpHeaderOdpsRequestId), n, nil
 }
 
 func (su *StreamUploadSession) newUploadConnection(dataSize int64, recordCount int64, timeout time.Duration) (*httpConnection, error) {

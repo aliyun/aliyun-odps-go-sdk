@@ -54,29 +54,46 @@ func (rsw *RecordPackStreamWriter) Append(record data.Record) error {
 	return errors.WithStack(err)
 }
 
-func (rsw *RecordPackStreamWriter) Flush(timeout_ ...time.Duration) (string, error) {
-	rsw.flushing = true
-
+// Flush send all buffered data to server. return (traceId, recordCount, recordBytes, error)
+// `recordCount` and `recordBytes` is the count and bytes count of the records uploaded
+func (rsw *RecordPackStreamWriter) Flush(timeout_ ...time.Duration) (string, int64, int64, error) {
 	timeout := time.Duration(0)
 	if len(timeout_) > 0 {
 		timeout = timeout_[0]
 	}
 
-	reqId, err := rsw.session.flushStream(rsw, timeout)
-	if err != nil {
-		return "", errors.WithStack(err)
+	if rsw.recordCount == 0 {
+		return "", 0, 0, nil
 	}
 
+	// close protoc stream writer
+	if !rsw.flushing {
+		err := rsw.protocWriter.Close()
+		if err != nil {
+			return "", 0, 0, errors.WithStack(err)
+		}
+	}
+
+	rsw.flushing = true
+
+	reqId, bytesSend, err := rsw.session.flushStream(rsw, timeout)
+	if err != nil {
+		return "", 0, 0, errors.WithStack(err)
+	}
+
+	recordCount := rsw.recordCount
 	rsw.flushing = false
 	rsw.reset()
 
-	return reqId, nil
+	return reqId, recordCount, int64(bytesSend), nil
 }
 
+// RecordCount the buffered record count
 func (rsw *RecordPackStreamWriter) RecordCount() int64 {
 	return rsw.recordCount
 }
 
+// DataSize the buffered data size
 func (rsw *RecordPackStreamWriter) DataSize() int64 {
 	return int64(rsw.buffer.Len())
 }

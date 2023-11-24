@@ -35,6 +35,7 @@ type RecordProtocWriter struct {
 	recordCrc           Crc32CheckSum
 	crcOfCrc            Crc32CheckSum // crc of record crc
 	count               int64
+	closed              bool
 }
 
 func newRecordProtocWriter(w io.WriteCloser, columns []tableschema.Column, shouldTransformDate bool) RecordProtocWriter {
@@ -46,6 +47,7 @@ func newRecordProtocWriter(w io.WriteCloser, columns []tableschema.Column, shoul
 		shouldTransformDate: shouldTransformDate,
 		recordCrc:           NewCrc32CheckSum(),
 		crcOfCrc:            NewCrc32CheckSum(),
+		closed:              false,
 	}
 }
 
@@ -62,6 +64,10 @@ func newRecordProtocHttpWriter(conn *httpConnection, columns []tableschema.Colum
 }
 
 func (r *RecordProtocWriter) Write(record data.Record) error {
+	// 这里加一个判断会引起不必要的耗时
+	//if r.closed {
+	//	return errors.New("cannot write to a closed RecordProtocWriter")
+	//}
 	recordColNum := record.Len()
 
 	if recordColNum > len(r.columns) {
@@ -331,7 +337,7 @@ func (r *RecordProtocWriter) writeStruct(val *data.Struct) error {
 	return nil
 }
 
-func (r *RecordProtocWriter) Close() error {
+func (r *RecordProtocWriter) close() error {
 	err := r.protocWriter.WriteTag(MetaCount, protowire.VarintType)
 	if err != nil {
 		return errors.WithStack(err)
@@ -357,9 +363,24 @@ func (r *RecordProtocWriter) Close() error {
 		return errors.WithStack(err)
 	}
 
-	if r.httpRes != nil {
-		return errors.WithStack(r.httpRes.closeRes())
+	return nil
+}
+
+func (r *RecordProtocWriter) Close() error {
+	if r.closed {
+		return errors.New("try to close a closed RecordProtocWriter")
 	}
 
-	return nil
+	r.closed = true
+	err := r.close()
+
+	if r.httpRes != nil {
+		closeHttpError := errors.WithStack(r.httpRes.closeRes())
+
+		if closeHttpError != nil {
+			return errors.WithStack(closeHttpError)
+		}
+	}
+
+	return errors.WithStack(err)
 }

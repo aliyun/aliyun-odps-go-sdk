@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
@@ -27,18 +28,18 @@ func main() {
 
 	tunnelIns := tunnel.NewTunnel(odpsIns, tunnelEndpoint)
 
+	session, err := tunnelIns.CreateStreamUploadSession(
+		project.Name(),
+		"all_types_demo",
+		tunnel.SessionCfg.WithPartitionKey("p1=20,p2='hangzhou'"),
+		tunnel.SessionCfg.WithCreatePartition(),
+	)
+
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
 	upload := func() {
-		session, err := tunnelIns.CreateStreamUploadSession(
-			project.Name(),
-			"all_types_demo",
-			tunnel.SessionCfg.WithPartitionKey("p1=20,p2='hangzhou'"),
-			tunnel.SessionCfg.WithCreatePartition(),
-		)
-
-		if err != nil {
-			log.Fatalf("%+v", err)
-		}
-
 		packWriter := session.OpenRecordPackWriter()
 		schema := session.Schema()
 
@@ -123,12 +124,15 @@ func main() {
 			}
 		}
 
-		traceId, err := packWriter.Flush()
+		traceId, recordCount, bytesSend, err := packWriter.Flush()
 		if err != nil {
 			log.Fatalf("%+v", err)
 		}
 
-		println("success upload data with traceId ", traceId)
+		fmt.Printf(
+			"success upload data with traceId=%s, record count=%d, record bytes=%d\n",
+			traceId, recordCount, bytesSend,
+		)
 	}
 
 	for i := 0; i < 3; i++ {
