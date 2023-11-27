@@ -33,6 +33,7 @@ func main() {
 		"all_types_demo",
 		tunnel.SessionCfg.WithPartitionKey("p1=20,p2='hangzhou'"),
 		tunnel.SessionCfg.WithCreatePartition(),
+		tunnel.SessionCfg.WithDefaultDeflateCompressor(),
 	)
 
 	if err != nil {

@@ -66,8 +66,8 @@ func (rsw *RecordPackStreamWriter) Flush(timeout_ ...time.Duration) (string, int
 		return "", 0, 0, nil
 	}
 
-	// close protoc stream writer
-	if !rsw.flushing {
+	// close protoc stream writer， the protoc stream will write the last protoc tags
+	if (!rsw.flushing) && (!rsw.protocWriter.closed) {
 		err := rsw.protocWriter.Close()
 		if err != nil {
 			return "", 0, 0, errors.WithStack(err)

@@ -209,13 +209,17 @@ func (su *StreamUploadSession) loadInformation(req *http.Request, inited bool) e
 }
 
 func (su *StreamUploadSession) flushStream(streamWriter *RecordPackStreamWriter, timeout time.Duration) (string, int, error) {
-	conn, err := su.newUploadConnection(streamWriter.DataSize(), streamWriter.RecordCount(), timeout)
+	var reader io.ReadCloser
+	var writer io.WriteCloser
+	reader, writer = io.Pipe()
+	writer = newBytesRecordWriter(writer)
+	conn, err := su.newUploadConnection(reader, writer, streamWriter.DataSize(), streamWriter.RecordCount(), timeout)
 	if err != nil {
 		return "", 0, errors.WithStack(err)
 	}
 
 	// write bytes to http uploading connection
-	n, err := conn.Writer.Write(streamWriter.buffer.Bytes())
+	_, err = conn.Writer.Write(streamWriter.buffer.Bytes())
 	if err != nil {
 		// 显示关闭打开的连接，并在http返回非200状态时，获取实际的http错误
 		closeError := conn.closeRes()
@@ -237,7 +241,6 @@ func (su *StreamUploadSession) flushStream(streamWriter *RecordPackStreamWriter,
 	}
 
 	// get and close response
-
 	rOrE := <-conn.resChan
 
 	if rOrE.err != nil {
@@ -267,10 +270,10 @@ func (su *StreamUploadSession) flushStream(streamWriter *RecordPackStreamWriter,
 		}
 	}
 
-	return res.Header.Get(common.HttpHeaderOdpsRequestId), n, nil
+	return res.Header.Get(common.HttpHeaderOdpsRequestId), writer.(*bytesRecordWriter).bytesN, nil
 }
 
-func (su *StreamUploadSession) newUploadConnection(dataSize int64, recordCount int64, timeout time.Duration) (*httpConnection, error) {
+func (su *StreamUploadSession) newUploadConnection(reader io.ReadCloser, writer io.WriteCloser, dataSize int64, recordCount int64, timeout time.Duration) (*httpConnection, error) {
 	queryArgs := make(url.Values, 5)
 	queryArgs.Set("uploadid", su.id)
 	queryArgs.Set("slotid", su.slotSelector.NextSlot().id)
@@ -286,10 +289,6 @@ func (su *StreamUploadSession) newUploadConnection(dataSize int64, recordCount i
 	if len(su.Columns) > 0 {
 		queryArgs.Set("zorder_columns", strings.Join(su.Columns, ","))
 	}
-
-	var reader io.ReadCloser
-	var writer io.WriteCloser
-	reader, writer = io.Pipe()
 
 	resource := su.ResourceUrl()
 	req, err := su.RestClient.NewRequestWithUrlQuery(common.HttpMethod.PutMethod, resource, reader, queryArgs)
