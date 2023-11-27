@@ -9,6 +9,7 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 	"log"
 	"os"
+	"time"
 )
 
 func main() {
@@ -27,6 +28,7 @@ func main() {
 	}
 
 	tunnelIns := tunnel.NewTunnel(odpsIns, tunnelEndpoint)
+	tunnelIns.SetHttpTimeout(time.Second * 5)
 
 	session, err := tunnelIns.CreateStreamUploadSession(
 		project.Name(),
@@ -136,7 +138,7 @@ func main() {
 		)
 	}
 
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 1; i++ {
 		upload()
 	}
 }

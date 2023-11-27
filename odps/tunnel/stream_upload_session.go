@@ -221,6 +221,8 @@ func (su *StreamUploadSession) flushStream(streamWriter *RecordPackStreamWriter,
 	// write bytes to http uploading connection
 	_, err = conn.Writer.Write(streamWriter.buffer.Bytes())
 	if err != nil {
+		// 这里关掉reader后可能导致writer写数据失败、程序退出而丢失了writer的真实错误原因
+		_ = reader.Close()
 		// 显示关闭打开的连接，并在http返回非200状态时，获取实际的http错误
 		closeError := conn.closeRes()
 		if closeError != nil {
