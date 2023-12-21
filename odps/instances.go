@@ -93,7 +93,7 @@ func (instances Instances) CreateTaskWithPriority(projectName string, task Task,
 	var instanceId string
 	var isSync bool
 
-	err := client.DoXmlWithParseFunc(common.HttpMethod.PostMethod, resource, nil, &instanceCreationModel, func(res *http.Response) error {
+	err := client.DoXmlWithParseFunc(common.HttpMethod.PostMethod, resource, nil, nil, &instanceCreationModel, func(res *http.Response) error {
 		location := res.Header.Get(common.HttpHeaderLocation)
 
 		if location == "" {

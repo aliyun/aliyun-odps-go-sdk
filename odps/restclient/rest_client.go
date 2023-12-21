@@ -232,6 +232,7 @@ func (client *RestClient) DoXmlWithParseFunc(
 	method string,
 	resource string,
 	queryArgs url.Values,
+	headers map[string]string,
 	bodyModel interface{},
 	parseFunc func(res *http.Response) error) error {
 
@@ -243,6 +244,9 @@ func (client *RestClient) DoXmlWithParseFunc(
 
 	req, err := client.NewRequestWithUrlQuery(method, resource, bytes.NewReader(bodyXml), queryArgs)
 	req.Header.Set(common.HttpHeaderContentType, common.XMLContentType)
+	for name, value := range headers {
+		req.Header.Set(name, value)
+	}
 
 	if err != nil {
 		return errors.WithStack(err)
@@ -255,6 +259,7 @@ func (client *RestClient) DoXmlWithParseRes(
 	method string,
 	resource string,
 	queryArgs url.Values,
+	headers map[string]string,
 	bodyModel interface{},
 	parseFunc func(res *http.Response) error) error {
 
@@ -266,6 +271,9 @@ func (client *RestClient) DoXmlWithParseRes(
 
 	req, err := client.NewRequestWithUrlQuery(method, resource, bytes.NewReader(bodyXml), queryArgs)
 	req.Header.Set(common.HttpHeaderContentType, common.XMLContentType)
+	for name, value := range headers {
+		req.Header.Set(name, value)
+	}
 
 	if err != nil {
 		return errors.WithStack(err)
@@ -291,6 +299,6 @@ func (client *RestClient) DoXmlWithModel(
 		return errors.WithStack(decoder.Decode(resModel))
 	}
 
-	err := client.DoXmlWithParseFunc(method, resource, queryArgs, bodyModel, parseFunc)
+	err := client.DoXmlWithParseFunc(method, resource, queryArgs, nil, bodyModel, parseFunc)
 	return errors.WithStack(err)
 }

@@ -129,7 +129,7 @@ func (instance *Instance) Terminate() error {
 	}
 
 	client := instance.odpsIns.restClient
-	err := client.DoXmlWithParseFunc("PUT", instance.resourceUrl, nil, &bodyModel, nil)
+	err := client.DoXmlWithParseFunc("PUT", instance.resourceUrl, nil, nil, &bodyModel, nil)
 	return errors.WithStack(err)
 }
 
