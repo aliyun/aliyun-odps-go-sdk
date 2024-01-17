@@ -55,7 +55,7 @@ type Option func(cfg *sessionConfig)
 func withPartitionKey(partitionKey string) Option {
 	return func(cfg *sessionConfig) {
 		cfg.PartitionKey = strings.ReplaceAll(partitionKey, "'", "")
-		cfg.PartitionKey = strings.ReplaceAll(cfg.PartitionKey, " ", "")
+		cfg.PartitionKey = strings.ReplaceAll(cfg.PartitionKey, "\"", "")
 	}
 }
 

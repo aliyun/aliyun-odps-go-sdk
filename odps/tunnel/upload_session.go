@@ -100,7 +100,7 @@ func (u *UploadSession) PartitionKey() string {
 
 func (u *UploadSession) SetPartitionKey(partitionKey string) {
 	u.partitionKey = strings.ReplaceAll(partitionKey, "'", "")
-	u.partitionKey = strings.ReplaceAll(u.partitionKey, " ", "")
+	u.partitionKey = strings.ReplaceAll(u.partitionKey, "\"", "")
 }
 
 // CreateUploadSession create a new upload session before uploading data。

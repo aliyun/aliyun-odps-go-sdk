@@ -190,7 +190,7 @@ func (ds *DownloadSession) PartitionKey() string {
 
 func (ds *DownloadSession) SetPartitionKey(partitionKey string) {
 	ds.partitionKey = strings.ReplaceAll(partitionKey, "'", "")
-	ds.partitionKey = strings.ReplaceAll(ds.partitionKey, "'", "")
+	ds.partitionKey = strings.ReplaceAll(ds.partitionKey, "\"", "")
 }
 
 func (ds *DownloadSession) ResourceUrl() string {
