@@ -2,9 +2,10 @@ package sqldriver
 
 import (
 	"database/sql"
+	"reflect"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/pkg/errors"
-	"reflect"
 )
 
 type NullBool sql.NullBool

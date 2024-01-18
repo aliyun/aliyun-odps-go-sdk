@@ -17,6 +17,7 @@
 package tunnel
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"time"
@@ -318,6 +319,12 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
+	case datatype.JSON:
+		var err error
+		fieldValue, err = r.readJson(dt.(datatype.JsonType))
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
 	}
 
 	return fieldValue, nil
@@ -400,4 +407,62 @@ func (r *RecordProtocReader) readStruct(t datatype.StructType) (*data.Struct, er
 	}
 
 	return sd, nil
+}
+
+func (r *RecordProtocReader) readJson(t datatype.JsonType) (*data.Json, error) {
+	strData, err := r.readField(datatype.StringType)
+	if err != nil {
+		return nil, err
+	}
+
+	j := data.NewJsonWithTyp(t)
+	jsonStr := string(strData.(data.String))
+	switch t.GetElementType() {
+	case datatype.BooleanType:
+		var b data.Bool
+		err = json.Unmarshal([]byte(jsonStr), &b)
+		if err != nil {
+			return nil, err
+		}
+		j.SetData(b)
+	case datatype.StringType:
+		var s data.String
+		err = json.Unmarshal([]byte(jsonStr), &s)
+		if err != nil {
+			return nil, err
+		}
+		_ = j.SetData(s)
+	case datatype.NullType:
+		_ = j.SetData(data.Null)
+	case datatype.IntType:
+		var i data.Int
+		err = json.Unmarshal([]byte(jsonStr), &i)
+		if err != nil {
+			return nil, err
+		}
+		_ = j.SetData(i)
+	case datatype.DoubleType:
+		var d data.Double
+		err = json.Unmarshal([]byte(jsonStr), &d)
+		if err != nil {
+			return nil, err
+		}
+		_ = j.SetData(d)
+	case datatype.ObjectType:
+		object := new(data.Object)
+		err = json.Unmarshal([]byte(jsonStr), object)
+		if err != nil {
+			return nil, err
+		}
+		_ = j.SetData(object)
+	case datatype.SliceType:
+		slice := new(data.Slice)
+		err = json.Unmarshal([]byte(jsonStr), slice)
+		if err != nil {
+			return nil, err
+		}
+		_ = j.SetData(slice)
+	}
+
+	return j, nil
 }

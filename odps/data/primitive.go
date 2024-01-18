@@ -17,7 +17,9 @@
 package data
 
 import (
+	"encoding/json"
 	"fmt"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/pkg/errors"
 )
@@ -30,6 +32,8 @@ type BigInt int64
 type Float float32
 type Double float64
 type String string
+type Object map[string]interface{}
+type Slice []interface{}
 
 func (b Bool) Type() datatype.DataType {
 	return datatype.BooleanType
@@ -152,5 +156,45 @@ func (s String) Sql() string {
 }
 
 func (s *String) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, s))
+}
+
+func (o Object) Type() datatype.DataType {
+	return datatype.ObjectType
+}
+
+func (o Object) String() string {
+	str, err := json.Marshal(o)
+	if err != nil {
+		return ""
+	}
+	return string(str)
+}
+
+func (o Object) Sql() string {
+	return o.String()
+}
+
+func (o *Object) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, o))
+}
+
+func (s Slice) Type() datatype.DataType {
+	return datatype.SliceType
+}
+
+func (s Slice) String() string {
+	str, err := json.Marshal(s)
+	if err != nil {
+		return ""
+	}
+	return string(str)
+}
+
+func (s Slice) Sql() string {
+	return s.String()
+}
+
+func (s *Slice) Scan(value interface{}) error {
 	return errors.WithStack(tryConvertType(value, s))
 }

@@ -17,6 +17,7 @@
 package tunnel
 
 import (
+	"encoding/json"
 	"io"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
@@ -134,7 +135,8 @@ func (r *RecordProtocWriter) writeFieldTag(colIndex int, dt datatype.DataType) e
 		datatype.DECIMAL,
 		datatype.ARRAY,
 		datatype.MAP,
-		datatype.STRUCT:
+		datatype.STRUCT,
+		datatype.JSON:
 		wireType = protowire.BytesType
 	default:
 		return errors.Errorf("Invalid data type, %s", dt.Name())
@@ -263,6 +265,10 @@ func (r *RecordProtocWriter) writeField(val data.Data) error {
 		return errors.WithStack(r.writeStruct(&val))
 	case *data.Struct:
 		return errors.WithStack(r.writeStruct(val))
+	case data.Json:
+		return errors.WithStack(r.writeJson(&val))
+	case *data.Json:
+		return errors.WithStack(r.writeJson(val))
 	}
 
 	return errors.Errorf("invalid data type %v", val.Type())
@@ -335,6 +341,17 @@ func (r *RecordProtocWriter) writeStruct(val *data.Struct) error {
 	}
 
 	return nil
+}
+
+func (r *RecordProtocWriter) writeJson(val *data.Json) error {
+	jsonStr, err := json.Marshal(val.GetData())
+	if err != nil {
+		return err
+	}
+	b := []byte(string(jsonStr))
+	r.recordCrc.Update(b)
+
+	return errors.WithStack(r.protocWriter.WriteBytes(b))
 }
 
 func (r *RecordProtocWriter) close() error {

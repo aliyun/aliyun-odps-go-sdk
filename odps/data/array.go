@@ -17,9 +17,10 @@
 package data
 
 import (
+	"strings"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/pkg/errors"
-	"strings"
 )
 
 type Array struct {
@@ -174,4 +175,27 @@ func ArrayFromSlice(data ...interface{}) (*Array, error) {
 
 func (a *Array) ToSlice() []Data {
 	return a.data
+}
+
+func (a Array) ToJsonString() string {
+	n := len(a.data)
+
+	if n == 0 {
+		return "[]"
+	}
+
+	sb := strings.Builder{}
+	sb.WriteString("[")
+
+	for i, d := range a.data {
+		sb.WriteString(d.Sql())
+
+		if i+1 < n {
+			sb.WriteString(", ")
+		}
+	}
+
+	sb.WriteString("]")
+
+	return sb.String()
 }

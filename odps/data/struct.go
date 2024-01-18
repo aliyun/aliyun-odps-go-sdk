@@ -17,11 +17,12 @@
 package data
 
 import (
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
-	"github.com/pkg/errors"
 	"reflect"
 	"strings"
 	"sync"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+	"github.com/pkg/errors"
 )
 
 type StructField struct {
@@ -102,6 +103,27 @@ func (s Struct) Sql() string {
 	}
 
 	sb.WriteString(")")
+
+	return sb.String()
+}
+
+func (s Struct) ToJsonString() string {
+	var sb strings.Builder
+	sb.WriteString("{")
+	n := len(s.fields) - 1
+
+	for i, field := range s.fields {
+		sb.WriteString("\"")
+		sb.WriteString(field.Name)
+		sb.WriteString("\"")
+		sb.WriteString(":")
+		sb.WriteString(field.Value.Sql())
+
+		if i < n {
+			sb.WriteString(", ")
+		}
+	}
+	sb.WriteString("}")
 
 	return sb.String()
 }
