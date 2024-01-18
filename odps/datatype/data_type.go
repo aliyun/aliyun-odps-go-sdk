@@ -389,7 +389,7 @@ type JsonType struct {
 
 func NewJsonType(elementType DataType) JsonType {
 	switch elementType {
-	case BooleanType, StringType, NullType, IntType, DoubleType, ObjectType, SliceType:
+	case BooleanType, StringType, NullType, BigIntType, DoubleType, ObjectType, SliceType:
 		return JsonType{
 			elementType: elementType,
 		}

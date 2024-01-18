@@ -17,10 +17,11 @@
 package datatype
 
 import (
-	"github.com/pkg/errors"
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/pkg/errors"
 )
 
 type typeParser struct {
@@ -99,6 +100,8 @@ func (parser *typeParser) parse() (DataType, error) {
 		return parser.parserVarchar()
 	case DECIMAL:
 		return parser.parseDecimal()
+	case JSON:
+		return parser.parseJson()
 	case TypeUnknown:
 		return nil, errors.Errorf("unknown data type: %s", token)
 	default:
@@ -328,6 +331,10 @@ LOOP:
 	}
 
 	return structType, nil
+}
+
+func (parser *typeParser) parseJson() (JsonType, error) {
+	return JsonType{}, nil
 }
 
 func (parser *typeParser) hasTokenLeft() bool {

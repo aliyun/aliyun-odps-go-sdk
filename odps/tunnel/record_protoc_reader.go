@@ -18,8 +18,11 @@ package tunnel
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
@@ -415,53 +418,60 @@ func (r *RecordProtocReader) readJson(t datatype.JsonType) (*data.Json, error) {
 		return nil, err
 	}
 
-	j := data.NewJsonWithTyp(t)
 	jsonStr := string(strData.(data.String))
-	switch t.GetElementType() {
-	case datatype.BooleanType:
+	jsonStrArr := []byte(jsonStr)
+	var j *data.Json
+
+	if len(jsonStr) == 0 || strings.ToUpper(jsonStr) == data.Null.String() { // NullType
+		t = datatype.NewJsonType(datatype.NullType)
+		j = data.NewJsonWithTyp(t)
+		_ = j.SetData(data.Null)
+	} else if strings.ToLower(jsonStr) == "true" || strings.ToLower(jsonStr) == "false" { // BooleanType
+		t = datatype.NewJsonType(datatype.BooleanType)
+		j = data.NewJsonWithTyp(t)
 		var b data.Bool
 		err = json.Unmarshal([]byte(jsonStr), &b)
 		if err != nil {
 			return nil, err
 		}
-		j.SetData(b)
-	case datatype.StringType:
-		var s data.String
-		err = json.Unmarshal([]byte(jsonStr), &s)
-		if err != nil {
-			return nil, err
-		}
-		_ = j.SetData(s)
-	case datatype.NullType:
-		_ = j.SetData(data.Null)
-	case datatype.IntType:
-		var i data.Int
-		err = json.Unmarshal([]byte(jsonStr), &i)
-		if err != nil {
-			return nil, err
-		}
-		_ = j.SetData(i)
-	case datatype.DoubleType:
-		var d data.Double
-		err = json.Unmarshal([]byte(jsonStr), &d)
-		if err != nil {
-			return nil, err
-		}
-		_ = j.SetData(d)
-	case datatype.ObjectType:
+		_ = j.SetData(b)
+	} else if jsonStrArr[0] == '{' { // ObjectType
+		t = datatype.NewJsonType(datatype.ObjectType)
+		j = data.NewJsonWithTyp(t)
 		object := new(data.Object)
-		err = json.Unmarshal([]byte(jsonStr), object)
+		err = json.Unmarshal(jsonStrArr, object)
 		if err != nil {
 			return nil, err
 		}
 		_ = j.SetData(object)
-	case datatype.SliceType:
+	} else if jsonStrArr[0] == '[' { // SliceType
+		t = datatype.NewJsonType(datatype.SliceType)
+		j = data.NewJsonWithTyp(t)
 		slice := new(data.Slice)
 		err = json.Unmarshal([]byte(jsonStr), slice)
 		if err != nil {
 			return nil, err
 		}
 		_ = j.SetData(slice)
+	} else if jsonStrArr[0] == '"' { // StringType
+		t = datatype.NewJsonType(datatype.StringType)
+		j = data.NewJsonWithTyp(t)
+		var s data.String
+		err = json.Unmarshal(jsonStrArr, &s)
+		if err != nil {
+			return nil, err
+		}
+		_ = j.SetData(s)
+	} else if i, err := strconv.ParseInt(jsonStr, 10, 64); err == nil {
+		t = datatype.NewJsonType(datatype.BigIntType)
+		j = data.NewJsonWithTyp(t)
+		_ = j.SetData(data.BigInt(i))
+	} else if d, err := strconv.ParseFloat(jsonStr, 64); err == nil {
+		t = datatype.NewJsonType(datatype.DoubleType)
+		j = data.NewJsonWithTyp(t)
+		_ = j.SetData(data.Double(d))
+	} else {
+		return nil, errors.New(fmt.Sprintf("Invalid data of JsonType: %+v", jsonStr))
 	}
 
 	return j, nil
