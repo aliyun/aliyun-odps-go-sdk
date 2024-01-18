@@ -425,7 +425,10 @@ func (r *RecordProtocReader) readJson(t datatype.JsonType) (*data.Json, error) {
 	if len(jsonStr) == 0 || strings.ToUpper(jsonStr) == data.Null.String() { // NullType
 		t = datatype.NewJsonType(datatype.NullType)
 		j = data.NewJsonWithTyp(t)
-		_ = j.SetData(data.Null)
+		err = j.SetData(data.Null)
+		if err != nil {
+			return nil, err
+		}
 	} else if strings.ToLower(jsonStr) == "true" || strings.ToLower(jsonStr) == "false" { // BooleanType
 		t = datatype.NewJsonType(datatype.BooleanType)
 		j = data.NewJsonWithTyp(t)
@@ -434,7 +437,10 @@ func (r *RecordProtocReader) readJson(t datatype.JsonType) (*data.Json, error) {
 		if err != nil {
 			return nil, err
 		}
-		_ = j.SetData(b)
+		err = j.SetData(b)
+		if err != nil {
+			return nil, err
+		}
 	} else if jsonStrArr[0] == '{' { // ObjectType
 		t = datatype.NewJsonType(datatype.ObjectType)
 		j = data.NewJsonWithTyp(t)
@@ -443,7 +449,10 @@ func (r *RecordProtocReader) readJson(t datatype.JsonType) (*data.Json, error) {
 		if err != nil {
 			return nil, err
 		}
-		_ = j.SetData(object)
+		err = j.SetData(object)
+		if err != nil {
+			return nil, err
+		}
 	} else if jsonStrArr[0] == '[' { // SliceType
 		t = datatype.NewJsonType(datatype.SliceType)
 		j = data.NewJsonWithTyp(t)
@@ -452,7 +461,10 @@ func (r *RecordProtocReader) readJson(t datatype.JsonType) (*data.Json, error) {
 		if err != nil {
 			return nil, err
 		}
-		_ = j.SetData(slice)
+		err = j.SetData(slice)
+		if err != nil {
+			return nil, err
+		}
 	} else if jsonStrArr[0] == '"' { // StringType
 		t = datatype.NewJsonType(datatype.StringType)
 		j = data.NewJsonWithTyp(t)
@@ -461,15 +473,24 @@ func (r *RecordProtocReader) readJson(t datatype.JsonType) (*data.Json, error) {
 		if err != nil {
 			return nil, err
 		}
-		_ = j.SetData(s)
+		err = j.SetData(s)
+		if err != nil {
+			return nil, err
+		}
 	} else if i, err := strconv.ParseInt(jsonStr, 10, 64); err == nil {
 		t = datatype.NewJsonType(datatype.BigIntType)
 		j = data.NewJsonWithTyp(t)
-		_ = j.SetData(data.BigInt(i))
+		err = j.SetData(data.BigInt(i))
+		if err != nil {
+			return nil, err
+		}
 	} else if d, err := strconv.ParseFloat(jsonStr, 64); err == nil {
 		t = datatype.NewJsonType(datatype.DoubleType)
 		j = data.NewJsonWithTyp(t)
-		_ = j.SetData(data.Double(d))
+		err = j.SetData(data.Double(d))
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		return nil, errors.New(fmt.Sprintf("Invalid data of JsonType: %+v", jsonStr))
 	}

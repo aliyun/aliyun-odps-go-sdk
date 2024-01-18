@@ -15,6 +15,14 @@ type Json struct {
 }
 
 func NewJsonWithTyp(typ datatype.JsonType) *Json {
+	if typ.GetElementType().ID() == datatype.NullType.ID() {
+		return &Json{
+			typ:   typ,
+			data:  Null,
+			Valid: true,
+		}
+	}
+
 	return &Json{
 		typ:   typ,
 		Valid: true,
@@ -52,7 +60,7 @@ func (j *Json) Scan(value interface{}) error {
 }
 
 func (j *Json) SetData(d Data) error {
-	if d.Type() != j.typ {
+	if d.Type() != j.typ.GetElementType() {
 		return errors.New(fmt.Sprintf("Inconsistent data type, expeted: %+v, get: %+v", j.typ.Name(), d.Type().Name()))
 	}
 	j.data = d
