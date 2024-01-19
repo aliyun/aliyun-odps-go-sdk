@@ -51,8 +51,6 @@ const (
 	IntervalYearMonth
 	STRUCT
 	JSON
-	OBJECT
-	SLICE
 	TypeUnknown
 )
 
@@ -102,10 +100,6 @@ func TypeCodeFromStr(s string) TypeID {
 		return STRUCT
 	case "JSON":
 		return JSON
-	case "OBJECT":
-		return OBJECT
-	case "SLICE":
-		return SLICE
 	default:
 		return TypeUnknown
 	}
@@ -168,10 +162,6 @@ func (t TypeID) String() string {
 		return "STRUCT"
 	case JSON:
 		return "JSON"
-	case OBJECT:
-		return "OBJECT"
-	case SLICE:
-		return "SLICE"
 	default:
 		return "TYPE_UNKNOWN"
 	}
@@ -384,17 +374,9 @@ func (s StructFields) Less(i, j int) bool {
 }
 
 type JsonType struct {
-	elementType DataType
 }
 
-func NewJsonType(elementType DataType) JsonType {
-	switch elementType {
-	case BooleanType, StringType, NullType, BigIntType, DoubleType, ObjectType, SliceType:
-		return JsonType{
-			elementType: elementType,
-		}
-	}
-
+func NewJsonType() JsonType {
 	return JsonType{}
 }
 
@@ -404,10 +386,6 @@ func (j JsonType) ID() TypeID {
 
 func (j JsonType) Name() string {
 	return JSON.String()
-}
-
-func (j JsonType) GetElementType() DataType {
-	return j.elementType
 }
 
 func IsTypeEqual(t1, t2 DataType) bool {
@@ -466,10 +444,6 @@ func IsTypeEqual(t1, t2 DataType) bool {
 	case VarcharType:
 		r2, _ := t2.(VarcharType)
 		return r1.Length == r2.Length
-	case JsonType:
-		j1, _ := t1.(JsonType)
-		j2, _ := t2.(JsonType)
-		return IsTypeEqual(j1.elementType, j2.elementType)
 	}
 
 	return true
@@ -490,8 +464,6 @@ var BinaryType = PrimitiveType{BINARY}
 var IntervalDayTimeType = PrimitiveType{IntervalDayTime}
 var IntervalYearMonthType = PrimitiveType{IntervalYearMonth}
 var NullType = PrimitiveType{NULL}
-var ObjectType = PrimitiveType{OBJECT}
-var SliceType = PrimitiveType{SLICE}
 
 func IsNullType(t DataType) bool {
 	return t.ID() == NULL

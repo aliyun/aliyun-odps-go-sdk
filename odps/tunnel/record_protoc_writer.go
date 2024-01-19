@@ -344,11 +344,14 @@ func (r *RecordProtocWriter) writeStruct(val *data.Struct) error {
 }
 
 func (r *RecordProtocWriter) writeJson(val *data.Json) error {
-	jsonStr, err := json.Marshal(val.GetData())
+	var jsonStr string
+	jsonStrArr, err := json.Marshal(val.GetData())
 	if err != nil {
 		return err
 	}
-	b := []byte(string(jsonStr))
+
+	jsonStr = string(jsonStrArr)
+	b := []byte(jsonStr)
 	r.recordCrc.Update(b)
 
 	return errors.WithStack(r.protocWriter.WriteBytes(b))

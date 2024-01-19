@@ -18,9 +18,10 @@ package odps_test
 
 import (
 	"fmt"
+	"log"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"log"
 )
 
 func ExampleTableSchema_ToSQLString() {

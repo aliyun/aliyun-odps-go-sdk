@@ -8,7 +8,6 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 )
 
@@ -40,19 +39,10 @@ func main() {
 	}
 
 	recordWriter, err := session.OpenRecordWriter(0)
-	//schema := session.Schema()
-	nullValue := data.NewJsonWithTyp(datatype.NewJsonType(datatype.NullType))
-	record := []data.Data{
-		nullValue,
-	}
-	err = recordWriter.Write(record)
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
 
-	booleanValue := data.NewJsonWithTyp(datatype.NewJsonType(datatype.BooleanType))
-	booleanValue.SetData(data.Bool(true))
-	record = []data.Data{
+	b := true
+	booleanValue := data.NewJson(b)
+	record := []data.Data{
 		booleanValue,
 	}
 	err = recordWriter.Write(record)
@@ -60,9 +50,17 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	objectValue := data.NewJsonWithTyp(datatype.NewJsonType(datatype.ObjectType))
+	sliceValue := data.NewJson([]interface{}{"abc", "dfg"})
+	record = []data.Data{
+		sliceValue,
+	}
+	err = recordWriter.Write(record)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
 	m := map[string]interface{}{"a": 1, "b": "abc"}
-	objectValue.SetData(data.Object(m))
+	objectValue := data.NewJson(m)
 	record = []data.Data{
 		objectValue,
 	}
@@ -71,8 +69,7 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	stringValue := data.NewJsonWithTyp(datatype.NewJsonType(datatype.StringType))
-	stringValue.SetData(data.String("asdfghjkl"))
+	stringValue := data.NewJson("asdfghjkl")
 	record = []data.Data{
 		stringValue,
 	}
@@ -81,8 +78,7 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	intValue := data.NewJsonWithTyp(datatype.NewJsonType(datatype.BigIntType))
-	intValue.SetData(data.BigInt(12345))
+	intValue := data.NewJson(123456)
 	record = []data.Data{
 		intValue,
 	}
@@ -91,8 +87,7 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	doubleValue := data.NewJsonWithTyp(datatype.NewJsonType(datatype.DoubleType))
-	doubleValue.SetData(data.Double(123.456))
+	doubleValue := data.NewJson(123.456)
 	record = []data.Data{
 		doubleValue,
 	}

@@ -95,6 +95,8 @@ func main() {
 					fmt.Printf("%s=%s", columns[i], r)
 				case *sqldriver.Struct:
 					fmt.Printf("%s=%s", columns[i], r)
+				case *sqldriver.Json:
+					fmt.Printf("%s=%s", columns[i], r)
 				}
 			}
 

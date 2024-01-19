@@ -107,27 +107,6 @@ func (s Struct) Sql() string {
 	return sb.String()
 }
 
-func (s Struct) ToJsonString() string {
-	var sb strings.Builder
-	sb.WriteString("{")
-	n := len(s.fields) - 1
-
-	for i, field := range s.fields {
-		sb.WriteString("\"")
-		sb.WriteString(field.Name)
-		sb.WriteString("\"")
-		sb.WriteString(":")
-		sb.WriteString(field.Value.Sql())
-
-		if i < n {
-			sb.WriteString(", ")
-		}
-	}
-	sb.WriteString("}")
-
-	return sb.String()
-}
-
 func (s *Struct) Scan(value interface{}) error {
 	return errors.WithStack(tryConvertType(value, s))
 }
