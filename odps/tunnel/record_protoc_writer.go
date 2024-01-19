@@ -17,7 +17,6 @@
 package tunnel
 
 import (
-	"encoding/json"
 	"io"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
@@ -344,13 +343,7 @@ func (r *RecordProtocWriter) writeStruct(val *data.Struct) error {
 }
 
 func (r *RecordProtocWriter) writeJson(val *data.Json) error {
-	var jsonStr string
-	jsonStrArr, err := json.Marshal(val.GetData())
-	if err != nil {
-		return err
-	}
-
-	jsonStr = string(jsonStrArr)
+	jsonStr := val.GetData()
 	b := []byte(jsonStr)
 	r.recordCrc.Update(b)
 

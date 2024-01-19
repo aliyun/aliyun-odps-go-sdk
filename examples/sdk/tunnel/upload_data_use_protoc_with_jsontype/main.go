@@ -59,7 +59,13 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	m := map[string]interface{}{"a": 1, "b": "abc"}
+	m := struct {
+		Age  int
+		Name string
+	}{
+		Age:  20,
+		Name: "Ali",
+	}
 	objectValue := data.NewJson(m)
 	record = []data.Data{
 		objectValue,
