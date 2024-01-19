@@ -21,7 +21,7 @@ import "strings"
 type Record []Data
 
 func NewRecord(columnNums int) Record {
-	return make([]Data, columnNums)
+	return make([]Data, 0, columnNums)
 }
 
 func (r *Record) Append(d Data) {

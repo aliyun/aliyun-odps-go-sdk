@@ -45,6 +45,7 @@ type RestClient struct {
 	// the default value is 0, represents no timeout
 	HttpTimeout          time.Duration
 	TcpConnectionTimeout time.Duration
+	DnsCacheExpireTime   time.Duration
 	DisableCompression   bool
 	_client              *http.Client
 	defaultProject       string
@@ -58,6 +59,7 @@ func NewOdpsRestClient(a account.Account, endpoint string) RestClient {
 		endpoint:             endpoint,
 		HttpTimeout:          DefaultHttpTimeout * time.Second,
 		TcpConnectionTimeout: DefaultTcpConnectionTimeout * time.Second,
+		DnsCacheExpireTime:   time.Duration(DefaultDNSCacheExpireTime) * time.Second,
 		DisableCompression:   true,
 	}
 
@@ -94,12 +96,19 @@ func (client *RestClient) client() *http.Client {
 		return client._client
 	}
 
-	var transport = http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
+	resolver := NewResolver(int64(client.DnsCacheExpireTime) / int64(time.Second))
+
+	dialer := Dialer{
+		Resolver: resolver,
+		Dialer: net.Dialer{
 			Timeout:   client.TcpConnectionTimeout,
 			KeepAlive: 30 * time.Second,
-		}).DialContext,
+		},
+	}
+
+	var transport = http.Transport{
+		Proxy:              http.ProxyFromEnvironment,
+		DialContext:        dialer.DialContext,
 		ForceAttemptHTTP2:  false,
 		DisableKeepAlives:  true,
 		DisableCompression: client.DisableCompression,

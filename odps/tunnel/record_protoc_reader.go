@@ -53,7 +53,7 @@ func (r *RecordProtocReader) HttpRes() *http.Response {
 }
 
 func (r *RecordProtocReader) Read() (data.Record, error) {
-	record := data.NewRecord(len(r.columns))
+	record := make([]data.Data, len(r.columns))
 
 LOOP:
 	for {
