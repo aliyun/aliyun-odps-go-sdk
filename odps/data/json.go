@@ -32,9 +32,7 @@ func (j Json) Type() datatype.DataType {
 
 func (j Json) String() string {
 	var sb strings.Builder
-	sb.WriteString("\"")
 	sb.WriteString(j.data)
-	sb.WriteString("\"")
 
 	return sb.String()
 }

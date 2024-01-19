@@ -257,7 +257,7 @@ func (n Struct) String() string {
 }
 
 func (n Json) String() string {
-	return n.String()
+	return data.Json(n).String()
 }
 
 func (n Binary) String() string {
