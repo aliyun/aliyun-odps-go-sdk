@@ -27,10 +27,12 @@ func main() {
 	}
 	fmt.Println("tunnel endpoint: " + tunnelEndpoint)
 	tunnelIns := tunnel.NewTunnel(odpsIns, tunnelEndpoint)
+
+	// create table `json_table` ddl:
+	// CREATE TABLE IF NOT EXISTS project_name.json_table(json_field JSON) STORED AS ALIORC;
 	session, err := tunnelIns.CreateUploadSession(
 		project.Name(),
 		"json_table",
-		//tunnel.SessionCfg.WithPartitionKey("p1=20,p2='hangzhou'"),
 		tunnel.SessionCfg.WithDefaultDeflateCompressor(),
 	)
 
