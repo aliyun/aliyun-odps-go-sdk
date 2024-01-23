@@ -37,12 +37,23 @@ func main() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
+	tableSchema := session.Schema()
+	log.Printf("schema: %+v", tableSchema)
 
 	recordWriter, err := session.OpenRecordWriter(0)
 
+	nullValue := data.NewJson(nil)
+	record := []data.Data{
+		nullValue,
+	}
+	err = recordWriter.Write(record)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
 	b := true
 	booleanValue := data.NewJson(b)
-	record := []data.Data{
+	record = []data.Data{
 		booleanValue,
 	}
 	err = recordWriter.Write(record)
@@ -78,6 +89,15 @@ func main() {
 	stringValue := data.NewJson("asdfghjkl")
 	record = []data.Data{
 		stringValue,
+	}
+	err = recordWriter.Write(record)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	emptyStringValue := data.NewJson("")
+	record = []data.Data{
+		emptyStringValue,
 	}
 	err = recordWriter.Write(record)
 	if err != nil {
