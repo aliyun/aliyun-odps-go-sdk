@@ -18,14 +18,15 @@ package sqldriver
 
 import (
 	"database/sql/driver"
+	"io"
+	"reflect"
+	"time"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 	"github.com/pkg/errors"
-	"io"
-	"reflect"
-	"time"
 )
 
 type rowsReader struct {
@@ -198,6 +199,8 @@ func (rr *rowsReader) ColumnTypeScanType(index int) reflect.Type {
 		return reflect.TypeOf(Array{})
 	case datatype.STRUCT:
 		return reflect.TypeOf(Struct{})
+	case datatype.JSON:
+		return reflect.TypeOf(Json{})
 	case datatype.VOID:
 		return reflect.TypeOf(data.Null)
 	case datatype.IntervalDayTime:

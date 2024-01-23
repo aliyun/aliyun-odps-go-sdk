@@ -2,9 +2,10 @@ package sqldriver
 
 import (
 	"database/sql"
+	"reflect"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/pkg/errors"
-	"reflect"
 )
 
 type NullBool sql.NullBool
@@ -20,6 +21,8 @@ type Decimal data.Decimal
 type Map data.Map
 type Array data.Array
 type Struct data.Struct
+type Json data.Json
+
 type NullInt8 struct {
 	Int8  int8
 	Valid bool //Valid is true if Int16 is not NULL
@@ -75,6 +78,10 @@ func (n *Array) Scan(value interface{}) error {
 
 func (n *Struct) Scan(value interface{}) error {
 	return (*data.Struct)(n).Scan(value)
+}
+
+func (n *Json) Scan(value interface{}) error {
+	return (*data.Json)(n).Scan(value)
 }
 
 func (n *NullInt16) Scan(value interface{}) error {
@@ -217,6 +224,10 @@ func (n Struct) IsNull() bool {
 	return !n.Valid
 }
 
+func (n Json) IsNull() bool {
+	return !n.Valid
+}
+
 func (n NullDate) String() string {
 	return data.Date(n.Time).String()
 }
@@ -243,6 +254,10 @@ func (n Array) String() string {
 
 func (n Struct) String() string {
 	return data.Struct(n).String()
+}
+
+func (n Json) String() string {
+	return data.Json(n).String()
 }
 
 func (n Binary) String() string {

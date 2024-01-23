@@ -18,10 +18,11 @@ package datatype
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 type TypeID int
@@ -49,6 +50,7 @@ const (
 	IntervalDayTime
 	IntervalYearMonth
 	STRUCT
+	JSON
 	TypeUnknown
 )
 
@@ -96,6 +98,8 @@ func TypeCodeFromStr(s string) TypeID {
 		return IntervalYearMonth
 	case "STRUCT":
 		return STRUCT
+	case "JSON":
+		return JSON
 	default:
 		return TypeUnknown
 	}
@@ -156,6 +160,8 @@ func (t TypeID) String() string {
 		return "INTERVAL_YEAR_MONTH"
 	case STRUCT:
 		return "STRUCT"
+	case JSON:
+		return "JSON"
 	default:
 		return "TYPE_UNKNOWN"
 	}
@@ -365,6 +371,21 @@ func (s StructFields) Swap(i, j int) {
 
 func (s StructFields) Less(i, j int) bool {
 	return strings.Compare(s[i].Name, s[j].Name) < 0
+}
+
+type JsonType struct {
+}
+
+func NewJsonType() JsonType {
+	return JsonType{}
+}
+
+func (j JsonType) ID() TypeID {
+	return JSON
+}
+
+func (j JsonType) Name() string {
+	return JSON.String()
 }
 
 func IsTypeEqual(t1, t2 DataType) bool {

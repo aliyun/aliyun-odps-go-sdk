@@ -17,11 +17,12 @@
 package data
 
 import (
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
-	"github.com/pkg/errors"
 	"reflect"
 	"strings"
 	"sync"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+	"github.com/pkg/errors"
 )
 
 type StructField struct {

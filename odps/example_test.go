@@ -17,12 +17,13 @@
 package odps_test
 
 import (
+	"log"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	datatype2 "github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"log"
 )
 
 var account = account2.AliyunAccountFromEnv()

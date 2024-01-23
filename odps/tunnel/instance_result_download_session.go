@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
@@ -259,9 +258,9 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 ) (*http.Response, error) {
 	queryArgs := make(url.Values, 6)
 
-	if len(columnNames) > 0 {
-		queryArgs.Set("columns", strings.Join(columnNames, ","))
-	}
+	//if len(columnNames) > 0 {
+	//	queryArgs.Set("columns", strings.Join(columnNames, ","))
+	//}
 
 	if is.LimitEnabled {
 		queryArgs.Set("instance_tunnel_limit_enabled", "")

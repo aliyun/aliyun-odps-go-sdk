@@ -19,13 +19,14 @@ package sqldriver_test
 import (
 	"database/sql"
 	"fmt"
+	"log"
+	"time"
+
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
-	"log"
-	"time"
 )
 
 func Example() {

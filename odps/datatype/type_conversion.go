@@ -17,9 +17,10 @@
 package datatype
 
 import (
-	"github.com/pkg/errors"
 	"reflect"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 var odpsDataType = reflect.TypeOf((*DataType)(nil)).Elem()

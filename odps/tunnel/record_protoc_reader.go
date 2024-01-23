@@ -318,6 +318,13 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
+	case datatype.JSON:
+		v, err := r.protocReader.ReadBytes()
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		r.recordCrc.Update(v)
+		fieldValue = data.NewJson(string(v))
 	}
 
 	return fieldValue, nil
