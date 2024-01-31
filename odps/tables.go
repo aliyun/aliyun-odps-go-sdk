@@ -159,7 +159,7 @@ func (ts *Tables) Create(
 		return errors.WithStack(err)
 	}
 
-	task := NewSqlTask("SQLCreateTableTask", sql, "", nil)
+	task := NewSqlTask("SQLCreateTableTask", sql, "", hints)
 
 	// TODO rm aliases
 	if alias != nil {
