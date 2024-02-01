@@ -163,7 +163,7 @@ func (ts *Tables) Create(
 
 	// TODO rm aliases
 	if alias != nil {
-		aliasJson, _ := json.Marshal(hints)
+		aliasJson, _ := json.Marshal(alias)
 		task.AddProperty("aliases", string(aliasJson))
 	}
 
