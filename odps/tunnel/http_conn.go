@@ -24,13 +24,28 @@ import (
 )
 
 type httpConnection struct {
-	Writer  io.WriteCloser
-	resChan <-chan resOrErr
+	Writer      io.WriteCloser
+	resChan     <-chan resOrErr
+	bytesRecord *bytesRecordWriter // 用于记录http上传的数据大小(压缩后的)
 }
 
 type resOrErr struct {
 	err error
 	res *http.Response
+}
+
+func newHttpConnection(writeCloser io.WriteCloser, resChan <-chan resOrErr, compressor Compressor) *httpConnection {
+	bytesRecord := newBytesRecordWriter(writeCloser)
+	var writer io.WriteCloser = bytesRecord
+	if compressor != nil {
+		writer = compressor.NewWriter(writer)
+	}
+
+	return &httpConnection{
+		Writer:      writer,
+		resChan:     resChan,
+		bytesRecord: bytesRecord,
+	}
 }
 
 func (conn *httpConnection) closeRes() error {
@@ -52,4 +67,8 @@ func (conn *httpConnection) closeRes() error {
 	}
 
 	return nil
+}
+
+func (conn *httpConnection) bytesCount() int {
+	return conn.bytesRecord.BytesN()
 }

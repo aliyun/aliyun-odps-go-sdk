@@ -397,3 +397,11 @@ func (r *RecordProtocWriter) Close() error {
 
 	return errors.WithStack(err)
 }
+
+func (r *RecordProtocWriter) RecordCount() int64 {
+	return r.count
+}
+
+func (r *RecordProtocWriter) BytesCount() int64 {
+	return int64(r.httpRes.bytesCount())
+}

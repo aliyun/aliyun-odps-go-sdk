@@ -133,7 +133,7 @@ func main() {
 		}
 
 		fmt.Printf(
-			"success upload data with traceId=%s, record count=%d, record bytes=%d\n",
+			"success to upload data with traceId=%s, record count=%d, record bytes=%d\n",
 			traceId, recordCount, bytesSend,
 		)
 	}

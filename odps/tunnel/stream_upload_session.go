@@ -212,7 +212,6 @@ func (su *StreamUploadSession) flushStream(streamWriter *RecordPackStreamWriter,
 	var reader io.ReadCloser
 	var writer io.WriteCloser
 	reader, writer = io.Pipe()
-	writer = newBytesRecordWriter(writer)
 	conn, err := su.newUploadConnection(reader, writer, streamWriter.DataSize(), streamWriter.RecordCount(), timeout)
 	if err != nil {
 		return "", 0, errors.WithStack(err)
@@ -221,7 +220,9 @@ func (su *StreamUploadSession) flushStream(streamWriter *RecordPackStreamWriter,
 	// write bytes to http uploading connection
 	_, err = conn.Writer.Write(streamWriter.buffer.Bytes())
 	if err != nil {
-		// 这里关掉reader后可能导致writer写数据失败、程序退出而丢失了writer的真实错误原因
+		// 在write失败时，如果http请求还未完全发送到server, server会等待http请求完成，造成 conn.closeRes()卡住。
+		// 因为conn.closeRes()会读取http响应流，而server一直在等剩余的http请求内容。
+		// 注意: 这里关掉reader后可能导致writer写数据失败、程序退出而丢失了writer的真实错误原因
 		_ = reader.Close()
 		// 显示关闭打开的连接，并在http返回非200状态时，获取实际的http错误
 		closeError := conn.closeRes()
@@ -272,7 +273,7 @@ func (su *StreamUploadSession) flushStream(streamWriter *RecordPackStreamWriter,
 		}
 	}
 
-	return res.Header.Get(common.HttpHeaderOdpsRequestId), writer.(*bytesRecordWriter).bytesN, nil
+	return res.Header.Get(common.HttpHeaderOdpsRequestId), conn.bytesCount(), nil
 }
 
 func (su *StreamUploadSession) newUploadConnection(reader io.ReadCloser, writer io.WriteCloser, dataSize int64, recordCount int64, timeout time.Duration) (*httpConnection, error) {
@@ -312,7 +313,6 @@ func (su *StreamUploadSession) newUploadConnection(reader io.ReadCloser, writer 
 
 	if su.Compressor != nil {
 		req.Header.Set("Content-Encoding", su.Compressor.Name())
-		writer = su.Compressor.NewWriter(writer)
 	}
 
 	req.Header.Set(common.HttpHeaderRoutedServer, slot.Server())
@@ -342,10 +342,8 @@ func (su *StreamUploadSession) newUploadConnection(reader io.ReadCloser, writer 
 		resChan <- resOrErr{err: err, res: res}
 	}()
 
-	return &httpConnection{
-		Writer:  writer,
-		resChan: resChan,
-	}, nil
+	httpConn := newHttpConnection(writer, resChan, su.Compressor)
+	return httpConn, nil
 }
 
 func (su *StreamUploadSession) reloadSlotNum() error {

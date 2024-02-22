@@ -401,7 +401,6 @@ func (u *UploadSession) newUploadConnection(blockId int, useArrow bool) (*httpCo
 
 	if u.Compressor != nil {
 		req.Header.Set("Content-Encoding", u.Compressor.Name())
-		writer = u.Compressor.NewWriter(writer)
 	}
 
 	resChan := make(chan resOrErr)
@@ -411,10 +410,8 @@ func (u *UploadSession) newUploadConnection(blockId int, useArrow bool) (*httpCo
 		resChan <- resOrErr{err: err, res: res}
 	}()
 
-	return &httpConnection{
-		Writer:  writer,
-		resChan: resChan,
-	}, nil
+	httpConn := newHttpConnection(writer, resChan, u.Compressor)
+	return httpConn, nil
 }
 
 func UploadStatusFromStr(s string) UploadStatus {

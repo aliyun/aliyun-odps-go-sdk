@@ -127,6 +127,8 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
+	fmt.Printf("success to upload %d record, %d bytes", recordWriter.RecordCount(), recordWriter.BytesCount())
+
 	err = session.Commit([]int{0})
 	if err != nil {
 		log.Fatalf("%+v", err)
