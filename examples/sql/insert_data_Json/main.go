@@ -23,73 +23,74 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	insertSql := "insert into json_table values (" +
-		"@json);"
-	// struct type
-	s := struct {
-		Typ   string
-		Value int
-	}{
-		Typ:   "asfdsahfh",
-		Value: 10000,
+	createJson := func(value interface{}) *data.Json {
+		jsonObj, err := data.NewJson(value)
+
+		if err != nil {
+			log.Fatalf("%+v", err)
+		}
+
+		return jsonObj
 	}
-	jsonIns := data.NewJson(s)
-	_, err = db.Exec(
-		insertSql,
-		sql.Named("json", jsonIns.Sql()),
-	)
-	if err != nil {
-		log.Fatalf("%+v", err)
+
+	// sql of creating table json_demo :
+	// CREATE TABLE IF NOT EXISTS json_demo(id int, json JSON);
+	insertSql := "insert into json_table values (@id, @json);"
+
+	records := [][]data.Data{
+		{
+			data.Int(1),
+			createJson(nil),
+		},
+		{
+			data.Int(2),
+			createJson(true),
+		},
+		{
+			data.Int(3),
+			createJson([]interface{}{"abc", "dfg"}),
+		},
+		{
+			data.Int(4),
+			createJson(
+				struct {
+					Age  int
+					Name string
+				}{
+					Age:  20,
+					Name: "Ali",
+				}),
+		},
+		{
+			data.Int(5),
+			createJson("I am a string"),
+		},
+		{
+			data.Int(6),
+			createJson(""),
+		},
+		{
+			data.Int(7),
+			createJson(123),
+		},
+		{
+			data.Int(8),
+			createJson(123.467),
+		},
+		{
+			data.Int(9),
+			nil,
+		},
 	}
-	// slice type
-	a := []string{"abc", "edf", "ghj"}
-	jsonIns = data.NewJson(a)
-	_, err = db.Exec(
-		insertSql,
-		sql.Named("json", jsonIns.Sql()),
-	)
-	if err != nil {
-		log.Fatalf("%+v", err)
+
+	for _, record := range records {
+		_, err = db.Exec(
+			insertSql,
+			sql.Named("id", record[0].Sql()),
+			sql.Named("json", record[1].Sql()),
+		)
+		if err != nil {
+			log.Fatalf("%+v", err)
+		}
 	}
-	// number type
-	i := 10000
-	jsonIns = data.NewJson(i)
-	_, err = db.Exec(
-		insertSql,
-		sql.Named("json", jsonIns.Sql()),
-	)
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-	// string type
-	str := "abcdfghijklmn"
-	jsonIns = data.NewJson(str)
-	_, err = db.Exec(
-		insertSql,
-		sql.Named("json", jsonIns.Sql()),
-	)
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-	// bool type
-	b := true
-	jsonIns = data.NewJson(b)
-	_, err = db.Exec(
-		insertSql,
-		sql.Named("json", jsonIns.Sql()),
-	)
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-	// double type
-	d := 123456.789
-	jsonIns = data.NewJson(d)
-	_, err = db.Exec(
-		insertSql,
-		sql.Named("json", jsonIns.Sql()),
-	)
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-	//
 }
