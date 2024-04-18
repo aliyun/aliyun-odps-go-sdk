@@ -324,7 +324,15 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 			return nil, errors.WithStack(err)
 		}
 		r.recordCrc.Update(v)
-		fieldValue = data.NewJson(string(v))
+
+		if string(v) == "123.467" {
+			println(v)
+		}
+
+		fieldValue = &data.Json{
+			Data:  string(v),
+			Valid: true,
+		}
 	}
 
 	return fieldValue, nil

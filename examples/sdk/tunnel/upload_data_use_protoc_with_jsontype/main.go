@@ -28,100 +28,83 @@ func main() {
 	fmt.Println("tunnel endpoint: " + tunnelEndpoint)
 	tunnelIns := tunnel.NewTunnel(odpsIns, tunnelEndpoint)
 
-	// create table `json_table` ddl:
-	// CREATE TABLE IF NOT EXISTS project_name.json_table(json_field JSON) STORED AS ALIORC;
+	// sql of creating table json_demo :
+	// CREATE TABLE IF NOT EXISTS json_demo(id int, json JSON);
+	tableName := "json_demo"
 	session, err := tunnelIns.CreateUploadSession(
 		project.Name(),
-		"json_table",
+		tableName,
 		tunnel.SessionCfg.WithDefaultDeflateCompressor(),
 	)
 
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-	tableSchema := session.Schema()
-	log.Printf("schema: %+v", tableSchema)
 
 	recordWriter, err := session.OpenRecordWriter(0)
 
-	nullValue := data.NewJson(nil)
-	record := []data.Data{
-		nullValue,
-	}
-	err = recordWriter.Write(record)
-	if err != nil {
-		log.Fatalf("%+v", err)
+	createJson := func(value interface{}) *data.Json {
+		jsonObj, err := data.NewJson(value)
+
+		if err != nil {
+			log.Fatalf("%+v", err)
+		}
+
+		return jsonObj
 	}
 
-	b := true
-	booleanValue := data.NewJson(b)
-	record = []data.Data{
-		booleanValue,
-	}
-	err = recordWriter.Write(record)
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-
-	sliceValue := data.NewJson([]interface{}{"abc", "dfg"})
-	record = []data.Data{
-		sliceValue,
-	}
-	err = recordWriter.Write(record)
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-
-	m := struct {
-		Age  int
-		Name string
-	}{
-		Age:  20,
-		Name: "Ali",
-	}
-	objectValue := data.NewJson(m)
-	record = []data.Data{
-		objectValue,
-	}
-	err = recordWriter.Write(record)
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-
-	stringValue := data.NewJson("asdfghjkl")
-	record = []data.Data{
-		stringValue,
-	}
-	err = recordWriter.Write(record)
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-
-	emptyStringValue := data.NewJson("")
-	record = []data.Data{
-		emptyStringValue,
-	}
-	err = recordWriter.Write(record)
-	if err != nil {
-		log.Fatalf("%+v", err)
+	records := [][]data.Data{
+		{
+			data.Int(1),
+			createJson(nil),
+		},
+		{
+			data.Int(2),
+			createJson(true),
+		},
+		{
+			data.Int(3),
+			createJson([]interface{}{"abc", "dfg"}),
+		},
+		{
+			data.Int(4),
+			createJson(
+				struct {
+					Age  int
+					Name string
+				}{
+					Age:  20,
+					Name: "Ali",
+				}),
+		},
+		{
+			data.Int(5),
+			createJson("I am a string"),
+		},
+		{
+			data.Int(6),
+			createJson(""),
+		},
+		{
+			data.Int(7),
+			createJson(123),
+		},
+		{
+			data.Int(8),
+			createJson(123.467),
+		},
+		{
+			data.Int(9),
+			nil,
+		},
 	}
 
-	intValue := data.NewJson(123456)
-	record = []data.Data{
-		intValue,
-	}
-	err = recordWriter.Write(record)
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
+	for _, record := range records {
+		err = recordWriter.Write(record)
 
-	doubleValue := data.NewJson(123.456)
-	record = []data.Data{
-		doubleValue,
-	}
-	err = recordWriter.Write(record)
-	if err != nil {
-		log.Fatalf("%+v", err)
+		if err != nil {
+			log.Fatalf("%+v", err)
+		}
 	}
 
 	err = recordWriter.Close()

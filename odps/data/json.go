@@ -9,21 +9,21 @@ import (
 )
 
 type Json struct {
-	data  string
+	Data  string
 	Valid bool
 }
 
-func NewJson(value interface{}) *Json {
+func NewJson(value interface{}) (*Json, error) {
 	byteArr, err := json.Marshal(value)
 	if err != nil {
-		return &Json{}
+		return nil, err
 	}
 	d := string(byteArr)
 
 	return &Json{
-		data:  d,
+		Data:  d,
 		Valid: true,
-	}
+	}, nil
 }
 
 func (j Json) Type() datatype.DataType {
@@ -32,15 +32,15 @@ func (j Json) Type() datatype.DataType {
 
 func (j Json) String() string {
 	var sb strings.Builder
-	sb.WriteString(j.data)
+	sb.WriteString(j.Data)
 
 	return sb.String()
 }
 
 func (j Json) Sql() string {
 	var sb strings.Builder
-	sb.WriteString("JSON '")
-	sb.WriteString(j.data)
+	sb.WriteString("JSON'")
+	sb.WriteString(j.Data)
 	sb.WriteString("'")
 
 	return sb.String()
@@ -51,5 +51,5 @@ func (j *Json) Scan(value interface{}) error {
 }
 
 func (j *Json) GetData() string {
-	return j.data
+	return j.Data
 }
