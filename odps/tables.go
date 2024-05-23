@@ -79,10 +79,6 @@ func (ts *Tables) List(f func(*Table, error), filters ...TFilterFunc) {
 			break
 		}
 
-		if len(resModel.Tables) == 0 {
-			break
-		}
-
 		for _, tableModel := range resModel.Tables {
 			table := NewTable(ts.odpsIns, ts.projectName, tableModel.Name)
 			table.model.Owner = tableModel.Owner

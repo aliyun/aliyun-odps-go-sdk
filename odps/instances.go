@@ -163,10 +163,6 @@ func (instances Instances) List(f func(*Instance, error), filters ...InsFilterFu
 			break
 		}
 
-		if len(resModel.Instances) == 0 {
-			break
-		}
-
 		for _, model := range resModel.Instances {
 			instance := NewInstance(instances.odpsIns, instances.projectName, model.Name)
 			instance.startTime = time.Time(model.StartTime)

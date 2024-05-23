@@ -62,10 +62,6 @@ func (p *Projects) List(filters ...PFilterFunc) ([]Project, error) {
 			return projects, errors.WithStack(err)
 		}
 
-		if len(resModel.Projects) == 0 {
-			break
-		}
-
 		for _, projectModel := range resModel.Projects {
 			project := NewProject(projectModel.Name, p.odpsIns)
 			project.model = projectModel

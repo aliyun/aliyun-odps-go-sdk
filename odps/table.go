@@ -403,10 +403,6 @@ func (t *Table) GetPartitions(partitionKey string) ([]Partition, error) {
 			return partitions, errors.WithStack(err)
 		}
 
-		if len(resModel.Partitions) == 0 {
-			return partitions, nil
-		}
-
 		var pModel partitionModel
 
 		for _, p := range resModel.Partitions {
