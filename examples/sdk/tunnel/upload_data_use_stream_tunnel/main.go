@@ -119,23 +119,25 @@ func main() {
 			structData,
 		}
 
-		// 缓冲一定大小的数据后一次上传到服务器
-		for packWriter.DataSize() < 64*1024 {
-			err = packWriter.Append(record)
+		for i := 0; i < 2; i++ {
+			// 缓冲一定大小的数据后一次上传到服务器
+			for packWriter.DataSize() < 64 {
+				err = packWriter.Append(record)
+				if err != nil {
+					log.Fatalf("%+v", err)
+				}
+			}
+
+			traceId, recordCount, bytesSend, err := packWriter.Flush()
 			if err != nil {
 				log.Fatalf("%+v", err)
 			}
-		}
 
-		traceId, recordCount, bytesSend, err := packWriter.Flush()
-		if err != nil {
-			log.Fatalf("%+v", err)
+			fmt.Printf(
+				"success to upload data with traceId=%s, record count=%d, record bytes=%d\n",
+				traceId, recordCount, bytesSend,
+			)
 		}
-
-		fmt.Printf(
-			"success to upload data with traceId=%s, record count=%d, record bytes=%d\n",
-			traceId, recordCount, bytesSend,
-		)
 	}
 
 	for i := 0; i < 1; i++ {

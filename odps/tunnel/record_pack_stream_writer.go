@@ -100,5 +100,6 @@ func (rsw *RecordPackStreamWriter) DataSize() int64 {
 
 func (rsw *RecordPackStreamWriter) reset() {
 	rsw.buffer.Reset()
+	rsw.protocWriter = newRecordProtocWriter(&bufWriter{rsw.buffer}, rsw.session.schema.Columns, false)
 	rsw.recordCount = 0
 }
