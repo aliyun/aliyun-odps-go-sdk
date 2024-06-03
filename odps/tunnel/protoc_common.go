@@ -17,8 +17,9 @@
 package tunnel
 
 import (
-	"google.golang.org/protobuf/encoding/protowire"
 	"time"
+
+	"google.golang.org/protobuf/encoding/protowire"
 )
 
 var epochDay time.Time
@@ -31,4 +32,5 @@ const (
 	MetaCount    = protowire.Number(33554430) // magic num 2^25-2
 	MetaChecksum = protowire.Number(33554431) // magic num 2^25-1
 	EndRecord    = protowire.Number(33553408) // magic num 2^25-1024
+	SchemaEndTag = protowire.Number(33553920) // maigc num 2^25-512
 )
