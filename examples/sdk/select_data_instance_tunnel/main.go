@@ -2,13 +2,12 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"os"
-
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
+	"log"
+	"os"
 )
 
 func main() {
@@ -51,30 +50,46 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	reader, err := session.OpenRecordReader(0, session.RecordCount(), 1000, nil)
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-
+	start := 0
+	step := 9
+	total := session.RecordCount()
 	schema := session.Schema()
 
-	reader.Iterator(func(record data.Record, err error) {
+	for start < total {
+		end := start + step
+		if end >= total {
+			end = total
+		}
+
+		// 注意：实际读取的record数量不一定小于等于(end - start), 要实际计算一下读出的record数量
+		reader, err := session.OpenRecordReader(start, end, 0, nil)
 		if err != nil {
 			log.Fatalf("%+v", err)
 		}
 
-		for i, d := range record {
-			if d == nil {
-				fmt.Printf("%s=null", schema.Columns[i].Name)
-			} else {
-				fmt.Printf("%s=%s", schema.Columns[i].Name, d.Sql())
+		count := 0
+		reader.Iterator(func(record data.Record, err error) {
+			if err != nil {
+				log.Fatalf("%+v", err)
 			}
 
-			if i < record.Len()-1 {
-				fmt.Printf(", ")
-			} else {
-				fmt.Println()
+			count += 1
+
+			for i, d := range record {
+				if d == nil {
+					fmt.Printf("%s=null", schema.Columns[i].Name)
+				} else {
+					fmt.Printf("%s=%s", schema.Columns[i].Name, d.Sql())
+				}
+
+				if i < record.Len()-1 {
+					fmt.Printf(", ")
+				} else {
+					fmt.Println()
+				}
 			}
-		}
-	})
+		})
+
+		start += count
+	}
 }

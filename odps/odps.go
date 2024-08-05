@@ -102,8 +102,8 @@ func (odps *Odps) Instance(instanceId string) Instance {
 	return NewInstance(odps, odps.defaultProject, instanceId)
 }
 
-func (odps *Odps) LogView() LogView {
-	return LogView{odpsIns: odps}
+func (odps *Odps) LogView() *LogView {
+	return &LogView{odpsIns: odps}
 }
 
 func (odps *Odps) ExecSQlWithHints(sql string, hints map[string]string) (*Instance, error) {

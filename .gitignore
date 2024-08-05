@@ -14,3 +14,4 @@ coverage.*
 .history/
 /document/
 go.sum
+/examples/sdk/admin_task/
