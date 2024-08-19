@@ -26,6 +26,10 @@ var odpsDataType = reflect.TypeOf((*Data)(nil)).Elem()
 // 主要用于将go的array|slice, map, struct, 转换为Array, Map, Struct类型
 
 func TryConvertGoToOdpsData(i interface{}) (Data, error) {
+	if i == nil {
+		return nil, nil
+	}
+
 	it := reflect.TypeOf(i)
 
 	if it.Implements(odpsDataType) {

@@ -82,7 +82,11 @@ func (a Array) Sql() string {
 	sb.WriteString("array(")
 
 	for i, d := range a.data {
-		sb.WriteString(d.Sql())
+		if d != nil {
+			sb.WriteString(d.Sql())
+		} else {
+			sb.WriteString("null")
+		}
 
 		if i+1 < n {
 			sb.WriteString(", ")
