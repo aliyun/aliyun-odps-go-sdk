@@ -22,23 +22,17 @@ import (
 )
 
 type BearerTokenAccount struct {
-	endPoint string
-	token    string
+	token string
 }
 
-func NewBearerTokenAccount(endPoint, token string) BearerTokenAccount {
-	return BearerTokenAccount{
-		endPoint: endPoint,
-		token:    token,
+func NewBearerTokenAccount(token string) *BearerTokenAccount {
+	return &BearerTokenAccount{
+		token: token,
 	}
 }
 
 func (account *BearerTokenAccount) GetType() Provider {
 	return BearToken
-}
-
-func (account *BearerTokenAccount) Endpoint() string {
-	return account.endPoint
 }
 
 func (account *BearerTokenAccount) SignRequest(req *http.Request, _ string) {
