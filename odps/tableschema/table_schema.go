@@ -19,11 +19,13 @@ package tableschema
 import (
 	"bytes"
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/pkg/errors"
 	"strings"
 	"text/template"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+	"github.com/pkg/errors"
 )
 
 type TableSchema struct {
@@ -83,6 +85,11 @@ type SchemaBuilder struct {
 	storageHandler   string
 	location         string
 	lifecycle        int
+}
+
+type ToArrowSchemaOption struct {
+	WithPartitionColumns   bool
+	WithExtensionTimeStamp bool
 }
 
 func NewSchemaBuilder() SchemaBuilder {
@@ -286,14 +293,55 @@ func (schema *TableSchema) ToExternalSQLString(
 	return builder.String(), nil
 }
 
-func (schema *TableSchema) ToArrowSchema() *arrow.Schema {
+func (schema *TableSchema) ToArrowSchema(opt ...ToArrowSchemaOption) *arrow.Schema {
 	fields := make([]arrow.Field, len(schema.Columns))
+	//
+	usingPartitionColumns := false
+	usingExtensionTimeStamp := false
+	if len(opt) == 1 {
+		if opt[0].WithPartitionColumns {
+			usingPartitionColumns = true
+		}
+		if opt[0].WithExtensionTimeStamp {
+			usingExtensionTimeStamp = true
+		}
+	}
+	//
 	for i, column := range schema.Columns {
 		arrowType, _ := TypeToArrowType(column.Type)
+		metadata := arrow.NewMetadata(nil, nil)
+		if column.Type.ID() == datatype.TIMESTAMP && usingExtensionTimeStamp {
+			arrowType, _ = TypeToArrowType(column.Type, withExtensionTimeStamp())
+			metadata = arrow.NewMetadata(
+				[]string{"ARROW:extension:metadata", "ARROW:extension:name"},
+				[]string{"odps_timestamp", "odps_timestamp"},
+			)
+		}
 		fields[i] = arrow.Field{
 			Name:     column.Name,
 			Type:     arrowType,
 			Nullable: column.IsNullable,
+			Metadata: metadata,
+		}
+	}
+
+	if schema.PartitionColumns != nil && usingPartitionColumns {
+		for _, column := range schema.PartitionColumns {
+			arrowType, _ := TypeToArrowType(column.Type)
+			metadata := arrow.NewMetadata(nil, nil)
+			if column.Type.ID() == datatype.TIMESTAMP && usingExtensionTimeStamp {
+				arrowType, _ = TypeToArrowType(column.Type, withExtensionTimeStamp())
+				metadata = arrow.NewMetadata(
+					[]string{"ARROW:extension:metadata", "ARROW:extension:name"},
+					[]string{"odps_timestamp", "odps_timestamp"},
+				)
+			}
+			fields = append(fields, arrow.Field{
+				Name:     column.Name,
+				Type:     arrowType,
+				Nullable: true, // todo: should be false, need tunnel backend fix this bug
+				Metadata: metadata,
+			})
 		}
 	}
 

@@ -22,30 +22,60 @@ import (
 	"github.com/pkg/errors"
 )
 
+type typeConvertConfig struct {
+	IsExtensionTimeStamp bool
+}
+
+type TypeConvertOption func(cfg *typeConvertConfig)
+
+func newTypeConvertConfig(opts ...TypeConvertOption) *typeConvertConfig {
+	cfg := &typeConvertConfig{}
+
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	return cfg
+}
+
+func withExtensionTimeStamp() TypeConvertOption {
+	return func(cfg *typeConvertConfig) {
+		cfg.IsExtensionTimeStamp = true
+	}
+}
+
+var TypeConvertConfig = struct {
+	WithExtendedTimeStamp func() TypeConvertOption
+}{
+	WithExtendedTimeStamp: withExtensionTimeStamp,
+}
+
 // TypeToArrowType convert odps field type to arrow field type
-//*        Storage Type      |  Arrow Type
-//*    ----------------------+---------------------
-//*      boolean             |  boolean
-//*      tinyint             |  int8
-//*      smallint            |  int16
-//*      int                 |  int32
-//*      bigint              |  int64
-//*      float               |  float32
-//*      double              |  float64
-//*      char                |  utf8
-//*      varchar             |  utf8
-//*      string              |  utf8
-//*      binary              |  binary
-//*      date                |  date32
-//*      datetime            |  timestamp(nano)
-//*      timestamp           |  timestamp(nano) 【注：精度选择功能开发中】
-//*      interval_day_time   |  day_time_interval
-//*      interval_year_month |  month_interval
-//*      decimal             |  decimal
-//*      struct              |  struct
-//*      array               |  list
-//*      map                 |  map
-func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error) {
+// *        Storage Type      |  Arrow Type
+// *    ----------------------+---------------------
+// *      boolean             |  boolean
+// *      tinyint             |  int8
+// *      smallint            |  int16
+// *      int                 |  int32
+// *      bigint              |  int64
+// *      float               |  float32
+// *      double              |  float64
+// *      char                |  utf8
+// *      varchar             |  utf8
+// *      string              |  utf8
+// *      binary              |  binary
+// *      date                |  date32
+// *      datetime            |  timestamp(milli)
+// *      timestamp           |  timestamp(nano) 【注：精度选择功能开发中】
+// *      interval_day_time   |  day_time_interval
+// *      interval_year_month |  month_interval
+// *      decimal             |  decimal
+// *      struct              |  struct
+// *      array               |  list
+// *      map                 |  map
+func TypeToArrowType(odpsType datatype.DataType, opt ...TypeConvertOption) (arrow.DataType, error) {
+	cfg := newTypeConvertConfig(opt...)
+
 	switch odpsType.ID() {
 	case datatype.BOOLEAN:
 		return arrow.FixedWidthTypes.Boolean, nil
@@ -68,10 +98,30 @@ func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error) {
 	case datatype.DATE:
 		return arrow.FixedWidthTypes.Date32, nil
 	case datatype.DATETIME:
-		return arrow.FixedWidthTypes.Timestamp_ns, nil
-		//return &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "UTC"}, nil
+		return &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "UTC"}, nil
 	case datatype.TIMESTAMP:
-		return arrow.FixedWidthTypes.Timestamp_ns, nil
+		if cfg.IsExtensionTimeStamp {
+			arrowFields := make([]arrow.Field, 2)
+			//
+			secField := arrow.Field{
+				Name:     "sec",
+				Type:     arrow.PrimitiveTypes.Int64,
+				Nullable: true,
+			}
+			arrowFields[0] = secField
+			//
+			nanoField := arrow.Field{
+				Name:     "nano",
+				Type:     arrow.PrimitiveTypes.Int32,
+				Nullable: true,
+			}
+			arrowFields[1] = nanoField
+			//
+			arrowStruct := arrow.StructOf(arrowFields...)
+			return arrowStruct, nil
+		} else {
+			return arrow.FixedWidthTypes.Timestamp_ns, nil
+		}
 		//return &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "UTC"}, nil
 	case datatype.IntervalDayTime:
 		return arrow.FixedWidthTypes.DayTimeInterval, nil
@@ -93,8 +143,9 @@ func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error) {
 			}
 
 			arrowFields[i] = arrow.Field{
-				Name: field.Name,
-				Type: arrowType,
+				Name:     field.Name,
+				Type:     arrowType,
+				Nullable: true,
 			}
 		}
 		return arrow.StructOf(arrowFields...), nil
@@ -106,17 +157,17 @@ func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error) {
 		}
 
 		return arrow.ListOf(itemType), nil
-		//case datatype.MAP:
-		//	mapType, _ := odpsType.(datatype.MapType)
-		//	keyType, err := TypeToArrowType(mapType.KeyType)
-		//	if err != nil {
-		//		return arrow.Null, err
-		//	}
-		//	valueType, err := TypeToArrowType(mapType.ValueType)
-		//	if err != nil {
-		//		return arrow.Null, err
-		//	}
-		//	return arrow.MapOf(keyType, valueType), nil
+	case datatype.MAP:
+		mapType, _ := odpsType.(datatype.MapType)
+		keyType, err := TypeToArrowType(mapType.KeyType)
+		if err != nil {
+			return arrow.Null, err
+		}
+		valueType, err := TypeToArrowType(mapType.ValueType)
+		if err != nil {
+			return arrow.Null, err
+		}
+		return arrow.MapOf(keyType, valueType), nil
 	}
 
 	return arrow.Null, errors.Errorf("unknown odps data type: %s", odpsType.Name())
