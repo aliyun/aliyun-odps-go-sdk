@@ -167,7 +167,7 @@ func (schema *TableSchema) ToBaseSQLString(projectName string, createIfNotExists
 			"{{$partitionNum := len .Schema.PartitionColumns}}" +
 			"create {{if .IsExternal -}} external {{ end -}} table {{ if .CreateIfNotExists }}if not exists{{ end }} {{.ProjectName}}.`{{.Schema.TableName}}` (\n" +
 			"{{ range $i, $column := .Schema.Columns  }}" +
-			"    `{{.Name}}` {{.Type | print}} {{ if ne .Comment \"\" }}comment '{{.Comment}}'{{ end }}{{ if notLast $i $columnNum  }},{{ end }}\n" +
+			"    `{{.Name}}` {{.Type.Name | print}} {{ if ne .Comment \"\" }}comment '{{.Comment}}'{{ end }}{{ if notLast $i $columnNum  }},{{ end }}\n" +
 			"{{ end }}" +
 			")" +
 			"{{ if ne .Schema.Comment \"\"  }}" +
