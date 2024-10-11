@@ -22,6 +22,7 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/pkg/errors"
+	"strconv"
 	"strings"
 	"text/template"
 )
@@ -63,16 +64,37 @@ type TableSchema struct {
 	ClusterInfo ClusterInfo
 }
 
+type ClusterType = string
+
 // ClusterInfo 聚簇信息
 type ClusterInfo struct {
-	ClusterType string
-	ClusterInfo []string
+	ClusterType ClusterType
+	ClusterCols []string
 	SortCols    []SortColumn
+	BucketNum   int
+}
+
+var CLUSTER_TYPE = struct {
+	Hash  ClusterType
+	Range ClusterType
+}{
+	Hash:  "hash",
+	Range: "range",
+}
+
+type SortOrder string
+
+var SORT_ORDER = struct {
+	ASC  SortOrder
+	DESC SortOrder
+}{
+	ASC:  "asc",
+	DESC: "desc",
 }
 
 type SortColumn struct {
-	name  string
-	order string
+	Name  string
+	Order SortOrder
 }
 
 type SchemaBuilder struct {
@@ -83,6 +105,7 @@ type SchemaBuilder struct {
 	storageHandler   string
 	location         string
 	lifecycle        int
+	clusterInfo      ClusterInfo
 }
 
 func NewSchemaBuilder() SchemaBuilder {
@@ -135,6 +158,26 @@ func (builder *SchemaBuilder) Lifecycle(lifecycle int) *SchemaBuilder {
 	return builder
 }
 
+func (builder *SchemaBuilder) ClusterType(clusterType ClusterType) *SchemaBuilder {
+	builder.clusterInfo.ClusterType = clusterType
+	return builder
+}
+
+func (builder *SchemaBuilder) ClusterColumns(clusterCols []string) *SchemaBuilder {
+	builder.clusterInfo.ClusterCols = clusterCols
+	return builder
+}
+
+func (builder *SchemaBuilder) ClusterSortColumns(clusterSortCols []SortColumn) *SchemaBuilder {
+	builder.clusterInfo.SortCols = clusterSortCols
+	return builder
+}
+
+func (builder *SchemaBuilder) ClusterBucketNum(bucketNum int) *SchemaBuilder {
+	builder.clusterInfo.BucketNum = bucketNum
+	return builder
+}
+
 func (builder *SchemaBuilder) Build() TableSchema {
 	return TableSchema{
 		TableName:        builder.name,
@@ -144,6 +187,7 @@ func (builder *SchemaBuilder) Build() TableSchema {
 		Lifecycle:        builder.lifecycle,
 		StorageHandler:   builder.storageHandler,
 		Location:         builder.location,
+		ClusterInfo:      builder.clusterInfo,
 	}
 }
 
@@ -199,15 +243,46 @@ func (schema *TableSchema) ToBaseSQLString(projectName string, createIfNotExists
 	err = tpl.Execute(&out, data)
 	if err != nil {
 		panic(err)
-	} else {
-		return out.String(), nil
 	}
+	return out.String(), nil
 }
 
 func (schema *TableSchema) ToSQLString(projectName string, createIfNotExists bool) (string, error) {
 	baseSql, err := schema.ToBaseSQLString(projectName, createIfNotExists, false)
 	if err != nil {
 		return "", errors.WithStack(err)
+	}
+
+	// 添加hash clustering或range clustering
+	clusterInfo := schema.ClusterInfo
+	if len(clusterInfo.ClusterCols) > 0 {
+
+		if clusterInfo.ClusterType == CLUSTER_TYPE.Hash {
+			baseSql += "\nclustered by (" + strings.Join(clusterInfo.ClusterCols, ", ") + ")"
+		}
+
+		if clusterInfo.ClusterType == CLUSTER_TYPE.Range {
+			baseSql += "\nrange clustered by (" + strings.Join(clusterInfo.ClusterCols, ", ") + ")"
+		}
+
+		sortColsNum := len(clusterInfo.SortCols)
+		if sortColsNum > 0 {
+			baseSql += "\nsorted by ("
+
+			for i, sc := range clusterInfo.SortCols {
+				baseSql += sc.Name + " " + string(sc.Order)
+
+				if i < sortColsNum-1 {
+					baseSql += ", "
+				}
+			}
+
+			baseSql += ")"
+		}
+
+		if clusterInfo.BucketNum > 0 {
+			baseSql += "\nINTO " + strconv.Itoa(clusterInfo.BucketNum) + " BUCKETS"
+		}
 	}
 
 	if schema.Lifecycle > 0 {

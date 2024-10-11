@@ -109,7 +109,19 @@ func (t *Table) LoadExtendedInfo() error {
 		return errors.WithStack(err)
 	}
 
-	return errors.WithStack(json.Unmarshal([]byte(model.Schema), &t.tableSchema))
+	// 填充剩余的schema信息
+	err = json.Unmarshal([]byte(model.Schema), &t.tableSchema)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Reserved信息中提取出Cluster信息
+	err = json.Unmarshal([]byte(t.tableSchema.Reserved), &t.tableSchema.ClusterInfo)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return nil
 }
 
 func (t *Table) Name() string {
@@ -292,9 +304,12 @@ func (t *Table) ShardInfoJson() string {
 }
 
 func (t *Table) GetSchema() (*tableschema.TableSchema, error) {
-	err := json.Unmarshal([]byte(t.model.Schema), &t.tableSchema)
-	if err != nil {
-		return nil, errors.WithStack(err)
+	if !t.beLoaded {
+		err := t.Load()
+
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &t.tableSchema, nil
