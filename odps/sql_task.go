@@ -28,20 +28,18 @@ import (
 type SQLTask struct {
 	XMLName  xml.Name `xml:"SQL"`
 	TaskName `xml:"Name"`
-	Comment  string
 	TaskConfig
 	Query string
 }
 
-func NewAnonymousSQLTask(query string, comment string, hints map[string]string) SQLTask {
-	return NewSqlTask("AnonymousSQLTask", query, comment, hints)
+func NewAnonymousSQLTask(query string, hints map[string]string) SQLTask {
+	return NewSqlTask("AnonymousSQLTask", query, hints)
 }
 
-func NewSqlTask(name string, query string, comment string, hints map[string]string) SQLTask {
+func NewSqlTask(name string, query string, hints map[string]string) SQLTask {
 	sqlTask := SQLTask{
 		TaskName: TaskName(name),
 		Query:    query,
-		Comment:  comment,
 	}
 
 	sqlTask.Config = append(sqlTask.Config, common.Property{Name: "type", Value: "sql"})
@@ -59,6 +57,10 @@ func (t *SQLTask) TaskType() string {
 }
 
 func (t *SQLTask) RunInOdps(odpsIns *Odps, projectName string) (*Instance, error) {
+	return t.Run(odpsIns, projectName)
+}
+
+func (t *SQLTask) Run(odpsIns *Odps, projectName string) (*Instance, error) {
 	Instances := NewInstances(odpsIns)
 	i, err := Instances.CreateTask(projectName, t)
 	return i, errors.WithStack(err)

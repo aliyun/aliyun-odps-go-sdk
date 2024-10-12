@@ -35,7 +35,7 @@ type Tables struct {
 }
 
 // NewTables if projectName is not set，the default projectName of odps will be used
-func NewTables(odpsIns *Odps, projectName ...string) Tables {
+func NewTables(odpsIns *Odps, projectName ...string) *Tables {
 	var _projectName string
 
 	if projectName == nil {
@@ -44,7 +44,7 @@ func NewTables(odpsIns *Odps, projectName ...string) Tables {
 		_projectName = projectName[0]
 	}
 
-	return Tables{
+	return &Tables{
 		projectName: _projectName,
 		odpsIns:     odpsIns,
 	}
@@ -81,9 +81,9 @@ func (ts *Tables) List(f func(*Table, error), filters ...TFilterFunc) {
 
 		for _, tableModel := range resModel.Tables {
 			table := NewTable(ts.odpsIns, ts.projectName, tableModel.Name)
-			table.model.Owner = tableModel.Owner
+			table.model = tableModel
 
-			f(&table, nil)
+			f(table, nil)
 		}
 
 		if resModel.Marker != "" {
@@ -96,7 +96,7 @@ func (ts *Tables) List(f func(*Table, error), filters ...TFilterFunc) {
 }
 
 // BatchLoadTables can get at most 100 tables, and the information of table is according to the permission
-func (ts *Tables) BatchLoadTables(tableNames []string) ([]Table, error) {
+func (ts *Tables) BatchLoadTables(tableNames []string) ([]*Table, error) {
 	type PostBodyModel struct {
 		XMLName xml.Name `xml:"Tables"`
 		Tables  []struct {
@@ -131,7 +131,7 @@ func (ts *Tables) BatchLoadTables(tableNames []string) ([]Table, error) {
 		return nil, errors.WithStack(err)
 	}
 
-	ret := make([]Table, len(resModel.Table))
+	ret := make([]*Table, len(resModel.Table))
 
 	for i, tableModel := range resModel.Table {
 		table := NewTable(ts.odpsIns, ts.projectName, tableModel.Name)
@@ -140,6 +140,12 @@ func (ts *Tables) BatchLoadTables(tableNames []string) ([]Table, error) {
 	}
 
 	return ret, nil
+}
+
+func (ts *Tables) Get(tableName string) *Table {
+	table := NewTable(ts.odpsIns, ts.projectName, tableName)
+
+	return table
 }
 
 // Create table with schema, the schema can be build with tableschema.SchemaBuilder
@@ -155,7 +161,7 @@ func (ts *Tables) Create(
 		return errors.WithStack(err)
 	}
 
-	task := NewSqlTask("SQLCreateTableTask", sql, "", hints)
+	task := NewSqlTask("SQLCreateTableTask", sql, hints)
 
 	// TODO rm aliases
 	if alias != nil {
@@ -186,7 +192,7 @@ func (ts *Tables) CreateExternal(
 		return errors.WithStack(err)
 	}
 
-	task := NewSqlTask("SQLCreateExternalTableTask", sql, "", nil)
+	task := NewSqlTask("SQLCreateExternalTableTask", sql, nil)
 
 	if alias != nil {
 		aliasJson, _ := json.Marshal(hints)
@@ -225,7 +231,7 @@ func (ts *Tables) CreateWithDataHub(
 	sb.WriteString(fmt.Sprintf("\nhubLifecycle %d", hubLifecycle))
 	sb.WriteRune(';')
 
-	task := NewSqlTask("SQLCreateTableTaskWithDataHub", sb.String(), "", nil)
+	task := NewSqlTask("SQLCreateTableTaskWithDataHub", sb.String(), nil)
 
 	instances := NewInstances(ts.odpsIns, ts.projectName)
 	i, err := instances.CreateTask(ts.projectName, &task)
@@ -251,7 +257,7 @@ func (ts *Tables) Delete(tableName string, ifExists bool) error {
 	sqlBuilder.WriteString(tableName)
 	sqlBuilder.WriteString(";")
 
-	sqlTask := NewSqlTask("SQLDropTableTask", sqlBuilder.String(), "", nil)
+	sqlTask := NewSqlTask("SQLDropTableTask", sqlBuilder.String(), nil)
 	instances := NewInstances(ts.odpsIns, ts.projectName)
 	i, err := instances.CreateTask(ts.projectName, &sqlTask)
 	if err != nil {

@@ -1,17 +1,15 @@
 package main
 
 import (
-	"log"
-	"os"
-
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
+	"log"
 )
 
 func main() {
-	conf, err := odps.NewConfigFromIni(os.Args[1])
+	conf, err := odps.NewConfigFromIni("./config.ini")
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -101,6 +99,7 @@ func main() {
 		datatype.NewStructFieldType("arr", arrayType),
 		datatype.NewStructFieldType("name", datatype.StringType),
 	)
+	jsonType := datatype.NewJsonType()
 
 	c16 := tableschema.Column{
 		Name: "map_type",
@@ -117,6 +116,11 @@ func main() {
 		Type: structType,
 	}
 
+	c19 := tableschema.Column{
+		Name: "json_type",
+		Type: jsonType,
+	}
+
 	p1 := tableschema.Column{
 		Name: "p1",
 		Type: datatype.BigIntType,
@@ -129,7 +133,7 @@ func main() {
 
 	schemaBuilder := tableschema.NewSchemaBuilder()
 	schemaBuilder.Name("all_types_demo").
-		Columns(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18).
+		Columns(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19).
 		PartitionColumns(p1, p2).
 		Lifecycle(2) // 单位: 天
 

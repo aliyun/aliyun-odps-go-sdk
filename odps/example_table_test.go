@@ -114,13 +114,13 @@ func ExampleTable_AddPartition() {
 
 func ExampleTable_GetPartitions() {
 	table := odpsIns.Table("sale_detail")
-	partitions, err := table.GetPartitions("")
+	partitions, err := table.GetPartitions()
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
 
 	for _, p := range partitions {
-		println(fmt.Sprintf("Name: %s", p.Name()))
+		println(fmt.Sprintf("Value: %s", p.Value()))
 		println(fmt.Sprintf("Create time: %s", p.CreatedTime()))
 		println(fmt.Sprintf("Last DDL time: %s", p.LastDDLTime()))
 		println(fmt.Sprintf("Last Modified time: %s", p.LastModifiedTime()))

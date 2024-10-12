@@ -1,33 +1,39 @@
 package main
 
 import (
-	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"log"
-	"os"
 )
 
 func main() {
-	conf, err := odps.NewConfigFromIni(os.Args[1])
+	// Specify the ini file path
+	configPath := "./config.ini"
+	conf, err := odps.NewConfigFromIni(configPath)
+
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
 
 	aliAccount := account.NewAliyunAccount(conf.AccessId, conf.AccessKey)
 	odpsIns := odps.NewOdps(aliAccount, conf.Endpoint)
+	// Set the Default Maxcompute project used By Odps instance
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
 
-	ts := odpsIns.Tables()
+	project := odpsIns.Project(conf.ProjectName)
+	ts := project.Tables()
+
 	ts.List(
 		func(t *odps.Table, err error) {
 			if err != nil {
 				log.Fatalf("%+v", err)
 			}
 
-			println(fmt.Sprintf("%s, %s, %s", t.Name(), t.Owner(), t.Type()))
+			println(t.Name())
 		},
-		odps.TableFilter.Extended(),
+		// Filter tables by name prefix
+		odps.TableFilter.NamePrefix("test_cluster"),
+		// Filter tables by table type. Other table types are: VirtualView, ExternalTable
 		odps.TableFilter.Type(odps.ManagedTable),
 	)
 }

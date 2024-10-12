@@ -64,7 +64,7 @@ func (odps *Odps) SetUserAgent(userAgent string) {
 	odps.restClient.SetUserAgent(userAgent)
 }
 
-func (odps *Odps) DefaultProject() Project {
+func (odps *Odps) DefaultProject() *Project {
 	return NewProject(odps.defaultProject, odps)
 }
 
@@ -78,27 +78,27 @@ func (odps *Odps) SetDefaultProjectName(projectName string) {
 	odps.restClient.SetDefaultProject(projectName)
 }
 
-func (odps *Odps) Projects() Projects {
-	return odps.projects
+func (odps *Odps) Projects() *Projects {
+	return &odps.projects
 }
 
-func (odps *Odps) Project(name string) Project {
+func (odps *Odps) Project(name string) *Project {
 	return NewProject(name, odps)
 }
 
-func (odps *Odps) Tables() Tables {
+func (odps *Odps) Tables() *Tables {
 	return NewTables(odps)
 }
 
-func (odps *Odps) Table(name string) Table {
+func (odps *Odps) Table(name string) *Table {
 	return NewTable(odps, odps.DefaultProjectName(), name)
 }
 
-func (odps *Odps) Instances() Instances {
+func (odps *Odps) Instances() *Instances {
 	return NewInstances(odps)
 }
 
-func (odps *Odps) Instance(instanceId string) Instance {
+func (odps *Odps) Instance(instanceId string) *Instance {
 	return NewInstance(odps, odps.defaultProject, instanceId)
 }
 
@@ -111,12 +111,16 @@ func (odps *Odps) ExecSQlWithHints(sql string, hints map[string]string) (*Instan
 		return nil, errors.New("default project has not been set for odps")
 	}
 
-	task := NewAnonymousSQLTask(sql, "", hints)
+	task := NewAnonymousSQLTask(sql, hints)
 	Instances := NewInstances(odps, odps.defaultProject)
 	i, err := Instances.CreateTask(odps.defaultProject, &task)
 	return i, errors.WithStack(err)
 }
 
-func (odps *Odps) ExecSQl(sql string) (*Instance, error) {
-	return odps.ExecSQlWithHints(sql, nil)
+func (odps *Odps) ExecSQl(sql string, hints ...map[string]string) (*Instance, error) {
+	if len(hints) == 0 {
+		return odps.ExecSQlWithHints(sql, nil)
+	}
+
+	return odps.ExecSQlWithHints(sql, hints[0])
 }

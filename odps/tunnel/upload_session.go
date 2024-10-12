@@ -287,6 +287,7 @@ func (u *UploadSession) loadInformation(req *http.Request) error {
 		Schema            schemaResModel `json:"Schema"`
 		Status            string         `json:"Status"`
 		UploadID          string         `json:"UploadID"`
+		QuotaName         string         `json:"QuotaName"`
 		UploadedBlockList []struct {
 			BlockID     int    `json:"BlockID"`
 			CreateTime  int    `json:"CreateTime"`
@@ -320,6 +321,11 @@ func (u *UploadSession) loadInformation(req *http.Request) error {
 
 	u.Id = resModel.UploadID
 	u.fieldMaxSize = resModel.MaxFieldSize
+
+	if resModel.QuotaName != "" {
+		u.QuotaName = resModel.QuotaName
+	}
+
 	u.status = UploadStatusFromStr(resModel.Status)
 	u.schema = tableSchema
 	u.arrowSchema = tableSchema.ToArrowSchema()

@@ -53,7 +53,7 @@ func (t *SQLCostTask) TaskType() string {
 	return "SQLCost"
 }
 
-func NewSQLCostTask(name string, query string, comment string, hints map[string]string) SQLCostTask {
+func NewSQLCostTask(name string, query string, hints map[string]string) SQLCostTask {
 	properties := make(map[string]string, 2)
 	properties["sqlcostmode"] = "sqlcostmode"
 
@@ -62,7 +62,7 @@ func NewSQLCostTask(name string, query string, comment string, hints map[string]
 		properties["settings"] = string(hintsJson)
 	}
 
-	sqlTask := NewSqlTask(name, query, comment, properties)
+	sqlTask := NewSqlTask(name, query, properties)
 	var sqlCostTask SQLCostTask
 	sqlCostTask.SQLTask = sqlTask
 

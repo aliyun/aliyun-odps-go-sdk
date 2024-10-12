@@ -63,7 +63,7 @@ func ExampleInstances_ListInstancesQueued() {
 
 func ExampleInstances_CreateTask() {
 	instances := odpsIns.Instances()
-	sqlTask := odps.NewSqlTask("hello", "select count(*) from sale_detail;", "", nil)
+	sqlTask := odps.NewSqlTask("hello", "select count(*) from sale_detail;", nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
 
 	if err != nil {
@@ -126,7 +126,7 @@ Loop:
 
 func ExampleInstance_Terminate() {
 	instances := odps.NewInstances(odpsIns)
-	sqlTask := odps.NewSqlTask("hello", "select count(*) from user;", "", nil)
+	sqlTask := odps.NewSqlTask("hello", "select count(*) from user;", nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
 
 	if err != nil {
@@ -152,7 +152,7 @@ func ExampleInstance_Terminate() {
 
 func ExampleInstance_GetTaskProgress() {
 	instances := odps.NewInstances(odpsIns)
-	sqlTask := odps.NewSqlTask("hello", "select count(*) from sale_detail;", "", nil)
+	sqlTask := odps.NewSqlTask("hello", "select count(*) from sale_detail;", nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
 
 	if err != nil {
@@ -187,7 +187,7 @@ func ExampleInstance_GetTaskProgress() {
 
 func ExampleInstance_GetTaskSummary() {
 	instances := odps.NewInstances(odpsIns)
-	sqlTask := odps.NewSqlTask("hello1", "select count(*) from sale_detail;", "", nil)
+	sqlTask := odps.NewSqlTask("hello1", "select count(*) from sale_detail;", nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
 
 	if err != nil {
@@ -207,7 +207,7 @@ func ExampleInstance_GetTaskSummary() {
 
 func ExampleInstance_GetCachedInfo() {
 	instances := odps.NewInstances(odpsIns)
-	sqlTask := odps.NewSqlTask("hello1", "select * from user;", "", nil)
+	sqlTask := odps.NewSqlTask("hello1", "select * from user;", nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
 
 	if err != nil {

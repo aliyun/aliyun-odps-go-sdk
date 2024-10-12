@@ -126,16 +126,20 @@ LOOP:
 	return record, nil
 }
 
-func (r *RecordProtocReader) Iterator(f func(record data.Record, err error)) {
+func (r *RecordProtocReader) Iterator(f func(record data.Record, err error)) error {
 	for {
 		record, err := r.Read()
 
 		isEOF := errors.Is(err, io.EOF)
 		if isEOF {
-			return
+			return nil
 		}
 
 		f(record, err)
+
+		if err != nil {
+			return err
+		}
 	}
 }
 

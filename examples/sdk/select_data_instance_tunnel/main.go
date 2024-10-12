@@ -7,21 +7,33 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 	"log"
-	"os"
 )
 
 func main() {
-	conf, err := odps.NewConfigFromIni(os.Args[1])
+	// Specify the ini file path
+	configPath := "./config.ini"
+	conf, err := odps.NewConfigFromIni(configPath)
+
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
 
 	aliAccount := account.NewAliyunAccount(conf.AccessId, conf.AccessKey)
 	odpsIns := odps.NewOdps(aliAccount, conf.Endpoint)
+	// Set the Default Maxcompute project used By Odps instance
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
-	sql := "select * from all_types_demo where p1=20 and p2='hangzhou';"
 
-	ins, err := odpsIns.ExecSQl(sql)
+	sql := "select * from all_types_demo where p1 = 20 and p2 = 'hangzhou';"
+
+	// The flags used by sql engine, such as odps.sql.skewjoin
+	var hints map[string]string = nil
+
+	sqlTask := odps.NewSqlTask("select_demo", sql, hints)
+
+	// Run the sql with the quota associated with a project
+	projectName := odpsIns.DefaultProjectName()
+
+	ins, err := sqlTask.Run(odpsIns, projectName)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -31,6 +43,7 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
+	// Generate the logView for job detail information
 	lv := odpsIns.LogView()
 	lvUrl, err := lv.GenerateLogView(ins, 10)
 	if err != nil {
@@ -44,6 +57,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
+
+	// Create a Tunnel instance
 	tunnelIns := tunnel.NewTunnel(odpsIns, tunnelEndpoint)
 	session, err := tunnelIns.CreateInstanceResultDownloadSession(project.Name(), ins.Id())
 	if err != nil {
@@ -51,29 +66,25 @@ func main() {
 	}
 
 	start := 0
-	step := 9
-	total := session.RecordCount()
+	step := 200000
+	recordCount := session.RecordCount()
 	schema := session.Schema()
+	total := 0
 
-	for start < total {
-		end := start + step
-		if end >= total {
-			end = total
-		}
-
-		// 注意：实际读取的record数量不一定小于等于(end - start), 要实际计算一下读出的record数量
-		reader, err := session.OpenRecordReader(start, end, 0, nil)
+	// Iterate the reader step by step
+	for start < recordCount {
+		reader, err := session.OpenRecordReader(start, step, 0, nil)
 		if err != nil {
 			log.Fatalf("%+v", err)
 		}
 
 		count := 0
-		reader.Iterator(func(record data.Record, err error) {
-			if err != nil {
-				log.Fatalf("%+v", err)
-			}
-
+		err = reader.Iterator(func(record data.Record, _err error) {
 			count += 1
+
+			if _err != nil {
+				return
+			}
 
 			for i, d := range record {
 				if d == nil {
@@ -90,6 +101,17 @@ func main() {
 			}
 		})
 
+		if err != nil {
+			log.Fatalf("%+v", err)
+		}
+
 		start += count
+		total += count
+		log.Println(count)
+		if err = reader.Close(); err != nil {
+			log.Fatalf("%+v", err)
+		}
 	}
+
+	println("total count ", total)
 }

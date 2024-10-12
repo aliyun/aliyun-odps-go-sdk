@@ -61,10 +61,10 @@ type InstanceOrErr struct {
 	Err error
 }
 
-func NewInstance(odpsIns *Odps, projectName, instanceId string) Instance {
+func NewInstance(odpsIns *Odps, projectName, instanceId string) *Instance {
 	rb := common.ResourceBuilder{ProjectName: projectName}
 
-	return Instance{
+	return &Instance{
 		id:          instanceId,
 		projectName: projectName,
 		odpsIns:     odpsIns,

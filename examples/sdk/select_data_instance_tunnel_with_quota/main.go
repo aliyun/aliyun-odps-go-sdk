@@ -56,9 +56,9 @@ func main() {
 
 	schema := session.Schema()
 
-	reader.Iterator(func(record data.Record, err error) {
-		if err != nil {
-			log.Fatalf("%+v", err)
+	err = reader.Iterator(func(record data.Record, _err error) {
+		if _err != nil {
+			return
 		}
 
 		for i, d := range record {
@@ -75,4 +75,8 @@ func main() {
 			}
 		}
 	})
+
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
 }

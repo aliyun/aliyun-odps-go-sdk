@@ -57,10 +57,7 @@ func ExampleTables_BatchLoadTables() {
 		println(fmt.Sprintf("%s, %s, %s", table.Name(), table.TableID(), table.Type()))
 	}
 
-	schema, err := tables[len(tables)-1].GetSchema()
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
+	schema := tables[len(tables)-1].Schema()
 
 	for _, c := range schema.Columns {
 		println(fmt.Sprintf("%s, %s, %t, %s", c.Name, c.Type, c.IsNullable, c.Comment))

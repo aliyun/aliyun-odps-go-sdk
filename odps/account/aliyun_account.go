@@ -64,7 +64,7 @@ func (account *AliyunAccount) GetType() Provider {
 	return Aliyun
 }
 
-func (account *AliyunAccount) SignRequest(req *http.Request, endpoint string) {
+func (account *AliyunAccount) SignRequest(req *http.Request, endpoint string) error {
 	var msg bytes.Buffer
 
 	// write verb
@@ -145,4 +145,6 @@ func (account *AliyunAccount) SignRequest(req *http.Request, endpoint string) {
 	signature.WriteString(_signature)
 
 	req.Header.Set(common.HttpHeaderAuthorization, signature.String())
+
+	return nil
 }

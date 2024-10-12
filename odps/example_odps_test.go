@@ -43,7 +43,7 @@ func ExampleOdps_RunSQl() {
 	}
 
 	for _, r := range result {
-		println(r.Result)
+		fmt.Printf("%+v", r)
 	}
 
 	// Output:

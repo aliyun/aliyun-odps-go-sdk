@@ -78,7 +78,7 @@ go sql/driver 接口的odps实现
 1. 使用odps实例创建table实例
 2. 使用table添加分区
 
-[示例代码](./examples/sdk/add_parition/main.go)
+[示例代码](examples/sdk/partition/add_partitions/main.go)
 
 ### 使用sql添加分区
 使用任何一种方法可以执行sql的方法执行sql语句即可，sql语句示例如下

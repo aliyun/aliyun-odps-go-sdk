@@ -32,17 +32,23 @@ type Partition struct {
 	odpsIns       *Odps
 	projectName   string
 	tableName     string
-	kv            map[string]string
 	model         partitionModel
 	extendedModel partitionExtendedModel
 }
 
+type PartitionColumn struct {
+	Name  string
+	Value string
+}
+
 type partitionModel struct {
-	CreateTime         common.GMTTime `json:"createTime"`
-	LastDDLTime        common.GMTTime `json:"lastDDLTime"`
-	LastModifiedTime   common.GMTTime `json:"lastModifiedTime"`
-	PartitionRecordNum int            `json:"partitionRecordNum"`
-	PartitionSize      int            `json:"partitionSize"`
+	Value              []PartitionColumn `json:"column"`
+	CreateTime         common.GMTTime    `json:"createTime"`
+	LastDDLTime        common.GMTTime    `json:"lastDDLTime"`
+	LastAccessTime     common.GMTTime    `json:"lastAccessTime"`
+	LastModifiedTime   common.GMTTime    `json:"lastModifiedTime"`
+	PartitionRecordNum int               `json:"partitionRecordNum"`
+	PartitionSize      int               `json:"partitionSize"`
 }
 
 type partitionExtendedModel struct {
@@ -54,26 +60,64 @@ type partitionExtendedModel struct {
 	Reserved     string `json:"Reserved"`
 }
 
-func NewPartition(odpsIns *Odps, projectName, tableName string, kv map[string]string) Partition {
-	return Partition{
+func NewPartition(odpsIns *Odps, projectName, tableName string, value string) *Partition {
+	parts := strings.Split(value, "/")
+	columns := make([]PartitionColumn, len(parts))
+
+	for i, p := range parts {
+		kv := strings.Split(p, "=")
+		columns[i] = PartitionColumn{
+			Name:  kv[0],
+			Value: kv[1],
+		}
+	}
+
+	pm := partitionModel{
+		Value: columns,
+	}
+
+	return &Partition{
 		odpsIns:     odpsIns,
 		projectName: projectName,
 		tableName:   tableName,
-		kv:          kv,
+		model:       pm,
 	}
 }
 
-// Name return string with format like "a=xx,b=yy"
+// Deprecated: Do not use this function. Use Value instead
+// Name return string with format like "a=xx/b=yy"
 func (p *Partition) Name() string {
-	i, n := 0, len(p.kv)
+	return p.Value()
+}
+
+// Value return partition value with format like "a=xx/b=yy"
+func (p *Partition) Value() string {
 	var sb strings.Builder
 
-	for key, value := range p.kv {
-		sb.WriteString(fmt.Sprintf("%s='%s'", key, value))
+	n := len(p.model.Value)
+	for i, c := range p.model.Value {
+		sb.WriteString(fmt.Sprintf("%s=%s", c.Name, c.Value))
 		i += 1
 
 		if i < n {
-			sb.WriteString(", ")
+			sb.WriteString("/")
+		}
+	}
+
+	return sb.String()
+}
+
+// Spec return partition value with format like "a='xx',b='yy'"
+func (p *Partition) Spec() string {
+	var sb strings.Builder
+
+	n := len(p.model.Value)
+	for i, c := range p.model.Value {
+		sb.WriteString(fmt.Sprintf("%s='%s'", c.Name, c.Value))
+		i += 1
+
+		if i < n {
+			sb.WriteString(",")
 		}
 	}
 
@@ -87,7 +131,7 @@ func (p *Partition) Load() error {
 	client := p.odpsIns.restClient
 
 	queryArgs := make(url.Values, 1)
-	queryArgs.Set("partition", p.Name())
+	queryArgs.Set("partition", p.Spec())
 
 	type ResModel struct {
 		XMLName xml.Name `xml:"Partition"`
@@ -106,7 +150,12 @@ func (p *Partition) Load() error {
 		return errors.WithStack(err)
 	}
 
-	p.model = model
+	p.model.CreateTime = model.CreateTime
+	p.model.LastAccessTime = model.LastAccessTime
+	p.model.LastModifiedTime = model.LastModifiedTime
+	p.model.LastDDLTime = model.LastDDLTime
+	p.model.PartitionRecordNum = model.PartitionRecordNum
+	p.model.PartitionSize = model.PartitionSize
 
 	return nil
 }
@@ -118,7 +167,7 @@ func (p *Partition) LoadExtended() error {
 	client := p.odpsIns.restClient
 
 	queryArgs := make(url.Values, 1)
-	queryArgs.Set("partition", p.Name())
+	queryArgs.Set("partition", p.Spec())
 	queryArgs.Set("extended", "")
 
 	type ResModel struct {

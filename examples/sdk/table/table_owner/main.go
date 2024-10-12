@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"log"
@@ -21,15 +20,16 @@ func main() {
 	// Set the Default Maxcompute project used By Odps instance
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
 
-	table := odpsIns.Table("test_range_cluster")
+	project := odpsIns.Project(conf.ProjectName)
+	tables := project.Tables()
+	table := tables.Get("all_types_demo")
+
+	err = table.Load()
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
 
-	schema, err := table.GetSchema()
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-
-	fmt.Printf("%+v", schema.ClusterInfo)
+	// Get table owner
+	owner := table.Owner()
+	println("owner is ", owner)
 }

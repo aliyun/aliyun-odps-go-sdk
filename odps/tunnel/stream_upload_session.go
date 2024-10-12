@@ -46,6 +46,7 @@ type StreamUploadSession struct {
 	Columns         []string
 	P2PMode         bool
 	CreatePartition bool
+	QuotaName       string
 	SlotNum         int
 	slotSelector    slotSelector
 	schema          tableschema.TableSchema
@@ -161,6 +162,7 @@ func (su *StreamUploadSession) loadInformation(req *http.Request, inited bool) e
 		SessionName  string          `json:"session_name"`
 		Slots        [][]interface{} `json:"slots"`
 		Status       string          `json:"status"`
+		QuotaName    string          `json:"QuotaName"`
 	}
 
 	var resModel ResModel
@@ -182,6 +184,10 @@ func (su *StreamUploadSession) loadInformation(req *http.Request, inited bool) e
 
 	if resModel.Status == "init" {
 		return errors.Errorf("Session is initiating. RequestId:%s Session name:%s", requestId, resModel.SessionName)
+	}
+
+	if resModel.QuotaName != "" {
+
 	}
 
 	if inited {
