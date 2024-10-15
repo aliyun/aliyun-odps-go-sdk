@@ -199,7 +199,7 @@ func (builder *SchemaBuilder) Build() TableSchema {
 	}
 }
 
-func (schema *TableSchema) ToBaseSQLString(projectName string, createIfNotExists, isExternal bool) (string, error) {
+func (schema *TableSchema) ToBaseSQLString(projectName string, schemaName string, createIfNotExists, isExternal bool) (string, error) {
 	if schema.TableName == "" {
 		return "", errors.New("table name is not set")
 	}
@@ -217,7 +217,8 @@ func (schema *TableSchema) ToBaseSQLString(projectName string, createIfNotExists
 	tplStr :=
 		"{{$columnNum := len .Schema.Columns}}" +
 			"{{$partitionNum := len .Schema.PartitionColumns}}" +
-			"create {{if .IsExternal -}} external {{ end -}} table {{ if .CreateIfNotExists }}if not exists{{ end }} {{.ProjectName}}.`{{.Schema.TableName}}` (\n" +
+			"create {{if .IsExternal -}} external {{ end -}} table {{ if .CreateIfNotExists }}if not exists{{ end }} " +
+			"{{.ProjectName}}.{{if ne .SchemaName \"\"}}`{{.SchemaName}}`.{{end}}`{{.Schema.TableName}}` (\n" +
 			"{{ range $i, $column := .Schema.Columns  }}" +
 			"    `{{.Name}}` {{.Type.Name | print}} {{ if ne .Comment \"\" }}comment '{{.Comment}}'{{ end }}{{ if notLast $i $columnNum  }},{{ end }}\n" +
 			"{{ end }}" +
@@ -240,12 +241,13 @@ func (schema *TableSchema) ToBaseSQLString(projectName string, createIfNotExists
 
 	type Data struct {
 		ProjectName       string
+		SchemaName        string
 		Schema            *TableSchema
 		IsExternal        bool
 		CreateIfNotExists bool
 	}
 
-	data := Data{projectName, schema, isExternal, createIfNotExists}
+	data := Data{projectName, schemaName, schema, isExternal, createIfNotExists}
 
 	var out bytes.Buffer
 	err = tpl.Execute(&out, data)
@@ -255,8 +257,8 @@ func (schema *TableSchema) ToBaseSQLString(projectName string, createIfNotExists
 	return out.String(), nil
 }
 
-func (schema *TableSchema) ToSQLString(projectName string, createIfNotExists bool) (string, error) {
-	baseSql, err := schema.ToBaseSQLString(projectName, createIfNotExists, false)
+func (schema *TableSchema) ToSQLString(projectName string, schemaName string, createIfNotExists bool) (string, error) {
+	baseSql, err := schema.ToBaseSQLString(projectName, schemaName, createIfNotExists, false)
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
@@ -304,6 +306,7 @@ func (schema *TableSchema) ToSQLString(projectName string, createIfNotExists boo
 
 func (schema *TableSchema) ToExternalSQLString(
 	projectName string,
+	schemaName string,
 	createIfNotExists bool,
 	serdeProperties map[string]string,
 	jars []string) (string, error) {
@@ -316,7 +319,7 @@ func (schema *TableSchema) ToExternalSQLString(
 		return "", errors.New("TableSchema.Location is not set")
 	}
 
-	baseSql, err := schema.ToBaseSQLString(projectName, createIfNotExists, true)
+	baseSql, err := schema.ToBaseSQLString(projectName, schemaName, createIfNotExists, true)
 
 	if err != nil {
 		return "", errors.WithStack(err)

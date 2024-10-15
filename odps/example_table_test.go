@@ -68,13 +68,14 @@ func ExampleTableSchema_ToSQLString() {
 
 	schema := builder.Build()
 
-	sql, _ := schema.ToSQLString("project_1", true)
+	sql, _ := schema.ToSQLString("project_1", "schema", true)
 	println("sql of create table:")
 	println(sql)
 	println()
 
 	externalSql, err := schema.ToExternalSQLString(
 		"project_1",
+		"",
 		true,
 		serdeProperties,
 		jars,

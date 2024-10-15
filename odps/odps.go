@@ -26,6 +26,7 @@ import (
 
 type Odps struct {
 	defaultProject string
+	currentSchema  string
 
 	account    account2.Account
 	restClient restclient.RestClient
@@ -72,10 +73,19 @@ func (odps *Odps) DefaultProjectName() string {
 	return odps.defaultProject
 }
 
+func (odps *Odps) CurrentSchemaName() string {
+	return odps.currentSchema
+}
+
 func (odps *Odps) SetDefaultProjectName(projectName string) {
 	odps.defaultProject = projectName
 	odps.rb.SetProject(projectName)
 	odps.restClient.SetDefaultProject(projectName)
+}
+
+func (odps *Odps) SetCurrentSchemaName(schemaName string) {
+	odps.currentSchema = schemaName
+	odps.restClient.SetCurrentSchema(schemaName)
 }
 
 func (odps *Odps) Projects() *Projects {
@@ -86,12 +96,20 @@ func (odps *Odps) Project(name string) *Project {
 	return NewProject(name, odps)
 }
 
+func (odps *Odps) Schemas() *Schemas {
+	return NewSchemas(odps)
+}
+
+func (odps *Odps) Schema(name string) *Schema {
+	return NewSchema(odps, odps.DefaultProjectName(), name)
+}
+
 func (odps *Odps) Tables() *Tables {
-	return NewTables(odps)
+	return NewTables(odps, odps.DefaultProjectName(), odps.CurrentSchemaName())
 }
 
 func (odps *Odps) Table(name string) *Table {
-	return NewTable(odps, odps.DefaultProjectName(), name)
+	return NewTable(odps, odps.DefaultProjectName(), odps.CurrentSchemaName(), name)
 }
 
 func (odps *Odps) Instances() *Instances {
