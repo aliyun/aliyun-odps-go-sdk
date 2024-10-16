@@ -18,7 +18,7 @@ package restclient
 
 import (
 	"fmt"
-	"io"
+	"io/ioutil"
 	"net/http"
 )
 
@@ -37,32 +37,12 @@ func (e HttpNotOk) Error() string {
 	return fmt.Sprintf("requestId=%s\nstatus=%s\n%s", e.RequestId, e.Status, e.Body)
 }
 
-type NoSuchObject struct {
-	RequestId string
-	Body      []byte
-}
-
-func (e NoSuchObject) Error() string {
-	if e.RequestId == "" {
-		return fmt.Sprintf("%s\n%s", "No such object.", e.Body)
-	}
-
-	return fmt.Sprintf("requestId=%s\nstatus=%s\n%s", e.RequestId, "No such object.", e.Body)
-}
-
-func NewHttpNotOk(res *http.Response) error {
+func NewHttpNotOk(res *http.Response) HttpNotOk {
 	var body []byte
 
 	if res.Body != nil {
-		body, _ = io.ReadAll(res.Body)
+		body, _ = ioutil.ReadAll(res.Body)
 		_ = res.Body.Close()
-	}
-
-	if res.StatusCode == http.StatusNotFound {
-		return NoSuchObject{
-			RequestId: res.Header.Get("x-odps-request-id"),
-			Body:      body,
-		}
 	}
 
 	return HttpNotOk{
