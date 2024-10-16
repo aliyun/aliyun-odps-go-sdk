@@ -49,6 +49,7 @@ type RestClient struct {
 	DisableCompression   bool
 	_client              *http.Client
 	defaultProject       string
+	currentSchema        string
 	endpoint             string
 	userAgent            string
 }
@@ -73,6 +74,10 @@ func LoadEndpointFromEnv() string {
 
 func (client *RestClient) SetDefaultProject(projectName string) {
 	client.defaultProject = projectName
+}
+
+func (client *RestClient) SetCurrentSchema(schemaName string) {
+	client.currentSchema = schemaName
 }
 
 func (client *RestClient) SetUserAgent(userAgent string) {

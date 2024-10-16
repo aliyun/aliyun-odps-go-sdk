@@ -30,11 +30,7 @@ func ExampleInstances_List() {
 	startTime, _ := time.Parse(timeFormat, "2021-11-15 02:15:30")
 	endTime, _ := time.Parse(timeFormat, "2021-11-18 06:22:02")
 
-	var f = func(i *odps.Instance, err error) {
-		if err != nil {
-			log.Fatalf("%+v", err)
-		}
-
+	var f = func(i *odps.Instance) {
 		println(
 			fmt.Sprintf(
 				"%s, %s, %s, %s, %s",

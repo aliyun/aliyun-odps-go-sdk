@@ -31,21 +31,21 @@ import (
 // Tables used for get all the tables in an odps project
 type Tables struct {
 	projectName string
+	schemaName  string
 	odpsIns     *Odps
 }
 
 // NewTables if projectName is not set，the default projectName of odps will be used
-func NewTables(odpsIns *Odps, projectName ...string) *Tables {
-	var _projectName string
-
-	if projectName == nil {
-		_projectName = odpsIns.DefaultProjectName()
-	} else {
-		_projectName = projectName[0]
+func NewTables(odpsIns *Odps, projectName, schemaName string) *Tables {
+	if projectName == "" {
+		projectName = odpsIns.DefaultProjectName()
 	}
-
+	if schemaName == "" {
+		schemaName = odpsIns.CurrentSchemaName()
+	}
 	return &Tables{
-		projectName: _projectName,
+		projectName: projectName,
+		schemaName:  schemaName,
 		odpsIns:     odpsIns,
 	}
 }
@@ -55,9 +55,12 @@ func NewTables(odpsIns *Odps, projectName ...string) *Tables {
 func (ts *Tables) List(f func(*Table, error), filters ...TFilterFunc) {
 	queryArgs := make(url.Values, 4)
 	queryArgs.Set("expectmarker", "true")
+	queryArgs.Set("curr_schema", ts.schemaName)
 
 	for _, filter := range filters {
-		filter(queryArgs)
+		if filter != nil {
+			filter(queryArgs)
+		}
 	}
 
 	rb := common.ResourceBuilder{ProjectName: ts.projectName}
@@ -80,7 +83,7 @@ func (ts *Tables) List(f func(*Table, error), filters ...TFilterFunc) {
 		}
 
 		for _, tableModel := range resModel.Tables {
-			table := NewTable(ts.odpsIns, ts.projectName, tableModel.Name)
+			table := NewTable(ts.odpsIns, ts.projectName, ts.schemaName, tableModel.Name)
 			table.model = tableModel
 
 			f(table, nil)
@@ -120,8 +123,11 @@ func (ts *Tables) BatchLoadTables(tableNames []string) ([]*Table, error) {
 
 	var resModel ResModel
 
-	queryArgs := make(url.Values, 1)
+	queryArgs := make(url.Values, 4)
 	queryArgs.Set("query", "")
+	if ts.schemaName != "" {
+		queryArgs.Set("curr_schema", ts.schemaName)
+	}
 	rb := common.ResourceBuilder{ProjectName: ts.projectName}
 	resource := rb.Tables()
 	client := ts.odpsIns.restClient
@@ -134,7 +140,7 @@ func (ts *Tables) BatchLoadTables(tableNames []string) ([]*Table, error) {
 	ret := make([]*Table, len(resModel.Table))
 
 	for i, tableModel := range resModel.Table {
-		table := NewTable(ts.odpsIns, ts.projectName, tableModel.Name)
+		table := NewTable(ts.odpsIns, ts.projectName, ts.schemaName, tableModel.Name)
 		table.model = tableModel
 		ret[i] = table
 	}
@@ -143,8 +149,7 @@ func (ts *Tables) BatchLoadTables(tableNames []string) ([]*Table, error) {
 }
 
 func (ts *Tables) Get(tableName string) *Table {
-	table := NewTable(ts.odpsIns, ts.projectName, tableName)
-
+	table := NewTable(ts.odpsIns, ts.projectName, ts.schemaName, tableName)
 	return table
 }
 
@@ -156,7 +161,7 @@ func (ts *Tables) Create(
 	createIfNotExists bool,
 	hints, alias map[string]string) error {
 
-	sql, err := schema.ToSQLString(ts.projectName, createIfNotExists)
+	sql, err := schema.ToSQLString(ts.projectName, ts.schemaName, createIfNotExists)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -187,7 +192,7 @@ func (ts *Tables) CreateExternal(
 	jars []string,
 	hints, alias map[string]string) error {
 
-	sql, err := schema.ToExternalSQLString(ts.projectName, createIfNotExists, serdeProperties, jars)
+	sql, err := schema.ToExternalSQLString(ts.projectName, ts.schemaName, createIfNotExists, serdeProperties, jars)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -215,7 +220,7 @@ func (ts *Tables) CreateWithDataHub(
 	hubLifecycle int,
 ) error {
 
-	sql, err := schema.ToBaseSQLString(ts.projectName, createIfNotExists, false)
+	sql, err := schema.ToBaseSQLString(ts.projectName, ts.schemaName, createIfNotExists, false)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -254,7 +259,11 @@ func (ts *Tables) Delete(tableName string, ifExists bool) error {
 	sqlBuilder.WriteRune(' ')
 	sqlBuilder.WriteString(ts.projectName)
 	sqlBuilder.WriteRune('.')
-	sqlBuilder.WriteString(tableName)
+	if ts.schemaName != "" {
+		sqlBuilder.WriteString("`" + ts.schemaName + "`")
+		sqlBuilder.WriteRune('.')
+	}
+	sqlBuilder.WriteString("`" + tableName + "`")
 	sqlBuilder.WriteString(";")
 
 	sqlTask := NewSqlTask("SQLDropTableTask", sqlBuilder.String(), nil)
