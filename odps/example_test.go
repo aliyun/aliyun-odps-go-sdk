@@ -84,7 +84,7 @@ func createUserTable(tableName string) {
 		Lifecycle(2)
 
 	schema := builder.Build()
-	tables := odps.NewTables(odpsIns, defaultProjectName)
+	tables := odps.NewTables(odpsIns, defaultProjectName, "")
 	err := tables.Create(schema, true, hints, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -102,7 +102,7 @@ func createTableWithComplexData() {
 	builder.Name("has_struct").Columns(column)
 	schema := builder.Build()
 
-	tables := odps.NewTables(odpsIns, defaultProjectName)
+	tables := odps.NewTables(odpsIns, defaultProjectName, "")
 	err := tables.Create(schema, true, nil, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -142,7 +142,7 @@ func createSaleDetailTable() {
 		Lifecycle(2)
 
 	schema := builder.Build()
-	tables := odps.NewTables(odpsIns, defaultProjectName)
+	tables := odps.NewTables(odpsIns, defaultProjectName, "")
 	err := tables.Create(schema, true, nil, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)

@@ -93,14 +93,15 @@ func TestSchemas_ListTableBySchema(t *testing.T) {
 }
 
 func TestSchemas_CheckExists(t *testing.T) {
-	schemas := NewSchemas(odpsIns, project)
-	exists, err := schemas.Exists("not_exists")
+	schema := NewSchema(odpsIns, project, "not_exists")
+	exists, err := schema.Exists()
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
 	print(exists)
 
-	exists, err = schemas.Exists("exist_schema")
+	schema = NewSchema(odpsIns, project, "exist_schema")
+	exists, err = schema.Exists()
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -123,11 +124,15 @@ func TestSchemas_DeleteSchema(t *testing.T) {
 	schemas := NewSchemas(odpsIns, project)
 
 	err := schemas.Create("to_delete_schema", true, "to delete")
-	print(schemas.Exists("to_delete_schema"))
+
+	schema := NewSchema(odpsIns, project, "to_delete_schema")
+	exists, err := schema.Exists()
+	print(exists)
 
 	err = schemas.Delete("to_delete_schema")
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-	print(schemas.Exists("to_delete_schema"))
+	exists, err = schema.Exists()
+	print(exists)
 }

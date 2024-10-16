@@ -373,8 +373,12 @@ func (p *Project) Update(properties map[string]string) error {
 	return client.DoXmlWithModel(common.HttpMethod.PutMethod, resource, nil, &bodyModel, nil)
 }
 
+func (p *Project) Schemas() *Schemas {
+	return NewSchemas(p.odpsIns, p.Name())
+}
+
 func (p *Project) Tables() *Tables {
-	return NewTables(p.odpsIns, p.Name())
+	return NewTables(p.odpsIns, p.Name(), "")
 }
 
 func (status *ProjectStatus) FromStr(s string) {

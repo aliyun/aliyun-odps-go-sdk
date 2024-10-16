@@ -19,8 +19,6 @@ package odps
 import (
 	"encoding/xml"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
-	"github.com/pkg/errors"
 	"net/url"
 )
 
@@ -29,7 +27,7 @@ type Schemas struct {
 	odpsIns     *Odps
 }
 
-// NewTables if projectName is not set，the default projectName of odps will be used
+// NewSchemas if projectName is not set，the default projectName of odps will be used
 func NewSchemas(odpsIns *Odps, projectName string) *Schemas {
 	if projectName == "" {
 		projectName = odpsIns.DefaultProjectName()
@@ -41,13 +39,13 @@ func NewSchemas(odpsIns *Odps, projectName string) *Schemas {
 }
 
 // List get all the schemas
-func (ts *Schemas) List(f func(*Schema, error)) {
+func (ss *Schemas) List(f func(*Schema, error)) {
 	queryArgs := make(url.Values, 4)
 	queryArgs.Set("expectmarker", "true")
 
-	rb := common.ResourceBuilder{ProjectName: ts.projectName}
+	rb := common.ResourceBuilder{ProjectName: ss.projectName}
 	resource := rb.Schemas()
-	client := ts.odpsIns.restClient
+	client := ss.odpsIns.restClient
 
 	type ResModel struct {
 		XMLName  xml.Name      `xml:"Schemas"`
@@ -65,7 +63,7 @@ func (ts *Schemas) List(f func(*Schema, error)) {
 		}
 
 		for _, schemaModel := range resModel.Schemas {
-			schema := NewSchema(ts.odpsIns, ts.projectName, schemaModel.Name)
+			schema := NewSchema(ss.odpsIns, ss.projectName, schemaModel.Name)
 			f(schema, nil)
 		}
 
@@ -78,25 +76,13 @@ func (ts *Schemas) List(f func(*Schema, error)) {
 	}
 }
 
-func (ts *Schemas) Get(schemaName string) *Schema {
-	return NewSchema(ts.odpsIns, ts.projectName, schemaName)
+// Get get the schema
+func (ss *Schemas) Get(schemaName string) *Schema {
+	return NewSchema(ss.odpsIns, ss.projectName, schemaName)
 }
 
-func (ts *Schemas) Exists(schemaName string) (bool, error) {
-	schema := ts.Get(schemaName)
-	err := schema.Load()
-	if err != nil {
-		var noSuchObject restclient.NoSuchObject
-		if errors.As(err, &noSuchObject) {
-			return false, nil
-		} else {
-			return false, err
-		}
-	}
-	return true, nil
-}
-
-func (ts *Schemas) Create(schemaName string, createIfNotExists bool, comment string) error {
+// Create create the schema
+func (ss *Schemas) Create(schemaName string, createIfNotExists bool, comment string) error {
 	type createSchemaModel struct {
 		XMLName     xml.Name `xml:"Schema"`
 		Project     string
@@ -106,14 +92,14 @@ func (ts *Schemas) Create(schemaName string, createIfNotExists bool, comment str
 	}
 	postBodyModel := createSchemaModel{
 
-		Project:     ts.projectName,
+		Project:     ss.projectName,
 		Name:        schemaName,
 		Comment:     comment,
 		IfNotExists: createIfNotExists,
 	}
-	rb := common.ResourceBuilder{ProjectName: ts.projectName}
+	rb := common.ResourceBuilder{ProjectName: ss.projectName}
 	resource := rb.Schemas()
-	client := ts.odpsIns.restClient
+	client := ss.odpsIns.restClient
 
 	return client.DoXmlWithModel(
 		common.HttpMethod.PostMethod,
@@ -123,10 +109,11 @@ func (ts *Schemas) Create(schemaName string, createIfNotExists bool, comment str
 		nil)
 }
 
-func (ts *Schemas) Delete(schemaName string) error {
-	rb := common.ResourceBuilder{ProjectName: ts.projectName}
+// Delete delete the schema
+func (ss *Schemas) Delete(schemaName string) error {
+	rb := common.ResourceBuilder{ProjectName: ss.projectName}
 	resource := rb.Schema(schemaName)
-	client := ts.odpsIns.restClient
+	client := ss.odpsIns.restClient
 
 	req, err := client.NewRequestWithUrlQuery(common.HttpMethod.DeleteMethod, resource, nil, nil)
 	if err != nil {
