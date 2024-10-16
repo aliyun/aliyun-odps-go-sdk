@@ -28,26 +28,31 @@ import (
 )
 
 type TableSchema struct {
-	TableName          string
-	Columns            []Column
-	Comment            string
-	CreateTime         common.GMTTime
-	ExtendedLabel      []string
-	HubLifecycle       int
-	IsExternal         bool
-	IsMaterializedView bool
-	IsVirtualView      bool
-	LastDDLTime        common.GMTTime
-	LastModifiedTime   common.GMTTime
-	Lifecycle          int
-	Owner              string
-	PartitionColumns   []Column `json:"PartitionKeys"`
-	RecordNum          int
-	ShardExist         bool
-	ShardInfo          string
-	Size               int
-	TableLabel         string
-	ViewText           string
+	TableName                        string
+	Columns                          []Column
+	Comment                          string
+	CreateTime                       common.GMTTime
+	ExtendedLabel                    []string
+	HubLifecycle                     int
+	IsExternal                       bool
+	IsMaterializedView               bool
+	IsMaterializedViewRewriteEnabled bool
+	IsMaterializedViewOutdated       bool
+
+	IsVirtualView    bool
+	LastDDLTime      common.GMTTime
+	LastModifiedTime common.GMTTime
+	LastAccessTime   common.GMTTime
+	Lifecycle        int
+	Owner            string
+	PartitionColumns []Column `json:"PartitionKeys"`
+	RecordNum        int
+	ShardExist       bool
+	ShardInfo        string
+	Size             int64
+	TableLabel       string
+	ViewText         string
+	ViewExpandedText string
 
 	// extended schema, got by adding "?extended" to table api
 	FileNum      int
@@ -56,9 +61,12 @@ type TableSchema struct {
 	Reserved     string // reserved json string, 字段不固定
 
 	// for external table extended info
-	StorageHandler string
-	Location       string
-	resources      string
+	StorageHandler  string
+	Location        string
+	resources       string
+	SerDeProperties map[string]string
+	Props           string
+	RefreshHistory  string
 
 	// for clustered info
 	ClusterInfo ClusterInfo
