@@ -30,16 +30,12 @@ type Schemas struct {
 }
 
 // NewTables if projectName is not set，the default projectName of odps will be used
-func NewSchemas(odpsIns *Odps, options ...string) *Schemas {
-	var _projectName string
-
-	if options == nil {
-		_projectName = odpsIns.DefaultProjectName()
-	} else {
-		_projectName = options[0]
+func NewSchemas(odpsIns *Odps, projectName string) *Schemas {
+	if projectName == "" {
+		projectName = odpsIns.DefaultProjectName()
 	}
 	return &Schemas{
-		projectName: _projectName,
+		projectName: projectName,
 		odpsIns:     odpsIns,
 	}
 }
