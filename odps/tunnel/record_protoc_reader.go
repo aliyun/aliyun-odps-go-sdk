@@ -291,6 +291,18 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 		r.recordCrc.Update(nanoSeconds)
 
 		fieldValue = data.Timestamp(time.Unix(seconds, int64(nanoSeconds)))
+	case datatype.TIMESTAMP_NTZ:
+		seconds, err := r.protocReader.ReadSInt64()
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		nanoSeconds, err := r.protocReader.ReadSInt32()
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		r.recordCrc.Update(seconds)
+		r.recordCrc.Update(nanoSeconds)
+		fieldValue = data.TimestampNtz(time.Unix(seconds, int64(nanoSeconds)).UTC())
 	case datatype.DECIMAL:
 		v, err := r.protocReader.ReadBytes()
 		if err != nil {

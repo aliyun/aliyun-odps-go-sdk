@@ -46,6 +46,7 @@ const (
 	VARCHAR
 	DATE
 	TIMESTAMP
+	TIMESTAMP_NTZ
 	BINARY
 	IntervalDayTime
 	IntervalYearMonth
@@ -90,6 +91,8 @@ func TypeCodeFromStr(s string) TypeID {
 		return DATE
 	case "TIMESTAMP":
 		return TIMESTAMP
+	case "TIMESTAMP_NTZ":
+		return TIMESTAMP_NTZ
 	case "BINARY":
 		return BINARY
 	case "INTERVAL_DAY_TIME":
@@ -152,6 +155,8 @@ func (t TypeID) String() string {
 		return "DATE"
 	case TIMESTAMP:
 		return "TIMESTAMP"
+	case TIMESTAMP_NTZ:
+		return "TIMESTAMP_NTZ"
 	case BINARY:
 		return "BINARY"
 	case IntervalDayTime:
@@ -458,6 +463,7 @@ var BooleanType = PrimitiveType{BOOLEAN}
 var DateType = PrimitiveType{DATE}
 var DateTimeType = PrimitiveType{DATETIME}
 var TimestampType = PrimitiveType{TIMESTAMP}
+var TimestampNtzType = PrimitiveType{TIMESTAMP_NTZ}
 var StringType = PrimitiveType{STRING}
 var FloatType = PrimitiveType{FLOAT}
 var BinaryType = PrimitiveType{BINARY}
