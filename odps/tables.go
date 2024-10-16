@@ -333,3 +333,353 @@ var TableFilter = struct {
 		}
 	},
 }
+
+// TableCreator is used to create table
+type TableCreator struct {
+	odps             *Odps
+	tableId          *TableIdentifier
+	dataColumn       []tableschema.Column
+	partitionColumn  []tableschema.Column
+	comment          string
+	ifNotExists      bool
+	lifeCycle        *int64
+	hints            map[string]string
+	aliases          map[string]string
+	primaryKeys      []string
+	debug            bool
+	shardNum         *int64
+	hubLifecycle     *int64
+	transactionTable bool
+	tblProperties    map[string]string
+	storedBy         string
+	location         string
+	jars             []string
+	serdeProperties  map[string]string
+}
+
+func NewTableCreator(odps *Odps, identifier *TableIdentifier, dataColumn []tableschema.Column) *TableCreator {
+	projectName := identifier.ProjectName
+	if projectName == "" {
+		identifier.ProjectName = odps.DefaultProjectName()
+	}
+
+	schemaName := identifier.SchemaName
+	if schemaName == "" {
+		identifier.SchemaName = odps.CurrentSchemaName()
+	}
+
+	return &TableCreator{
+		odps:            odps,
+		tableId:         identifier,
+		dataColumn:      dataColumn,
+		hints:           make(map[string]string),
+		aliases:         make(map[string]string),
+		tblProperties:   make(map[string]string),
+		serdeProperties: make(map[string]string),
+	}
+}
+
+func (tc *TableCreator) PartitionColumns(columns []tableschema.Column) *TableCreator {
+	tc.partitionColumn = columns
+	return tc
+}
+
+func (tc *TableCreator) WithComment(comment string) *TableCreator {
+	tc.comment = comment
+	return tc
+}
+
+func (tc *TableCreator) IfNotExists() *TableCreator {
+	tc.ifNotExists = true
+	return tc
+}
+
+func (tc *TableCreator) WithLifeCycle(lifeCycle int64) *TableCreator {
+	tc.lifeCycle = &lifeCycle
+	return tc
+}
+
+func (tc *TableCreator) TransactionTable() *TableCreator {
+	if tc.tblProperties == nil {
+		tc.tblProperties = make(map[string]string)
+	}
+	tc.tblProperties["transactional"] = "true"
+
+	tc.hints["odps.sql.upsertable.table.enable"] = "true"
+	tc.transactionTable = true
+	return tc
+}
+
+func (tc *TableCreator) WithPrimaryKeys(primaryKeys []string) *TableCreator {
+	tc.primaryKeys = primaryKeys
+	return tc
+}
+
+func (tc *TableCreator) WithBucketNum(bucketNum int) *TableCreator {
+	if bucketNum < 1 {
+		panic("bucketNum must be greater than or equal to 1")
+	}
+	tc.tblProperties["write.bucket.num"] = fmt.Sprintf("%d", bucketNum)
+	return tc
+}
+
+func (tc *TableCreator) WithTblProperties(tblProperties map[string]string) *TableCreator {
+	for k, v := range tblProperties {
+		tc.tblProperties[k] = v
+	}
+	return tc
+}
+
+func (tc *TableCreator) WithSerdeProperties(serdeProperties map[string]string) *TableCreator {
+	for k, v := range serdeProperties {
+		tc.serdeProperties[k] = v
+	}
+	return tc
+}
+
+func (tc *TableCreator) WithHints(hints map[string]string) *TableCreator {
+	for k, v := range hints {
+		tc.hints[k] = v
+	}
+	return tc
+}
+
+func (tc *TableCreator) WithAliases(aliases map[string]string) *TableCreator {
+	for k, v := range aliases {
+		tc.aliases[k] = v
+	}
+	return tc
+}
+
+func (tc *TableCreator) WithShardNum(shardNum int64) *TableCreator {
+	tc.shardNum = &shardNum
+	return tc
+}
+
+func (tc *TableCreator) WithHubLifecycle(hubLifecycle int64) *TableCreator {
+	tc.hubLifecycle = &hubLifecycle
+	return tc
+}
+
+func (tc *TableCreator) WithJars(jars []string) *TableCreator {
+	tc.jars = append(tc.jars, jars...)
+	return tc
+}
+
+func (tc *TableCreator) Debug() *TableCreator {
+	tc.debug = true
+	return tc
+}
+
+func (tc *TableCreator) Create() error {
+	if tc.odps == nil {
+		return errors.New("odps cannot be nil")
+	}
+	if tc.tableId == nil || tc.tableId.TableName == "" {
+		return errors.New("identifier cannot be nil or empty")
+	}
+	if tc.dataColumn == nil || len(tc.dataColumn) == 0 {
+		return errors.New("tableSchema cannot be nil")
+	}
+
+	// Set schema flag in hints
+	if tc.tableId.SchemaName != "" {
+		tc.hints["odps.namespace.schema"] = "true"
+	} else {
+		tc.hints["odps.namespace.schema"] = "false"
+	}
+
+	task := NewSqlTask("SQLCreateTableTask", tc.generateCreateTableSql(), tc.hints)
+
+	if tc.aliases != nil && len(tc.aliases) > 0 {
+		aliasJson, _ := json.Marshal(tc.aliases)
+		task.AddProperty("aliases", string(aliasJson))
+	}
+
+	instances := NewInstances(tc.odps, tc.tableId.ProjectName)
+
+	ins, err := instances.CreateTask(tc.tableId.ProjectName, &task)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	if tc.debug {
+		logView, ignore := tc.odps.LogView().GenerateLogView(ins, 24)
+		if ignore == nil {
+			fmt.Println(logView)
+		}
+	}
+	return errors.WithStack(ins.WaitForSuccess())
+}
+
+func (tc *TableCreator) CreateExternal(storedBy, location string) error {
+	if tc.odps == nil {
+		return errors.New("odps cannot be nil")
+	}
+	if tc.tableId == nil || tc.tableId.TableName == "" {
+		return errors.New("identifier cannot be nil or empty")
+	}
+	if tc.dataColumn == nil || len(tc.dataColumn) == 0 {
+		return errors.New("tableSchema cannot be nil")
+	}
+
+	tc.storedBy = storedBy
+	tc.location = location
+
+	if tc.tableId.SchemaName != "" {
+		tc.hints["odps.namespace.schema"] = "true"
+	} else {
+		tc.hints["odps.namespace.schema"] = "false"
+	}
+	task := NewSqlTask("SQLCreateTableTask", tc.generateCreateExternalTableSql(), tc.hints)
+
+	if tc.aliases != nil && len(tc.aliases) > 0 {
+		aliasJson, _ := json.Marshal(tc.aliases)
+		task.AddProperty("aliases", string(aliasJson))
+	}
+
+	instances := NewInstances(tc.odps, tc.tableId.ProjectName)
+
+	ins, err := instances.CreateTask(tc.tableId.ProjectName, &task)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	if tc.debug {
+		logView, ignore := tc.odps.LogView().GenerateLogView(ins, 24)
+		if ignore == nil {
+			fmt.Println(logView)
+		}
+	}
+	return errors.WithStack(ins.WaitForSuccess())
+}
+
+func (tc *TableCreator) generateCreateExternalTableSql() string {
+	if tc.storedBy == "" || tc.location == "" {
+		panic("Create external table must have storedBy and location")
+	}
+
+	plainString := tc.generateCreateTableSql()
+	plainString = strings.Replace(plainString, "CREATE", "CREATE EXTERNAL", 1)
+
+	var sb strings.Builder
+	sb.WriteString(" STORED BY '")
+	sb.WriteString(strings.TrimSpace(tc.storedBy))
+	sb.WriteString("'")
+
+	if len(tc.serdeProperties) > 0 {
+		sb.WriteString(" WITH SERDEPROPERTIES(")
+		for k, v := range tc.serdeProperties {
+			sb.WriteString(fmt.Sprintf("'%s' = '%s'", k, v))
+		}
+		sb.WriteString(")")
+	}
+
+	sb.WriteString(fmt.Sprintf(" LOCATION '%s'", tc.location))
+
+	if len(tc.jars) > 0 {
+		sb.WriteString(" USING '")
+		sb.WriteString(strings.Join(tc.jars, ","))
+		sb.WriteString("'")
+	}
+
+	if tc.lifeCycle != nil {
+		// Remove LIFE CYCLE from original SQL query
+		lastIndex := strings.LastIndex(plainString, " LIFECYCLE ")
+		if lastIndex < 0 {
+			panic("Invalid SQL syntax")
+		}
+		plainString = plainString[:lastIndex]
+		sb.WriteString(fmt.Sprintf(" LIFECYCLE %d;", *tc.lifeCycle))
+	} else {
+		// Remove the trailing ';'
+		plainString = strings.TrimSuffix(plainString, ";")
+		sb.WriteString(";")
+	}
+
+	if tc.debug {
+		fmt.Println(plainString + sb.String())
+	}
+	return plainString + sb.String()
+}
+
+func (tc *TableCreator) generateCreateTableSql() string {
+	var sql strings.Builder
+	sql.WriteString("CREATE TABLE ")
+	if tc.ifNotExists {
+		sql.WriteString("IF NOT EXISTS ")
+	}
+	sql.WriteString(tc.tableId.String())
+	sql.WriteString(" (")
+
+	columns := tc.dataColumn
+	for i, column := range columns {
+		sql.WriteString(fmt.Sprintf("`%s` %s", column.Name, column.Type.Name()))
+		if !column.IsNullable {
+			sql.WriteString(" NOT NULL")
+		}
+		if column.DefaultValue != "" {
+			sql.WriteString(" DEFAULT " + column.DefaultValue)
+		}
+		if column.Comment != "" {
+			sql.WriteString(fmt.Sprintf(" COMMENT '%s'", column.Comment))
+		}
+		if i+1 < len(columns) {
+			sql.WriteString(",")
+		}
+	}
+
+	if tc.transactionTable {
+		if len(tc.primaryKeys) == 0 {
+			panic("Transaction table must have a primary key")
+		}
+		sql.WriteString(", PRIMARY KEY(" + strings.Join(tc.primaryKeys, ", ") + ")")
+	}
+	sql.WriteString(")")
+
+	if tc.comment != "" {
+		sql.WriteString(fmt.Sprintf(" COMMENT '%s'", tc.comment))
+	}
+
+	partitionColumns := tc.partitionColumn
+	if len(partitionColumns) > 0 {
+		sql.WriteString(" PARTITIONED BY (")
+		for i, column := range partitionColumns {
+			sql.WriteString(fmt.Sprintf("%s %s", column.Name, column.Type.Name()))
+			if column.Comment != "" {
+				sql.WriteString(fmt.Sprintf(" COMMENT '%s'", column.Comment))
+			}
+			if i+1 < len(partitionColumns) {
+				sql.WriteString(",")
+			}
+		}
+		sql.WriteString(")")
+	}
+
+	if len(tc.tblProperties) > 0 {
+		sql.WriteString(" TBLPROPERTIES(")
+		for k, v := range tc.tblProperties {
+			sql.WriteString(fmt.Sprintf("'%s'='%s',", k, v))
+		}
+		sql.WriteByte(')')
+	}
+
+	if tc.lifeCycle != nil {
+		sql.WriteString(fmt.Sprintf(" LIFECYCLE %d", *tc.lifeCycle))
+	}
+	if tc.shardNum != nil {
+		sql.WriteString(fmt.Sprintf(" INTO %d SHARDS", *tc.shardNum))
+	}
+	if tc.hubLifecycle != nil {
+		if tc.lifeCycle != nil {
+			panic("Only one of lifeCycle and hubLifecycle can be set")
+		}
+		sql.WriteString(fmt.Sprintf(" HUBLIFECYCLE %d", *tc.hubLifecycle))
+	}
+	sql.WriteString(";")
+
+	if tc.debug {
+		fmt.Println(sql.String())
+	}
+	return sql.String()
+}

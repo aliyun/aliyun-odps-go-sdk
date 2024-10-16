@@ -33,6 +33,17 @@ type Column struct {
 	ExtendedLabels  []string
 }
 
+type ColumnBuilder struct {
+	name            string
+	typeInfo        datatype2.DataType
+	comment         string
+	label           string
+	isNullable      bool
+	hasDefaultValue bool
+	defaultValue    string
+	extendedLabels  []string
+}
+
 func (c *Column) UnmarshalJSON(data []byte) error {
 	type ColumnShadow struct {
 		Name            string
@@ -66,4 +77,54 @@ func (c *Column) UnmarshalJSON(data []byte) error {
 	}
 
 	return nil
+}
+
+func NewColumnBuilder(name string, typeInfo datatype2.DataType) *ColumnBuilder {
+	return &ColumnBuilder{
+		name:            name,
+		typeInfo:        typeInfo,
+		isNullable:      true,  // default is true
+		hasDefaultValue: false, // default is false
+	}
+}
+
+func (cb *ColumnBuilder) WithComment(comment string) *ColumnBuilder {
+	cb.comment = comment
+	return cb
+}
+
+func (cb *ColumnBuilder) WithLabel(label string) *ColumnBuilder {
+	cb.label = label
+	return cb
+}
+
+func (cb *ColumnBuilder) WithExtendedLabels(extendedLabels []string) *ColumnBuilder {
+	cb.extendedLabels = extendedLabels
+	return cb
+}
+
+func (cb *ColumnBuilder) NotNull() *ColumnBuilder {
+	cb.isNullable = false
+	return cb
+}
+
+func (cb *ColumnBuilder) DefaultValue(defaultValue string) *ColumnBuilder {
+	if defaultValue != "" {
+		cb.hasDefaultValue = true
+		cb.defaultValue = defaultValue
+	}
+	return cb
+}
+
+func (cb *ColumnBuilder) Build() Column {
+	return Column{
+		Name:            cb.name,
+		Type:            cb.typeInfo,
+		Comment:         cb.comment,
+		Label:           cb.label,
+		ExtendedLabels:  cb.extendedLabels,
+		IsNullable:      cb.isNullable,
+		HasDefaultValue: cb.hasDefaultValue,
+		DefaultValue:    cb.defaultValue,
+	}
 }
