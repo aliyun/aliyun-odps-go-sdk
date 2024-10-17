@@ -20,9 +20,10 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"encoding/xml"
+	"strings"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/pkg/errors"
-	"strings"
 )
 
 type SQLTask struct {

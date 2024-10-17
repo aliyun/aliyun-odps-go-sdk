@@ -19,6 +19,7 @@ package odps
 import (
 	"encoding/json"
 	"encoding/xml"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
@@ -37,11 +38,31 @@ func (n TaskName) GetName() string {
 
 // TaskConfig 作为embedding filed使用时，使用者自动实现Task接口的AddProperty方法
 type TaskConfig struct {
-	Config []common.Property `xml:"Config>Property"`
+	Config []common.Property `xml:"Config>Property,omitempty"`
 }
 
 func (t *TaskConfig) AddProperty(key, value string) {
 	t.Config = append(t.Config, common.Property{Name: key, Value: value})
+}
+
+type BaseTask struct {
+	TaskName `xml:"Name"`
+	TaskConfig
+	Comment string `xml:"Comment,omitempty"`
+}
+
+func newBaseTask(name string, comment string, hints map[string]string) BaseTask {
+	baseTask := BaseTask{
+		TaskName: TaskName(name),
+		Comment:  comment,
+	}
+
+	if hints != nil {
+		hintsJson, _ := json.Marshal(hints)
+		baseTask.Config = append(baseTask.Config, common.Property{Name: "settings", Value: string(hintsJson)})
+	}
+
+	return baseTask
 }
 
 type SQLCostTask struct {
@@ -76,15 +97,6 @@ type SQLPlanTask struct {
 
 func (t *SQLPlanTask) TaskType() string {
 	return "SQLPlan"
-}
-
-type SQLRTTask struct {
-	XMLName xml.Name `xml:"SQLRT"`
-	SQLTask
-}
-
-func (t *SQLRTTask) TaskType() string {
-	return "SQLRT"
 }
 
 type MergeTask struct {
