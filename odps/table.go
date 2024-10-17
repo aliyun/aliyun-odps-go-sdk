@@ -33,8 +33,7 @@ import (
 type TableType int
 
 const (
-	_ TableType = iota
-	ManagedTable
+	ManagedTable TableType = iota
 	VirtualView
 	ExternalTable
 	TableTypeUnknown
@@ -55,22 +54,24 @@ type TableOrErr struct {
 }
 
 type tableModel struct {
-	XMLName     xml.Name `xml:"Table"`
-	Name        string
-	TableId     string
-	Format      string
-	Schema      string
-	Comment     string
-	Owner       string
-	ProjectName string `xml:"Project"`
-	TableLabel  string
-	CryptoAlgo  string
-	Type        TableType
+	XMLName       xml.Name `xml:"Table"`
+	Name          string
+	TableId       string
+	Format        string
+	Schema        string
+	Comment       string
+	Owner         string
+	ProjectName   string `xml:"Project"`
+	SchemaName    string
+	TableLabel    string
+	CryptoAlgo    string
+	TableMaskInfo string
+	Type          TableType
 }
 
-func NewTable(odpsIns *Odps, projectName string, tableName string) *Table {
+func NewTable(odpsIns *Odps, projectName string, schemaName string, tableName string) *Table {
 	return &Table{
-		model:   tableModel{ProjectName: projectName, Name: tableName},
+		model:   tableModel{ProjectName: projectName, SchemaName: schemaName, Name: tableName},
 		odpsIns: odpsIns,
 	}
 }
@@ -84,7 +85,12 @@ func (t *Table) Load() error {
 	resource := t.ResourceUrl()
 	t.beLoaded = true
 
-	err := client.GetWithModel(resource, nil, &t.model)
+	queryArgs := make(url.Values, 4)
+	if t.SchemaName() != "" {
+		queryArgs.Set("curr_schema", t.SchemaName())
+	}
+
+	err := client.GetWithModel(resource, queryArgs, &t.model)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -94,7 +100,7 @@ func (t *Table) Load() error {
 		return errors.WithStack(err)
 	}
 
-	// LoadExtendedInfo会加载其他额外信息，主要是schema信息
+	// LoadExtendedInfo会加载其他额外信息，主要是table schema信息
 	return errors.WithStack(t.LoadExtendedInfo())
 }
 
@@ -102,11 +108,14 @@ func (t *Table) LoadExtendedInfo() error {
 	client := t.odpsIns.restClient
 	resource := t.ResourceUrl()
 
-	urlQuery := make(url.Values)
-	urlQuery.Set("extended", "")
+	queryArgs := make(url.Values, 4)
+	queryArgs.Set("extended", "")
+	if t.SchemaName() != "" {
+		queryArgs.Set("curr_schema", t.SchemaName())
+	}
 
 	var model tableModel
-	err := client.GetWithModel(resource, urlQuery, &model)
+	err := client.GetWithModel(resource, queryArgs, &model)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -136,10 +145,18 @@ func (t *Table) ResourceUrl() string {
 }
 
 func (t *Table) Comment() string {
+	// both model.Comment and tableSchema.Comment can get the value, the latter takes precedence
+	if t.tableSchema.Comment != "" {
+		return t.tableSchema.Comment
+	}
 	return t.model.Comment
 }
 
 func (t *Table) Owner() string {
+	// both model.Owner and tableSchema.Owner can get the value, the latter takes precedence
+	if t.tableSchema.Owner != "" {
+		return t.tableSchema.Owner
+	}
 	return t.model.Owner
 }
 
@@ -155,6 +172,10 @@ func (t *Table) ProjectName() string {
 	return t.model.ProjectName
 }
 
+func (t *Table) SchemaName() string {
+	return t.model.SchemaName
+}
+
 func (t *Table) Type() TableType {
 	return t.model.Type
 }
@@ -164,6 +185,10 @@ func (t *Table) CreatedTime() time.Time {
 }
 
 func (t *Table) TableLabel() string {
+	// Service will return 0 if nothing set
+	if t.tableSchema.TableLabel == "0" {
+		return ""
+	}
 	return t.tableSchema.TableLabel
 }
 
@@ -295,7 +320,7 @@ func (t *Table) ViewText() string {
 	return t.tableSchema.ViewText
 }
 
-func (t *Table) Size() int {
+func (t *Table) Size() int64 {
 	return t.tableSchema.Size
 }
 
@@ -379,7 +404,13 @@ func partitionValueToSpec(value string) string {
 // AddPartitions Example: AddPartitions(true, []string{"region=10026/name=abc", "region=10027/name=mhn"})
 func (t *Table) AddPartitions(ifNotExists bool, partitionValues []string) error {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("alter table %s.%s add", t.ProjectName(), t.Name()))
+	sb.WriteString("alter table ")
+	if t.SchemaName() == "" {
+		sb.WriteString(fmt.Sprintf("%s.%s", t.ProjectName(), t.Name()))
+	} else {
+		sb.WriteString(fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name()))
+	}
+	sb.WriteString(" add")
 	if ifNotExists {
 		sb.WriteString(" if not exists\n")
 	}
@@ -409,7 +440,13 @@ func (t *Table) AddPartition(ifNotExists bool, partitionValue string) error {
 // DeletePartitions Example: DeletePartitions(true, []string{"region=10026/name=abc", "region=10027/name=mhn"})
 func (t *Table) DeletePartitions(ifExists bool, partitionValues []string) error {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("alter table %s.%s drop", t.ProjectName(), t.Name()))
+	sb.WriteString("alter table ")
+	if t.SchemaName() == "" {
+		sb.WriteString(fmt.Sprintf("%s.%s", t.ProjectName(), t.Name()))
+	} else {
+		sb.WriteString(fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name()))
+	}
+	sb.WriteString(" drop")
 	if ifExists {
 		sb.WriteString(" if exists")
 	}
@@ -446,10 +483,14 @@ func (t *Table) DeletePartition(ifExists bool, partitionValue string) error {
 }
 
 func (t *Table) GetPartitionValues() ([]string, error) {
-	queryArgs := make(url.Values, 1)
+	queryArgs := make(url.Values, 4)
 	queryArgs.Set("partitions", "")
 	// 指定name为空后，接口只会返回分区的“名字”，也就是分区的值q
 	queryArgs.Set("name", "")
+
+	if t.SchemaName() != "" {
+		queryArgs.Set("curr_schema", t.SchemaName())
+	}
 
 	resource := t.ResourceUrl()
 	client := t.odpsIns.restClient
@@ -520,6 +561,9 @@ func (t *Table) getPartitions(partitionSpec string) ([]Partition, error) {
 
 	if partitionSpec != "" {
 		queryArgs.Set("partition", partitionSpec)
+	}
+	if t.SchemaName() != "" {
+		queryArgs.Set("curr_schema", t.SchemaName())
 	}
 
 	resource := t.ResourceUrl()
@@ -630,7 +674,12 @@ func (t *Table) getPartitions(partitionSpec string) ([]Partition, error) {
 
 func (t *Table) CreateShards(shardCount int) error {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("alter table %s.%s", t.ProjectName(), t.Name()))
+	sb.WriteString("alter table ")
+	if t.SchemaName() == "" {
+		sb.WriteString(fmt.Sprintf("%s.%s", t.ProjectName(), t.Name()))
+	} else {
+		sb.WriteString(fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name()))
+	}
 	sb.WriteString(fmt.Sprintf("\ninto %d shards;", shardCount))
 	ins, err := t.ExecSql("SQLCreateShardsTask", sb.String())
 	if err != nil {

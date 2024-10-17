@@ -75,6 +75,14 @@ func (rb *ResourceBuilder) Table(tableName string) string {
 	return path.Join(ProjectsPath, rb.ProjectName, TablesPath, url.PathEscape(tableName))
 }
 
+func (rb *ResourceBuilder) Schemas() string {
+	return path.Join(ProjectsPath, rb.ProjectName, SchemasPath)
+}
+
+func (rb *ResourceBuilder) Schema(schemaName string) string {
+	return path.Join(ProjectsPath, rb.ProjectName, SchemasPath, url.PathEscape(schemaName))
+}
+
 func (rb *ResourceBuilder) TableStream(tableName string) string {
 	return path.Join(ProjectsPath, rb.ProjectName, TablesPath, url.PathEscape(tableName), StreamsPath)
 }

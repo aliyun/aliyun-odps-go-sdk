@@ -26,7 +26,7 @@ import (
 )
 
 func ExampleTables_List() {
-	ts := odps.NewTables(odpsIns)
+	ts := odps.NewTables(odpsIns, "", "")
 	var f = func(t *odps.Table, err error) {
 		if err != nil {
 			log.Fatalf("%+v", err)
@@ -40,7 +40,7 @@ func ExampleTables_List() {
 }
 
 func ExampleTables_BatchLoadTables() {
-	tablesIns := odps.NewTables(odpsIns)
+	tablesIns := odps.NewTables(odpsIns, "", "")
 	tableNames := []string{
 		"jet_mr_input",
 		"jet_smode_test",
@@ -105,10 +105,10 @@ func ExampleTables_Create() {
 		Lifecycle(2)
 
 	schema := builder.Build()
-	sql, _ := schema.ToSQLString(defaultProjectName, false)
+	sql, _ := schema.ToSQLString(defaultProjectName, "", false)
 	println(sql)
 
-	tables := odps.NewTables(odpsIns)
+	tables := odps.NewTables(odpsIns, odpsIns.DefaultProjectName(), "")
 	err := tables.Create(schema, true, hints, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -118,7 +118,7 @@ func ExampleTables_Create() {
 }
 
 func ExampleTables_Delete() {
-	tables := odps.NewTables(odpsIns, odpsIns.DefaultProjectName())
+	tables := odps.NewTables(odpsIns, odpsIns.DefaultProjectName(), "")
 	err := tables.Delete("user_temp", false)
 	if err != nil {
 		log.Fatalf("%+v", err)
