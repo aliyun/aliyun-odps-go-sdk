@@ -39,6 +39,7 @@ const (
 type Date time.Time
 type DateTime time.Time
 type Timestamp time.Time
+type TimestampNtz time.Time
 
 func NewDate(s string) (Date, error) {
 	t, err := time.ParseInLocation(DateFormat, s, time.UTC)
@@ -127,5 +128,34 @@ func (t Timestamp) Sql() string {
 }
 
 func (t *Timestamp) Scan(value interface{}) error {
+	return errors.WithStack(tryConvertType(value, t))
+}
+
+func NewTimestampNtz(s string) (TimestampNtz, error) {
+	t, err := time.Parse(TimeStampFormat, s)
+	if err != nil {
+		return TimestampNtz(time.Time{}), err
+	}
+	return TimestampNtz(t), nil
+}
+
+func (t TimestampNtz) Type() datatype.DataType {
+	return datatype.TimestampNtzType
+}
+
+func (t TimestampNtz) Time() time.Time {
+	return time.Time(t)
+}
+
+func (t TimestampNtz) String() string {
+	ts := time.Time(t)
+	return ts.Format(TimeStampFormat)
+}
+
+func (t TimestampNtz) Sql() string {
+	return fmt.Sprintf("timestamp_ntz'%s'", t.String())
+}
+
+func (t *TimestampNtz) Scan(value interface{}) error {
 	return errors.WithStack(tryConvertType(value, t))
 }

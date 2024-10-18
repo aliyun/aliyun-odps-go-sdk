@@ -141,6 +141,7 @@ func (r *RecordProtocWriter) writeFieldTag(colIndex int, dt datatype.DataType) e
 		wireType = protowire.Fixed32Type
 	case datatype.IntervalDayTime,
 		datatype.TIMESTAMP,
+		datatype.TIMESTAMP_NTZ,
 		datatype.STRING,
 		datatype.CHAR,
 		datatype.VARCHAR,
@@ -245,6 +246,20 @@ func (r *RecordProtocWriter) writeField(val data.Data) error {
 
 		return errors.WithStack(r.protocWriter.WriteSInt32(nanoSeconds))
 	case data.Timestamp:
+		t := val.Time()
+		seconds := t.Unix()
+		nanoSeconds := int32(t.Nanosecond())
+
+		r.recordCrc.Update(seconds)
+		r.recordCrc.Update(nanoSeconds)
+
+		err := r.protocWriter.WriteSInt64(seconds)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		return errors.WithStack(r.protocWriter.WriteSInt32(nanoSeconds))
+	case *data.TimestampNtz:
 		t := val.Time()
 		seconds := t.Unix()
 		nanoSeconds := int32(t.Nanosecond())
