@@ -40,7 +40,7 @@ func ExampleProjects_List() {
 
 func ExampleProjects_Exists() {
 	projects := odpsIns.Projects()
-	projectName := "project_1"
+	projectName := defaultProjectName
 
 	existed, err := projects.Exists(projectName)
 	if err != nil {

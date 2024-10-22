@@ -14,77 +14,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package odps
+package odps_test
 
 import (
 	"fmt"
-	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"log"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"testing"
 )
 
-var (
-	account  account2.Account
-	endpoint string
-	odpsIns  *Odps
-	project  string
-)
-
-func setup() {
-	account = account2.AliyunAccountFromEnv()
-	endpoint = restclient.LoadEndpointFromEnv()
-	odpsIns = NewOdps(account, endpoint)
-	project = "dingxin"
-
-	schemas := NewSchemas(odpsIns, project)
-	err := schemas.Create("exist_schema", true, "create by ut")
-	if err != nil {
-		log.Fatalf("%+v", err)
-		return
-	}
-
-	// create some tables in exist_schema
-	tables := NewTables(odpsIns, project, "exist_schema")
-	c := tableschema.Column{
-		Name: "name",
-		Type: datatype.StringType,
-	}
-	schemaBuilder := tableschema.NewSchemaBuilder()
-	err = tables.Create(schemaBuilder.Name("table1").Column(c).Build(), true, nil, nil)
-	err = tables.Create(schemaBuilder.Name("table2").Build(), true, nil, nil)
-	if err != nil {
-		log.Fatalf("%+v", err)
-		return
-	}
-}
-
-func TestMain(m *testing.M) {
-	// 在运行所有测试前进行设置
-	setup()
-	m.Run()
-}
-
 func TestSchemas_List(t *testing.T) {
-	schemas := NewSchemas(odpsIns, project)
-	schemas.List(func(schema *Schema, err error) {
+	schemas := odps.NewSchemas(odpsIns, defaultProjectName)
+	schemas.List(func(schema *odps.Schema, err error) {
 		print(schema.Name() + "\n")
 	})
 }
 
 func TestSchemas_GetSchema(t *testing.T) {
-	schema := NewSchema(odpsIns, project, "exist_schema")
-	schema.Load()
+	schema := odps.NewSchema(odpsIns, defaultProjectName, "exist_schema")
+	err := schema.Load()
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
 	print(schema.ModifiedTime().String())
 }
 
-func TestSchemas_ListTableBySchema(t *testing.T) {
-	ts := NewTables(odpsIns, project, "exist_schema")
-	var f = func(t *Table, err error) {
+func TestSchemas_ListTableBySchema(te *testing.T) {
+	ts := odps.NewTables(odpsIns, defaultProjectName, "exist_schema")
+	var f = func(t *odps.Table, err error) {
 		if err != nil {
-			log.Fatalf("%+v", err)
+			te.Fatalf("%+v", err)
 		}
 
 		println(fmt.Sprintf("%s, %s, %s", t.Name(), t.Owner(), t.Type()))
@@ -93,45 +51,45 @@ func TestSchemas_ListTableBySchema(t *testing.T) {
 }
 
 func TestSchemas_CheckExists(t *testing.T) {
-	schema := NewSchema(odpsIns, project, "not_exists")
+	schemas := odps.NewSchemas(odpsIns, defaultProjectName)
+	schema := schemas.Get("not_exists")
 	exists, err := schema.Exists()
 	if err != nil {
-		log.Fatalf("%+v", err)
+		t.Fatalf("%+v", err)
 	}
-	print(exists)
 
-	schema = NewSchema(odpsIns, project, "exist_schema")
+	schema = odps.NewSchema(odpsIns, defaultProjectName, "exist_schema")
 	exists, err = schema.Exists()
 	if err != nil {
-		log.Fatalf("%+v", err)
+		t.Fatalf("%+v", err)
 	}
 	print(exists)
 }
 
 func TestSchemas_CreateSchema(t *testing.T) {
-	schemas := NewSchemas(odpsIns, project)
+	schemas := odps.NewSchemas(odpsIns, defaultProjectName)
 	err := schemas.Create("new_schema", true, "new comment")
 	if err != nil {
-		log.Fatalf("%+v", err)
+		t.Fatalf("%+v", err)
 	}
 
-	schema := NewSchema(odpsIns, project, "new_schema")
+	schema := odps.NewSchema(odpsIns, defaultProjectName, "new_schema")
 	schema.Load()
 	println(schema.Comment())
 }
 
 func TestSchemas_DeleteSchema(t *testing.T) {
-	schemas := NewSchemas(odpsIns, project)
+	schemas := odps.NewSchemas(odpsIns, defaultProjectName)
 
 	err := schemas.Create("to_delete_schema", true, "to delete")
 
-	schema := NewSchema(odpsIns, project, "to_delete_schema")
+	schema := odps.NewSchema(odpsIns, defaultProjectName, "to_delete_schema")
 	exists, err := schema.Exists()
 	print(exists)
 
 	err = schemas.Delete("to_delete_schema")
 	if err != nil {
-		log.Fatalf("%+v", err)
+		t.Fatalf("%+v", err)
 	}
 	exists, err = schema.Exists()
 	print(exists)

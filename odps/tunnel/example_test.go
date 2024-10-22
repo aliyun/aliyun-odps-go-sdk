@@ -56,7 +56,7 @@ func createTableWithComplexData() {
 	builder.Name("has_struct").Columns(column)
 	schema := builder.Build()
 
-	tables := odps.NewTables(odpsIns, ProjectName)
+	tables := odps.NewTables(odpsIns, ProjectName, "")
 	err := tables.Create(schema, true, nil, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -96,7 +96,7 @@ func createSaleDetailTable() {
 		Lifecycle(2)
 
 	schema := builder.Build()
-	tables := odps.NewTables(odpsIns, ProjectName)
+	tables := odps.NewTables(odpsIns, ProjectName, "")
 	err := tables.Create(schema, true, nil, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
