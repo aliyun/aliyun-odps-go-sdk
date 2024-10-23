@@ -45,12 +45,17 @@ func Example() {
 		config.AccessId = akAccount.AccessId()
 		config.AccessKey = akAccount.AccessKey()
 	} else {
-		log.Fatalf("unknown account type: %s", account.GetType())
+		errMsg := "unknown account type: %s" + account.GetType().String()
+		panic(errMsg)
 	}
 	config.ProjectName = "go_sdk_regression_testing"
 
 	dsn := config.FormatDsn()
 	db, err := sql.Open("odps", dsn)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+	_, err = db.Exec("create table if not exists data_type_demo(ti tinyint, si smallint, i int, bi bigint, b binary, f float, d double);", nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

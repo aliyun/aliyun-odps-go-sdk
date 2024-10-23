@@ -54,10 +54,10 @@ func (sp *stsStringProvider) _signRequest(req *http.Request, endpoint string) er
 }
 
 func (sp *stsStringProvider) AccessId() string {
-	return sp.stsToken
+	return sp.accessId
 }
 func (sp *stsStringProvider) AccessKey() string {
-	return sp.stsToken
+	return sp.accessKey
 }
 func (sp *stsStringProvider) SecurityToken() string {
 	return sp.stsToken
