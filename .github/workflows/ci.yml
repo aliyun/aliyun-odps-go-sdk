@@ -19,11 +19,10 @@ jobs:
     steps:
     - name: get credentials
       id: get-credentials
-      uses: 'mozillazg/alibabacloud-oidc-auth@v1'
+      uses: aliyun/configure-aliyun-credentials-action@v1
       with:
-        role-arn-to-assume: '${{ secrets.ROLE_ARN }}'
+        role-to-assume: '${{ secrets.ROLE_ARN }}'
         oidc-provider-arn: '${{ secrets.OIDC_ARN }}'
-        set-outputs: 'true'
         
     - name: Set up environment
       run: |
