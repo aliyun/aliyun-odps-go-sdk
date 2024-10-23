@@ -31,6 +31,7 @@ jobs:
         echo "odps_accessKey=${{ steps.get-credentials.outputs.aliyun-access-key-secret }}" >> $GITHUB_ENV
         echo "odps_stsToken=${{ steps.get-credentials.outputs.aliyun-security-token }}" >> $GITHUB_ENV
         echo "odps_endpoint=${{ secrets.ENDPOINT }}" >> $GITHUB_ENV
+        echo "TZ=Asia/Shanghai" >> $GITHUB_ENV
     
     - uses: actions/checkout@v4
 
