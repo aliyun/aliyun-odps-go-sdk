@@ -23,7 +23,7 @@ jobs:
       with:
         role-to-assume: '${{ secrets.ROLE_ARN }}'
         oidc-provider-arn: '${{ secrets.OIDC_ARN }}'
-        audience: 'sts.aliyuncs.com' # default value
+        audience: 'actions.github.com' # default value
         
     - name: Set up environment
       run: |
