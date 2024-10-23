@@ -54,10 +54,6 @@ func Example() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-	_, err = db.Exec("create table if not exists data_type_demo(ti tinyint, si smallint, i int, bi bigint, b binary, f float, d double);", nil)
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
 
 	rows, err := db.Query("select ti, si, i, bi, b, f, d from data_type_demo;", nil)
 	if err != nil {
@@ -78,7 +74,7 @@ func Example() {
 			log.Fatalf("%+v", err)
 		}
 
-		println(ti, si, i, bi, b, f, d)
+		log.Println(ti, si, i, bi, b, f, d)
 	}
 
 	// Output:
