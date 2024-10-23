@@ -105,7 +105,7 @@ func ExampleManager_ListUsers() {
 
 func ExampleManager_RunQuery() {
 	sm := security.NewSecurityManager(restClient, projectName)
-	result, err := sm.RunQuery("show grants for ALIYUN$mc_schema@test.aliyunid.com;", true, "")
+	result, err := sm.RunQuery("whoami;", true, "")
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
