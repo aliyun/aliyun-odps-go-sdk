@@ -1,0 +1,46 @@
+# This workflow will build a golang project
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
+
+name: CI
+
+on:
+  workflow_dispatch: # 支持手动触发
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write     # 获取 oidc token 的权限
+    steps:
+    - name: get credentials
+      id: get-credentials
+      uses: 'mozillazg/alibabacloud-oidc-auth@v1'
+      with:
+        role-arn-to-assume: '${{ secrets.ROLE_ARN }}'
+        oidc-provider-arn: '${{ secrets.OIDC_ARN }}'
+        set-outputs: 'true'
+        
+    - name: Set up environment
+      run: |
+        echo "odps_accessId=${{ steps.get-credentials.outputs.access-key-id }}" >> $GITHUB_ENV
+        echo "odps_accessKey=${{ steps.get-credentials.outputs.access-key-secret }}" >> $GITHUB_ENV
+        echo "odps_stsToken=${{ steps.get-credentials.outputs.security-token }}" >> $GITHUB_ENV
+        echo "Success setup test env: $odps_accessId"
+    
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.15'
+
+    - name: Build
+      run: go build -v ./...
+
+    - name: Test
+      run: go test -v ./...
