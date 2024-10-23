@@ -658,10 +658,17 @@ func (tc *TableCreator) generateCreateTableSql() string {
 
 	if len(tc.tblProperties) > 0 {
 		sql.WriteString(" TBLPROPERTIES(")
+
+		first := true
 		for k, v := range tc.tblProperties {
-			sql.WriteString(fmt.Sprintf("'%s'='%s',", k, v))
+			if !first {
+				sql.WriteString(", ")
+			}
+			sql.WriteString(fmt.Sprintf("'%s'='%s'", k, v))
+			first = false
 		}
-		sql.WriteByte(')')
+
+		sql.WriteString(")")
 	}
 
 	if tc.lifeCycle != nil {
