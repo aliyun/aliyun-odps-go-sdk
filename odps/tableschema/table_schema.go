@@ -116,8 +116,8 @@ type SchemaBuilder struct {
 	clusterInfo      ClusterInfo
 }
 
-func NewSchemaBuilder() SchemaBuilder {
-	return SchemaBuilder{}
+func NewSchemaBuilder() *SchemaBuilder {
+	return &SchemaBuilder{}
 }
 
 func (builder *SchemaBuilder) Name(name string) *SchemaBuilder {
