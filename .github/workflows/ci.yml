@@ -19,7 +19,7 @@ jobs:
     steps:
     - name: get credentials
       id: get-credentials
-      uses: aliyun/configure-aliyun-credentials-action@v1
+      uses: aliyun/configure-aliyun-credentials-action@v1.0.3
       with:
         role-to-assume: '${{ secrets.ROLE_ARN }}'
         oidc-provider-arn: '${{ secrets.OIDC_ARN }}'
