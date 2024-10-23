@@ -27,9 +27,9 @@ jobs:
         
     - name: Set up environment
       run: |
-        echo "odps_accessId=${{ steps.get-credentials.outputs.access-key-id }}" >> $GITHUB_ENV
-        echo "odps_accessKey=${{ steps.get-credentials.outputs.access-key-secret }}" >> $GITHUB_ENV
-        echo "odps_stsToken=${{ steps.get-credentials.outputs.security-token }}" >> $GITHUB_ENV
+        echo "odps_accessId=${{ steps.get-credentials.outputs.aliyun-access-key-id }}" >> $GITHUB_ENV
+        echo "odps_accessKey=${{ steps.get-credentials.outputs.aliyun-access-key-secret }}" >> $GITHUB_ENV
+        echo "odps_stsToken=${{ steps.get-credentials.outputs.aliyun-security-token }}" >> $GITHUB_ENV
         echo "Success setup test env: $odps_accessId"
     
     - uses: actions/checkout@v4
