@@ -27,11 +27,11 @@ import (
 )
 
 func Example_tunnel_download_instance_result() {
-	var account = account2.AliyunAccountFromEnv()
+	var account = account2.AccountFromEnv()
 	var endpoint = restclient.LoadEndpointFromEnv()
 	var odpsIns = odps.NewOdps(account, endpoint)
 
-	projectName := "project_1"
+	projectName := "go_sdk_regression_testing"
 	odpsIns.SetDefaultProjectName(projectName)
 	project := odpsIns.DefaultProject()
 	tunnelIns, err := tunnel.NewTunnelFromProject(project)

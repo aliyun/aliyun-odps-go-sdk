@@ -24,12 +24,13 @@ import (
 	"log"
 )
 
-var account = account2.AliyunAccountFromEnv()
+var account = account2.AccountFromEnv()
 var endpoint = restclient.LoadEndpointFromEnv()
 var restClient = restclient.NewOdpsRestClient(account, endpoint)
+var projectName = "go_sdk_regression_testing"
 
 func ExampleManager_GetSecurityConfig() {
-	sm := security.NewSecurityManager(restClient, "project_1")
+	sm := security.NewSecurityManager(restClient, projectName)
 	sc, err := sm.GetSecurityConfig(true)
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -41,9 +42,9 @@ func ExampleManager_GetSecurityConfig() {
 }
 
 func ExampleManager_CheckPermissionV1() {
-	sm := security.NewSecurityManager(restClient, "project_1")
+	sm := security.NewSecurityManager(restClient, projectName)
 	p := security.NewPermission(
-		"project_1",
+		projectName,
 		security.ObjectTypeTable,
 		"sale_detail",
 		security.ActionTypeAll,
@@ -61,7 +62,7 @@ func ExampleManager_CheckPermissionV1() {
 }
 
 func ExampleManager_CheckPermissionV0() {
-	sm := security.NewSecurityManager(restClient, "project_1")
+	sm := security.NewSecurityManager(restClient, projectName)
 
 	r, err := sm.CheckPermissionV0(
 		security.ObjectTypeTable,
@@ -78,7 +79,7 @@ func ExampleManager_CheckPermissionV0() {
 }
 
 func ExampleManager_GetPolicy() {
-	sm := security.NewSecurityManager(restClient, "project_1")
+	sm := security.NewSecurityManager(restClient, projectName)
 	policy, err := sm.GetPolicy()
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -89,7 +90,7 @@ func ExampleManager_GetPolicy() {
 }
 
 func ExampleManager_ListUsers() {
-	sm := security.NewSecurityManager(restClient, "project_1")
+	sm := security.NewSecurityManager(restClient, projectName)
 	users, err := sm.ListUsers()
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -103,8 +104,8 @@ func ExampleManager_ListUsers() {
 }
 
 func ExampleManager_RunQuery() {
-	sm := security.NewSecurityManager(restClient, "project_1")
-	result, err := sm.RunQuery("show grants for aliyun$odpstest1@aliyun.com;", true, "")
+	sm := security.NewSecurityManager(restClient, projectName)
+	result, err := sm.RunQuery("show grants for ALIYUN$mc_schema@test.aliyunid.com;", true, "")
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

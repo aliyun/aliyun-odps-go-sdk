@@ -52,6 +52,20 @@ func AliyunAccountFromEnv() *AliyunAccount {
 	return &account
 }
 
+func AccountFromEnv() Account {
+	accessId, found := os.LookupEnv("odps_accessId")
+	accessKey, found := os.LookupEnv("odps_accessKey")
+	if !found {
+		return nil
+	}
+	securityToken, found := os.LookupEnv("odps_stsToken")
+	if found {
+		return NewStsAccount(accessId, accessKey, securityToken)
+	} else {
+		return NewAliyunAccount(accessId, accessKey)
+	}
+}
+
 func (account *AliyunAccount) AccessId() string {
 	return account.accessId
 }

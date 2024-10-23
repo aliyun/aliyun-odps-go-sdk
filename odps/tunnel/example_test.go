@@ -20,23 +20,22 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 	"log"
 	"os"
 )
 
-var tunnelIns tunnel.Tunnel
+var tunnelIns *tunnel.Tunnel
 var odpsIns *odps.Odps
-var ProjectName = "test_new_console_gcc"
+var ProjectName = "go_sdk_regression_testing"
 
 func init() {
-	accessId := os.Getenv("tunnel_odps_accessId")
-	accessKey := os.Getenv("tunnel_odps_accessKey")
-	odpsEndpoint := os.Getenv("odps_endpoint")
+	account := account2.AccountFromEnv()
+	odpsEndpoint := restclient.LoadEndpointFromEnv()
 	tunnelEndpoint := os.Getenv("tunnel_odps_endpoint")
 
-	account := account2.NewAliyunAccount(accessId, accessKey)
 	odpsIns = odps.NewOdps(account, odpsEndpoint)
 	tunnelIns = tunnel.NewTunnel(odpsIns, tunnelEndpoint)
 
@@ -104,7 +103,7 @@ func createSaleDetailTable() {
 }
 
 func createUploadSampleArrowTable() {
-	ins, err := odpsIns.ExecSQl("CREATE TABLE IF NOT EXISTS project_1.upload_sample_arrow(payload STRING);")
+	ins, err := odpsIns.ExecSQl("CREATE TABLE IF NOT EXISTS go_sdk_regression_testing.upload_sample_arrow(payload STRING);")
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

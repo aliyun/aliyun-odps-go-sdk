@@ -18,7 +18,6 @@ package sqldriver_test
 
 import (
 	"database/sql"
-	"fmt"
 	"log"
 	"time"
 
@@ -30,17 +29,32 @@ import (
 )
 
 func Example() {
-	var account = account2.AliyunAccountFromEnv()
+	var account = account2.AccountFromEnv()
 	var endpoint = restclient.LoadEndpointFromEnv()
 
 	config := sqldriver.NewConfig()
 	config.Endpoint = endpoint
-	config.AccessId = account.AccessId()
-	config.AccessKey = account.AccessKey()
-	config.ProjectName = "project_1"
+
+	if account.GetType() == account2.STS {
+		stsAccount, _ := account.(*account2.StsAccount)
+		config.AccessId = stsAccount.AccessId()
+		config.AccessKey = stsAccount.AccessKey()
+		config.StsToken = stsAccount.SecurityToken()
+	} else if account.GetType() == account2.Aliyun {
+		akAccount, _ := account.(*account2.AliyunAccount)
+		config.AccessId = akAccount.AccessId()
+		config.AccessKey = akAccount.AccessKey()
+	} else {
+		log.Fatalf("unknown account type: %s", account.GetType())
+	}
+	config.ProjectName = "go_sdk_regression_testing"
 
 	dsn := config.FormatDsn()
 	db, err := sql.Open("odps", dsn)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+	_, err = db.Exec("create table if not exists data_type_demo(ti tinyint, si smallint, i int, bi bigint, b binary, f float, d double);", nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -71,14 +85,24 @@ func Example() {
 }
 
 func ExampleStructField() {
-	var account = account2.AliyunAccountFromEnv()
+	var account = account2.AccountFromEnv()
 	var endpoint = restclient.LoadEndpointFromEnv()
 
 	config := sqldriver.NewConfig()
 	config.Endpoint = endpoint
-	config.AccessId = account.AccessId()
-	config.AccessKey = account.AccessKey()
-	config.ProjectName = "project_1"
+	if account.GetType() == account2.STS {
+		stsAccount, _ := account.(*account2.StsAccount)
+		config.AccessId = stsAccount.AccessId()
+		config.AccessKey = stsAccount.AccessKey()
+		config.StsToken = stsAccount.SecurityToken()
+	} else if account.GetType() == account2.Aliyun {
+		akAccount, _ := account.(*account2.AliyunAccount)
+		config.AccessId = akAccount.AccessId()
+		config.AccessKey = akAccount.AccessKey()
+	} else {
+		log.Fatalf("unknown account type: %s", account.GetType())
+	}
+	config.ProjectName = "go_sdk_regression_testing"
 
 	dsn := config.FormatDsn()
 	db, err := sql.Open("odps", dsn)
@@ -104,20 +128,33 @@ func ExampleStructField() {
 }
 
 func ExampleInsert() {
-	var account = account2.AliyunAccountFromEnv()
+	var account = account2.AccountFromEnv()
 	var endpoint = restclient.LoadEndpointFromEnv()
 
 	config := sqldriver.NewConfig()
 	config.Endpoint = endpoint
-	config.AccessId = account.AccessId()
-	config.AccessKey = account.AccessKey()
-	config.ProjectName = "project_1"
+	if account.GetType() == account2.STS {
+		stsAccount, _ := account.(*account2.StsAccount)
+		config.AccessId = stsAccount.AccessId()
+		config.AccessKey = stsAccount.AccessKey()
+		config.StsToken = stsAccount.SecurityToken()
+	} else if account.GetType() == account2.Aliyun {
+		akAccount, _ := account.(*account2.AliyunAccount)
+		config.AccessId = akAccount.AccessId()
+		config.AccessKey = akAccount.AccessKey()
+	} else {
+		log.Fatalf("unknown account type: %s", account.GetType())
+	}
+	config.ProjectName = "go_sdk_regression_testing"
 
 	dsn := config.FormatDsn()
 	db, err := sql.Open("odps", dsn)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
+
+	db.Exec("drop table if exists simple_struct;")
+	db.Exec("create table if not exists simple_struct (col struct<a:int, b:struct<b1:STRING>>);")
 
 	type SimpleStruct struct {
 		A int32
@@ -132,7 +169,7 @@ func ExampleInsert() {
 	}
 
 	odpsStruct, err := data.StructFromGoStruct(simpleStruct)
-	fmt.Println(odpsStruct)
+	log.Println(odpsStruct)
 
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -147,14 +184,24 @@ func ExampleInsert() {
 }
 
 func ExampleCreateTable() {
-	var account = account2.AliyunAccountFromEnv()
+	var account = account2.AccountFromEnv()
 	var endpoint = restclient.LoadEndpointFromEnv()
 
 	config := sqldriver.NewConfig()
 	config.Endpoint = endpoint
-	config.AccessId = account.AccessId()
-	config.AccessKey = account.AccessKey()
-	config.ProjectName = "project_1"
+	if account.GetType() == account2.STS {
+		stsAccount, _ := account.(*account2.StsAccount)
+		config.AccessId = stsAccount.AccessId()
+		config.AccessKey = stsAccount.AccessKey()
+		config.StsToken = stsAccount.SecurityToken()
+	} else if account.GetType() == account2.Aliyun {
+		akAccount, _ := account.(*account2.AliyunAccount)
+		config.AccessId = akAccount.AccessId()
+		config.AccessKey = akAccount.AccessKey()
+	} else {
+		log.Fatalf("unknown account type: %s", account.GetType())
+	}
+	config.ProjectName = "go_sdk_regression_testing"
 
 	dsn := config.FormatDsn()
 	db, err := sql.Open("odps", dsn)
@@ -169,7 +216,7 @@ func ExampleCreateTable() {
 		)),
 	)
 
-	_, err = db.Exec("create table simple_struct (struct_field @f);", sql.Named("f", structType.String()))
+	_, err = db.Exec("create table if not exists simple_struct (struct_field @f);", sql.Named("f", structType.String()))
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
