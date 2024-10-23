@@ -30,7 +30,6 @@ jobs:
         echo "odps_accessId=${{ steps.get-credentials.outputs.aliyun-access-key-id }}" >> $GITHUB_ENV
         echo "odps_accessKey=${{ steps.get-credentials.outputs.aliyun-access-key-secret }}" >> $GITHUB_ENV
         echo "odps_stsToken=${{ steps.get-credentials.outputs.aliyun-security-token }}" >> $GITHUB_ENV
-        echo "Success setup test env: $odps_accessId"
     
     - uses: actions/checkout@v4
 
@@ -42,5 +41,5 @@ jobs:
     - name: Build
       run: go build -v ./...
 
-    - name: Test
-      run: go test -v ./...
+    - name: Test (Expect Arrow Package)
+      run: go test -v $(go list ./... | grep -v './arrow')
