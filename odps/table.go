@@ -288,7 +288,7 @@ func calculateMaxLabel(labels []string) string {
 func (t *Table) Exists() (bool, error) {
 	err := t.Load()
 
-	var httpErr restclient.HttpNotOk
+	var httpErr restclient.HttpError
 	if errors.As(err, &httpErr) {
 		if httpErr.Status == "404 Not Found" {
 			return false, nil

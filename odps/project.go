@@ -174,7 +174,7 @@ func (p *Project) Load() error {
 	p.beLoaded = true
 
 	if err != nil {
-		if httpNoteOk, ok := err.(restclient.HttpNotOk); ok {
+		if httpNoteOk, ok := err.(restclient.HttpError); ok {
 			if httpNoteOk.StatusCode == 404 {
 				p.exists = false
 			}

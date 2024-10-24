@@ -354,7 +354,7 @@ func (sm *Manager) Run(query string, jsonOutput bool, supervisionToken string) (
 		return errors.WithStack(decoder.Decode(&resModel))
 	})
 
-	if _, ok := err.(restclient.HttpNotOk); ok {
+	if _, ok := err.(restclient.HttpError); ok {
 		return nil, errors.WithStack(err)
 	}
 

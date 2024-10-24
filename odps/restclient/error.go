@@ -22,14 +22,14 @@ import (
 	"net/http"
 )
 
-type HttpNotOk struct {
+type HttpError struct {
 	Status     string
 	StatusCode int
 	RequestId  string
 	Body       []byte
 }
 
-func (e HttpNotOk) Error() string {
+func (e HttpError) Error() string {
 	if e.RequestId == "" {
 		return fmt.Sprintf("%s\n%s", e.Status, e.Body)
 	}
@@ -37,7 +37,7 @@ func (e HttpNotOk) Error() string {
 	return fmt.Sprintf("requestId=%s\nstatus=%s\n%s", e.RequestId, e.Status, e.Body)
 }
 
-func NewHttpNotOk(res *http.Response) HttpNotOk {
+func NewHttpNotOk(res *http.Response) HttpError {
 	var body []byte
 
 	if res.Body != nil {
@@ -45,7 +45,7 @@ func NewHttpNotOk(res *http.Response) HttpNotOk {
 		_ = res.Body.Close()
 	}
 
-	return HttpNotOk{
+	return HttpError{
 		Status:     res.Status,
 		StatusCode: res.StatusCode,
 		RequestId:  res.Header.Get("x-odps-request-id"),
