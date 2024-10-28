@@ -17,16 +17,27 @@
 package restclient
 
 import (
+	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 )
 
 type HttpError struct {
-	Status     string
-	StatusCode int
-	RequestId  string
-	Body       []byte
+	Status       string
+	StatusCode   int
+	RequestId    string
+	Body         []byte
+	ErrorMessage *ErrorMessage
+	Response     *http.Response
+}
+
+type ErrorMessage struct {
+	ErrorCode string `json:"Code" xml:"Code"`
+	Message   string `json:"Message" xml:"Message"`
+	RequestId string `json:"RequestId" xml:"RequestId"`
+	HostId    string `json:"HostId" xml:"HostId"`
 }
 
 func (e HttpError) Error() string {
@@ -46,9 +57,32 @@ func NewHttpNotOk(res *http.Response) HttpError {
 	}
 
 	return HttpError{
-		Status:     res.Status,
-		StatusCode: res.StatusCode,
-		RequestId:  res.Header.Get("x-odps-request-id"),
-		Body:       body,
+		Status:       res.Status,
+		StatusCode:   res.StatusCode,
+		RequestId:    res.Header.Get("x-odps-request-id"),
+		Body:         body,
+		ErrorMessage: NewErrorMessage(body),
+		Response:     res,
 	}
+}
+
+func NewErrorMessage(body []byte) *ErrorMessage {
+	if body == nil {
+		return nil
+	}
+
+	var errorMessage ErrorMessage
+
+	// 尝试解析为 XML
+	if err := xml.Unmarshal(body, &errorMessage); err == nil {
+		return &errorMessage
+	}
+
+	// 尝试解析为 JSON
+	if err := json.Unmarshal(body, &errorMessage); err == nil {
+		return &errorMessage
+	}
+
+	// 如果都失败了，返回 nil
+	return nil
 }

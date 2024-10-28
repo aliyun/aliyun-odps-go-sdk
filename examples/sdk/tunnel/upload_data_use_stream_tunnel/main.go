@@ -74,7 +74,7 @@ func main() {
 	}
 }
 
-func makeRecord(schema tableschema.TableSchema) (data.Record, error) {
+func makeRecord(schema *tableschema.TableSchema) (data.Record, error) {
 	varchar, _ := data.NewVarChar(500, "varchar")
 	char, _ := data.NewVarChar(254, "char")
 	s := data.String("hello world")

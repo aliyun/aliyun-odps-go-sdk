@@ -87,12 +87,12 @@ func newSlotSelect(arr []slot) slotSelector {
 	}
 }
 
-func (s *slotSelector) NextSlot() slot {
+func (s *slotSelector) NextSlot() *slot {
 	if s.index >= len(s.arr) {
 		s.index = 0
 	}
 
-	e := s.arr[s.index]
+	e := &s.arr[s.index]
 	s.index += 1
 
 	return e
