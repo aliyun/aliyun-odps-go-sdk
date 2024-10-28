@@ -100,11 +100,17 @@ func (ts *Tables) List(f func(*Table, error), filters ...TFilterFunc) {
 
 // BatchLoadTables can get at most 100 tables, and the information of table is according to the permission
 func (ts *Tables) BatchLoadTables(tableNames []string) ([]*Table, error) {
+	return ts.BatchLoadTablesInSpecificSchema(tableNames, ts.schemaName)
+}
+
+// BatchLoadTablesInSpecificSchema can get at most 100 tables, and the information of table is according to the permission
+func (ts *Tables) BatchLoadTablesInSpecificSchema(tableNames []string, schemaName string) ([]*Table, error) {
 	type PostBodyModel struct {
 		XMLName xml.Name `xml:"Tables"`
 		Tables  []struct {
 			Project string
 			Name    string
+			Schema  string
 		} `xml:"Table"`
 	}
 
@@ -113,7 +119,8 @@ func (ts *Tables) BatchLoadTables(tableNames []string) ([]*Table, error) {
 		postBodyModel.Tables = append(postBodyModel.Tables, struct {
 			Project string
 			Name    string
-		}{Project: ts.projectName, Name: tableName})
+			Schema  string
+		}{Project: ts.projectName, Name: tableName, Schema: schemaName})
 	}
 
 	type ResModel struct {
@@ -125,8 +132,8 @@ func (ts *Tables) BatchLoadTables(tableNames []string) ([]*Table, error) {
 
 	queryArgs := make(url.Values, 4)
 	queryArgs.Set("query", "")
-	if ts.schemaName != "" {
-		queryArgs.Set("curr_schema", ts.schemaName)
+	if schemaName != "" {
+		queryArgs.Set("curr_schema", schemaName)
 	}
 	rb := common.ResourceBuilder{ProjectName: ts.projectName}
 	resource := rb.Tables()
@@ -139,9 +146,12 @@ func (ts *Tables) BatchLoadTables(tableNames []string) ([]*Table, error) {
 
 	ret := make([]*Table, len(resModel.Table))
 
-	for i, tableModel := range resModel.Table {
-		table := NewTable(ts.odpsIns, ts.projectName, ts.schemaName, tableModel.Name)
-		table.model = tableModel
+	for i, _ := range resModel.Table {
+		tableModel := &resModel.Table[i]
+		table, err := NewTableWithModel(ts.odpsIns, tableModel)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
 		ret[i] = table
 	}
 

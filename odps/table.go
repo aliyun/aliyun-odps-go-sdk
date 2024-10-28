@@ -41,10 +41,11 @@ const (
 
 // Table represent the table in odps projects
 type Table struct {
-	model       tableModel
-	tableSchema tableschema.TableSchema
-	odpsIns     *Odps
-	beLoaded    bool
+	model            tableModel
+	tableSchema      tableschema.TableSchema
+	odpsIns          *Odps
+	beLoaded         bool
+	beLoadedExtended bool
 }
 
 // TableOrErr is used for the return value of Tables.List
@@ -76,7 +77,26 @@ func NewTable(odpsIns *Odps, projectName string, schemaName string, tableName st
 	}
 }
 
+func NewTableWithModel(odpsIns *Odps, model *tableModel) (*Table, error) {
+	table := Table{
+		model:            *model,
+		odpsIns:          odpsIns,
+		beLoaded:         true,
+		beLoadedExtended: false,
+	}
+
+	err := json.Unmarshal([]byte(model.Schema), &table.tableSchema)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return &table, nil
+}
+
 func (t *Table) IsLoaded() bool {
+	return t.beLoaded
+}
+
+func (t *Table) IsLoadedExtended() bool {
 	return t.beLoaded
 }
 
@@ -131,7 +151,7 @@ func (t *Table) LoadExtendedInfo() error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
+	t.beLoadedExtended = true
 	return nil
 }
 
