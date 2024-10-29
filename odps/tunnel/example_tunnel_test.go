@@ -28,6 +28,12 @@ import (
 )
 
 func Example_tunnel_upload_arrow() {
+
+	err := odpsIns.Tables().Get("sale_detail").AddPartition(true, "sale_date='202111',region='hangzhou'")
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
 	tunnelIns.SetHttpTimeout(10 * time.Second)
 
 	session, err := tunnelIns.CreateUploadSession(
