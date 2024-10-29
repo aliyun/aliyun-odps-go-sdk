@@ -37,9 +37,14 @@ func Example() {
 
 	if account.GetType() == account2.STS {
 		stsAccount, _ := account.(*account2.StsAccount)
-		config.AccessId = stsAccount.AccessId()
-		config.AccessKey = stsAccount.AccessKey()
-		config.StsToken = stsAccount.SecurityToken()
+		credential, err := stsAccount.Credential()
+		if err != nil {
+			log.Fatalf("%+v", err)
+		}
+		config.AccessId = *credential.AccessKeyId
+		config.AccessKey = *credential.AccessKeySecret
+		config.StsToken = *credential.SecurityToken
+
 	} else if account.GetType() == account2.Aliyun {
 		akAccount, _ := account.(*account2.AliyunAccount)
 		config.AccessId = akAccount.AccessId()
@@ -93,9 +98,13 @@ func ExampleStructField() {
 	config.Endpoint = endpoint
 	if account.GetType() == account2.STS {
 		stsAccount, _ := account.(*account2.StsAccount)
-		config.AccessId = stsAccount.AccessId()
-		config.AccessKey = stsAccount.AccessKey()
-		config.StsToken = stsAccount.SecurityToken()
+		credential, err := stsAccount.Credential()
+		if err != nil {
+			log.Fatalf("%+v", err)
+		}
+		config.AccessId = *credential.AccessKeyId
+		config.AccessKey = *credential.AccessKeySecret
+		config.StsToken = *credential.SecurityToken
 	} else if account.GetType() == account2.Aliyun {
 		akAccount, _ := account.(*account2.AliyunAccount)
 		config.AccessId = akAccount.AccessId()
@@ -136,9 +145,13 @@ func ExampleInsert() {
 	config.Endpoint = endpoint
 	if account.GetType() == account2.STS {
 		stsAccount, _ := account.(*account2.StsAccount)
-		config.AccessId = stsAccount.AccessId()
-		config.AccessKey = stsAccount.AccessKey()
-		config.StsToken = stsAccount.SecurityToken()
+		credential, err := stsAccount.Credential()
+		if err != nil {
+			log.Fatalf("%+v", err)
+		}
+		config.AccessId = *credential.AccessKeyId
+		config.AccessKey = *credential.AccessKeySecret
+		config.StsToken = *credential.SecurityToken
 	} else if account.GetType() == account2.Aliyun {
 		akAccount, _ := account.(*account2.AliyunAccount)
 		config.AccessId = akAccount.AccessId()
@@ -192,9 +205,13 @@ func ExampleCreateTable() {
 	config.Endpoint = endpoint
 	if account.GetType() == account2.STS {
 		stsAccount, _ := account.(*account2.StsAccount)
-		config.AccessId = stsAccount.AccessId()
-		config.AccessKey = stsAccount.AccessKey()
-		config.StsToken = stsAccount.SecurityToken()
+		credential, err := stsAccount.Credential()
+		if err != nil {
+			log.Fatalf("%+v", err)
+		}
+		config.AccessId = *credential.AccessKeyId
+		config.AccessKey = *credential.AccessKeySecret
+		config.StsToken = *credential.SecurityToken
 	} else if account.GetType() == account2.Aliyun {
 		akAccount, _ := account.(*account2.AliyunAccount)
 		config.AccessId = akAccount.AccessId()

@@ -33,9 +33,7 @@ type CredentialProvider interface {
 
 type stsAccountProvider interface {
 	_signRequest(req *http.Request, endpoint string) error
-	AccessId() string
-	AccessKey() string
-	SecurityToken() string
+	Credential() (*credentials.CredentialModel, error)
 }
 
 type stsStringProvider struct {
@@ -53,14 +51,12 @@ func (sp *stsStringProvider) _signRequest(req *http.Request, endpoint string) er
 	return nil
 }
 
-func (sp *stsStringProvider) AccessId() string {
-	return sp.accessId
-}
-func (sp *stsStringProvider) AccessKey() string {
-	return sp.accessKey
-}
-func (sp *stsStringProvider) SecurityToken() string {
-	return sp.stsToken
+func (sp *stsStringProvider) Credential() (*credentials.CredentialModel, error) {
+	return &credentials.CredentialModel{
+		AccessKeyId:     &sp.accessId,
+		AccessKeySecret: &sp.accessKey,
+		SecurityToken:   &sp.stsToken,
+	}, nil
 }
 
 type stsAliyunCredentialProvider struct {
@@ -84,17 +80,8 @@ func (sp *stsAliyunCredentialProvider) _signRequest(req *http.Request, endpoint 
 	return nil
 }
 
-func (sp *stsAliyunCredentialProvider) AccessId() string {
-	credential, _ := sp.aliyunCredential.GetCredential()
-	return *credential.AccessKeyId
-}
-func (sp *stsAliyunCredentialProvider) AccessKey() string {
-	credential, _ := sp.aliyunCredential.GetCredential()
-	return *credential.AccessKeySecret
-}
-func (sp *stsAliyunCredentialProvider) SecurityToken() string {
-	credential, _ := sp.aliyunCredential.GetCredential()
-	return *credential.SecurityToken
+func (sp *stsAliyunCredentialProvider) Credential() (*credentials.CredentialModel, error) {
+	return sp.aliyunCredential.GetCredential()
 }
 
 type stsCustomCredentialProvider struct {
@@ -118,17 +105,8 @@ func (sp *stsCustomCredentialProvider) _signRequest(req *http.Request, endpoint 
 	return nil
 }
 
-func (sp *stsCustomCredentialProvider) AccessId() string {
-	credential, _ := sp.provider.GetCredential()
-	return *credential.AccessKeyId
-}
-func (sp *stsCustomCredentialProvider) AccessKey() string {
-	credential, _ := sp.provider.GetCredential()
-	return *credential.AccessKeySecret
-}
-func (sp *stsCustomCredentialProvider) SecurityToken() string {
-	credential, _ := sp.provider.GetCredential()
-	return *credential.SecurityToken
+func (sp *stsCustomCredentialProvider) Credential() (*credentials.CredentialModel, error) {
+	return sp.provider.GetCredential()
 }
 
 func NewStsAccount(accessId, accessKey, securityToken string) *StsAccount {
@@ -173,14 +151,7 @@ func (account *StsAccount) SignRequest(req *http.Request, endpoint string) error
 	return account.sp._signRequest(req, endpoint)
 }
 
-func (account *StsAccount) AccessId() string {
-	return account.sp.AccessId()
-}
+func (account *StsAccount) Credential() (*credentials.CredentialModel, error) {
 
-func (account *StsAccount) AccessKey() string {
-	return account.sp.AccessKey()
-}
-
-func (account *StsAccount) SecurityToken() string {
-	return account.sp.SecurityToken()
+	return account.sp.Credential()
 }
