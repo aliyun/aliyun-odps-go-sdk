@@ -37,6 +37,7 @@ func init() {
 	tunnelEndpoint := os.Getenv("tunnel_odps_endpoint")
 
 	odpsIns = odps.NewOdps(account, odpsEndpoint)
+	odpsIns.SetDefaultProjectName(ProjectName)
 	tunnelIns = tunnel.NewTunnel(odpsIns, tunnelEndpoint)
 
 	//createTableWithComplexData()
