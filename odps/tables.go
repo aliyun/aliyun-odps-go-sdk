@@ -148,7 +148,7 @@ func (ts *Tables) BatchLoadTablesInSpecificSchema(tableNames []string, schemaNam
 
 	for i, _ := range resModel.Table {
 		tableModel := &resModel.Table[i]
-		table, err := NewTableWithModel(ts.odpsIns, tableModel)
+		table, err := newTableWithModel(ts.odpsIns, tableModel)
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}

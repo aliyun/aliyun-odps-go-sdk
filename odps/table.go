@@ -77,7 +77,7 @@ func NewTable(odpsIns *Odps, projectName string, schemaName string, tableName st
 	}
 }
 
-func NewTableWithModel(odpsIns *Odps, model *tableModel) (*Table, error) {
+func newTableWithModel(odpsIns *Odps, model *tableModel) (*Table, error) {
 	table := Table{
 		model:            *model,
 		odpsIns:          odpsIns,
