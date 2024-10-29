@@ -87,6 +87,8 @@ func main() {
 					fmt.Printf("%s=%s", columns[i], r)
 				case *sqldriver.NullTimeStamp:
 					fmt.Printf("%s=%s", columns[i], r)
+				case *sqldriver.NullTimeStampNtz:
+					fmt.Printf("%s=%s", columns[i], r)
 				case *sqldriver.NullBool:
 					fmt.Printf("%s=%v", columns[i], r.(*sqldriver.NullBool).Bool)
 				case *sqldriver.Map:

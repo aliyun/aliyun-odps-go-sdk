@@ -259,7 +259,7 @@ func (r *RecordProtocWriter) writeField(val data.Data) error {
 		}
 
 		return errors.WithStack(r.protocWriter.WriteSInt32(nanoSeconds))
-	case *data.TimestampNtz:
+	case data.TimestampNtz:
 		t := val.Time()
 		seconds := t.Unix()
 		nanoSeconds := int32(t.Nanosecond())

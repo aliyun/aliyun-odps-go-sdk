@@ -52,8 +52,9 @@ func main() {
 		date, _ := data.NewDate("2022-10-19")
 		datetime, _ := data.NewDateTime("2022-10-19 17:00:00")
 		timestamp, _ := data.NewTimestamp("2022-10-19 17:00:00.000")
+		timestampNtz, _ := data.NewTimestampNtz("2022-10-19 17:00:00.000")
 
-		mapType := schema.Columns[15].Type.(datatype.MapType)
+		mapType := schema.Columns[16].Type.(datatype.MapType)
 		mapData := data.NewMapWithType(mapType)
 		err = mapData.Set("hello", 1)
 		if err != nil {
@@ -65,7 +66,7 @@ func main() {
 			log.Fatalf("%+v", err)
 		}
 
-		arrayType := schema.Columns[16].Type.(datatype.ArrayType)
+		arrayType := schema.Columns[17].Type.(datatype.ArrayType)
 		arrayData := data.NewArrayWithType(arrayType)
 		err = arrayData.Append("a")
 		if err != nil {
@@ -77,7 +78,7 @@ func main() {
 			log.Fatalf("%+v", err)
 		}
 
-		structType := schema.Columns[17].Type.(datatype.StructType)
+		structType := schema.Columns[18].Type.(datatype.StructType)
 		structData := data.NewStructWithTyp(structType)
 
 		arr := data.NewArrayWithType(structType.FieldType("arr").(datatype.ArrayType))
@@ -113,6 +114,7 @@ func main() {
 			date,
 			datetime,
 			timestamp,
+			timestampNtz,
 			data.Bool(true),
 			mapData,
 			arrayData,

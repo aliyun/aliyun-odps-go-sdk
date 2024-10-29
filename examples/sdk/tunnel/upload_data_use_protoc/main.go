@@ -48,6 +48,7 @@ func main() {
 	date, _ := data.NewDate("2022-10-19")
 	datetime, _ := data.NewDateTime("2022-10-19 17:00:00")
 	timestamp, _ := data.NewTimestamp("2022-10-19 17:00:00.000")
+	timestampNtz, _ := data.NewTimestampNtz("2022-10-19 17:00:00.000")
 
 	mapType := schema.Columns[15].Type.(datatype.MapType)
 	mapData := data.NewMapWithType(mapType)
@@ -109,6 +110,7 @@ func main() {
 		date,
 		datetime,
 		timestamp,
+		timestampNtz,
 		data.Bool(true),
 		mapData,
 		arrayData,
