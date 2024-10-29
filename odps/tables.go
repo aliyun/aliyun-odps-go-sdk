@@ -100,11 +100,6 @@ func (ts *Tables) List(f func(*Table, error), filters ...TFilterFunc) {
 
 // BatchLoadTables can get at most 100 tables, and the information of table is according to the permission
 func (ts *Tables) BatchLoadTables(tableNames []string) ([]*Table, error) {
-	return ts.BatchLoadTablesInSpecificSchema(tableNames, ts.schemaName)
-}
-
-// BatchLoadTablesInSpecificSchema can get at most 100 tables, and the information of table is according to the permission
-func (ts *Tables) BatchLoadTablesInSpecificSchema(tableNames []string, schemaName string) ([]*Table, error) {
 	type PostBodyModel struct {
 		XMLName xml.Name `xml:"Tables"`
 		Tables  []struct {
@@ -120,7 +115,7 @@ func (ts *Tables) BatchLoadTablesInSpecificSchema(tableNames []string, schemaNam
 			Project string
 			Name    string
 			Schema  string
-		}{Project: ts.projectName, Name: tableName, Schema: schemaName})
+		}{Project: ts.projectName, Name: tableName, Schema: ts.schemaName})
 	}
 
 	type ResModel struct {
@@ -132,8 +127,8 @@ func (ts *Tables) BatchLoadTablesInSpecificSchema(tableNames []string, schemaNam
 
 	queryArgs := make(url.Values, 4)
 	queryArgs.Set("query", "")
-	if schemaName != "" {
-		queryArgs.Set("curr_schema", schemaName)
+	if ts.schemaName != "" {
+		queryArgs.Set("curr_schema", ts.schemaName)
 	}
 	rb := common.ResourceBuilder{ProjectName: ts.projectName}
 	resource := rb.Tables()
