@@ -26,13 +26,13 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 )
 
-var account = account2.AliyunAccountFromEnv()
+var account = account2.AccountFromEnv()
 var endpoint = restclient.LoadEndpointFromEnv()
 var odpsIns = odps.NewOdps(account, endpoint)
 var defaultProjectName = "go_sdk_regression_testing"
 
 func init() {
-	if account.AccessId() == "" {
+	if account == nil {
 		panic("account environments are not set")
 	}
 

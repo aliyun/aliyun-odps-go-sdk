@@ -68,13 +68,13 @@ func ExampleTableSchema_ToSQLString() {
 
 	schema := builder.Build()
 
-	sql, _ := schema.ToSQLString("project_1", "schema", true)
+	sql, _ := schema.ToSQLString("go_sdk_regression_testing", "schema", true)
 	println("sql of create table:")
 	println(sql)
 	println()
 
 	externalSql, err := schema.ToExternalSQLString(
-		"project_1",
+		"go_sdk_regression_testing",
 		"",
 		true,
 		serdeProperties,
@@ -132,7 +132,7 @@ func ExampleTable_GetPartitions() {
 }
 
 func ExampleTable_ExecSql() {
-	//table := odps.NewTable(odpsIns, "project_1", "sale_detail")
+	//table := odps.NewTable(odpsIns, "go_sdk_regression_testing", "sale_detail")
 	table := odpsIns.Table("has_struct")
 	//instance, err := table.ExecSql("SelectSale_detail", "select * from sale_detail;")
 	instance, err := table.ExecSql("Select_has_struct", "select * from has_struct;")

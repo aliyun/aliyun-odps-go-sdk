@@ -50,7 +50,7 @@ type Tunnel struct {
 }
 
 // Once the tunnel endpoint is set, it cannot be modified anymore.
-func NewTunnel(odpsIns *odps.Odps, endpoint ...string) Tunnel {
+func NewTunnel(odpsIns *odps.Odps, endpoint ...string) *Tunnel {
 	tunnel := Tunnel{
 		odpsIns: odpsIns,
 	}
@@ -58,13 +58,13 @@ func NewTunnel(odpsIns *odps.Odps, endpoint ...string) Tunnel {
 		tunnel.endpoint = endpoint[0]
 	}
 
-	return tunnel
+	return &tunnel
 }
 
-func NewTunnelFromProject(project odps.Project) (Tunnel, error) {
+func NewTunnelFromProject(project *odps.Project) (*Tunnel, error) {
 	endpoint, err := project.GetTunnelEndpoint()
 	if err != nil {
-		return Tunnel{}, errors.WithStack(err)
+		return &Tunnel{}, errors.WithStack(err)
 	}
 
 	tunnel := Tunnel{
@@ -72,7 +72,7 @@ func NewTunnelFromProject(project odps.Project) (Tunnel, error) {
 		endpoint: endpoint,
 	}
 
-	return tunnel, nil
+	return &tunnel, nil
 }
 
 func (t *Tunnel) HttpTimeout() time.Duration {

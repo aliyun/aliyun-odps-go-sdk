@@ -41,15 +41,29 @@ func NewAliyunAccount(accessId string, accessKey string) *AliyunAccount {
 func AliyunAccountFromEnv() *AliyunAccount {
 	account := AliyunAccount{}
 
-	if accessId, found := os.LookupEnv("odps_accessId"); found {
+	if accessId, found := os.LookupEnv("ALIBABA_CLOUD_ACCESS_KEY_ID"); found {
 		account.accessId = accessId
 	}
 
-	if accessKey, found := os.LookupEnv("odps_accessKey"); found {
+	if accessKey, found := os.LookupEnv("ALIBABA_CLOUD_ACCESS_KEY_SECRET"); found {
 		account.accessKey = accessKey
 	}
 
 	return &account
+}
+
+func AccountFromEnv() Account {
+	accessId, found := os.LookupEnv("ALIBABA_CLOUD_ACCESS_KEY_ID")
+	accessKey, found := os.LookupEnv("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
+	if !found {
+		return nil
+	}
+	securityToken, found := os.LookupEnv("ALIBABA_CLOUD_SECURITY_TOKEN")
+	if found {
+		return NewStsAccount(accessId, accessKey, securityToken)
+	} else {
+		return NewAliyunAccount(accessId, accessKey)
+	}
 }
 
 func (account *AliyunAccount) AccessId() string {
