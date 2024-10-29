@@ -62,12 +62,13 @@ func (su *StreamUploadSession) ResourceUrl() string {
 // CreateStreamUploadSession create a new stream upload session before uploading data。
 // The opts can be one or more of:
 // SessionCfg.WithPartitionKey
-// SessionCfg.WithSchemaName, it doesn't work now
+// SessionCfg.WithSchemaName
 // SessionCfg.WithDefaultDeflateCompressor, using deflate compressor with default level
 // SessionCfg.WithDeflateCompressor, using deflate compressor with specific level
 // SessionCfg.WithSnappyFramedCompressor
 // SessionCfg.SlotNum, 暂不对外开放
 // SessionCfg.CreatePartition, create partition if the partition specified by WithPartitionKey does not exist
+// SessionCfg.AllowSchemaMismatch, Whether to allow the schema of uploaded data to be inconsistent with the table schema. The default value is true. When set to false, the Append operation will check the type of uploaded data, and the server will throw a specific exception during Flush.
 // SessionCfg.Columns, TODO 作用待明确
 func CreateStreamUploadSession(
 	projectName, tableName string,

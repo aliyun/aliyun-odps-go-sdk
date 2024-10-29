@@ -18,7 +18,6 @@ package tunnel
 
 import (
 	"bytes"
-	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/pkg/errors"
@@ -63,14 +62,14 @@ func (rsw *RecordPackStreamWriter) Append(record data.Record) error {
 
 func checkIfRecordSchemaMatchSessionSchema(record *data.Record, schema []tableschema.Column) error {
 	if record.Len() != len(schema) {
-		return errors.New(fmt.Sprintf("Record schema not match session schema, record len: %d, session schema len: %d",
-			record.Len(), len(schema)))
+		return errors.Errorf("Record schema not match session schema, record len: %d, session schema len: %d",
+			record.Len(), len(schema))
 	}
 	for index, recordData := range *record {
 		colType := schema[index].Type.ID()
 		if recordData != nil && recordData.Type().ID() != colType {
-			return errors.New(fmt.Sprintf("Record schema not match session schema, index: %d, record type: %s, session schema type: %s",
-				index, recordData.Type().Name(), schema[index].Type.Name()))
+			return errors.Errorf("Record schema not match session schema, index: %d, record type: %s, session schema type: %s",
+				index, recordData.Type().Name(), schema[index].Type.Name())
 		}
 	}
 	return nil
