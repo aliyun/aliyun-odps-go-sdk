@@ -405,10 +405,13 @@ func partitionValueToSpec(value string) string {
 func (t *Table) AddPartitions(ifNotExists bool, partitionValues []string) error {
 	var sb strings.Builder
 	sb.WriteString("alter table ")
+	hints := make(map[string]string)
 	if t.SchemaName() == "" {
 		sb.WriteString(fmt.Sprintf("%s.%s", t.ProjectName(), t.Name()))
+		hints["odps.namespace.schema"] = "false"
 	} else {
 		sb.WriteString(fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name()))
+		hints["odps.namespace.schema"] = "true"
 	}
 	sb.WriteString(" add")
 	if ifNotExists {
@@ -424,7 +427,7 @@ func (t *Table) AddPartitions(ifNotExists bool, partitionValues []string) error 
 	sb.WriteString(";")
 	println(sb.String())
 
-	i, err := t.ExecSql("SQLAddPartitionTask", sb.String())
+	i, err := t.ExecSqlWithHints("SQLAddPartitionTask", sb.String(), hints)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -441,9 +444,12 @@ func (t *Table) AddPartition(ifNotExists bool, partitionValue string) error {
 func (t *Table) DeletePartitions(ifExists bool, partitionValues []string) error {
 	var sb strings.Builder
 	sb.WriteString("alter table ")
+	hints := make(map[string]string)
 	if t.SchemaName() == "" {
+		hints["odps.namespace.schema"] = "false"
 		sb.WriteString(fmt.Sprintf("%s.%s", t.ProjectName(), t.Name()))
 	} else {
+		hints["odps.namespace.schema"] = "true"
 		sb.WriteString(fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name()))
 	}
 	sb.WriteString(" drop")
@@ -464,7 +470,7 @@ func (t *Table) DeletePartitions(ifExists bool, partitionValues []string) error 
 
 	sb.WriteString(";")
 
-	ins, err := t.ExecSql("SQLDropPartitionTask", sb.String())
+	ins, err := t.ExecSqlWithHints("SQLDropPartitionTask", sb.String(), hints)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -675,13 +681,16 @@ func (t *Table) getPartitions(partitionSpec string) ([]Partition, error) {
 func (t *Table) CreateShards(shardCount int) error {
 	var sb strings.Builder
 	sb.WriteString("alter table ")
+	hints := make(map[string]string)
 	if t.SchemaName() == "" {
 		sb.WriteString(fmt.Sprintf("%s.%s", t.ProjectName(), t.Name()))
+		hints["odps.namespace.schema"] = "false"
 	} else {
 		sb.WriteString(fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name()))
+		hints["odps.namespace.schema"] = "true"
 	}
 	sb.WriteString(fmt.Sprintf("\ninto %d shards;", shardCount))
-	ins, err := t.ExecSql("SQLCreateShardsTask", sb.String())
+	ins, err := t.ExecSqlWithHints("SQLCreateShardsTask", sb.String(), hints)
 	if err != nil {
 		return errors.WithStack(err)
 	}

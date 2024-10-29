@@ -165,6 +165,14 @@ func (ts *Tables) Create(
 	if err != nil {
 		return errors.WithStack(err)
 	}
+	if hints == nil {
+		hints = make(map[string]string)
+	}
+	if ts.schemaName == "" {
+		hints["odps.namespace.schema"] = "false"
+	} else {
+		hints["odps.namespace.schema"] = "true"
+	}
 
 	task := NewSqlTask("SQLCreateTableTask", sql, hints)
 
@@ -197,7 +205,15 @@ func (ts *Tables) CreateExternal(
 		return errors.WithStack(err)
 	}
 
-	task := NewSqlTask("SQLCreateExternalTableTask", sql, nil)
+	if hints == nil {
+		hints = make(map[string]string)
+	}
+	if ts.schemaName == "" {
+		hints["odps.namespace.schema"] = "false"
+	} else {
+		hints["odps.namespace.schema"] = "true"
+	}
+	task := NewSqlTask("SQLCreateExternalTableTask", sql, hints)
 
 	if alias != nil {
 		aliasJson, _ := json.Marshal(hints)
@@ -236,7 +252,13 @@ func (ts *Tables) CreateWithDataHub(
 	sb.WriteString(fmt.Sprintf("\nhubLifecycle %d", hubLifecycle))
 	sb.WriteRune(';')
 
-	task := NewSqlTask("SQLCreateTableTaskWithDataHub", sb.String(), nil)
+	hints := make(map[string]string)
+	if ts.schemaName == "" {
+		hints["odps.namespace.schema"] = "false"
+	} else {
+		hints["odps.namespace.schema"] = "true"
+	}
+	task := NewSqlTask("SQLCreateTableTaskWithDataHub", sb.String(), hints)
 
 	instances := NewInstances(ts.odpsIns, ts.projectName)
 	i, err := instances.CreateTask(ts.projectName, &task)
@@ -251,6 +273,8 @@ func (ts *Tables) CreateWithDataHub(
 // Delete delete table
 func (ts *Tables) Delete(tableName string, ifExists bool) error {
 	var sqlBuilder strings.Builder
+	hints := make(map[string]string)
+	hints["odps.namespace.schema"] = "false"
 	sqlBuilder.WriteString("drop table")
 	if ifExists {
 		sqlBuilder.WriteString(" if exists")
@@ -260,13 +284,14 @@ func (ts *Tables) Delete(tableName string, ifExists bool) error {
 	sqlBuilder.WriteString(ts.projectName)
 	sqlBuilder.WriteRune('.')
 	if ts.schemaName != "" {
+		hints["odps.namespace.schema"] = "true"
 		sqlBuilder.WriteString("`" + ts.schemaName + "`")
 		sqlBuilder.WriteRune('.')
 	}
 	sqlBuilder.WriteString("`" + tableName + "`")
 	sqlBuilder.WriteString(";")
 
-	sqlTask := NewSqlTask("SQLDropTableTask", sqlBuilder.String(), nil)
+	sqlTask := NewSqlTask("SQLDropTableTask", sqlBuilder.String(), hints)
 	instances := NewInstances(ts.odpsIns, ts.projectName)
 	i, err := instances.CreateTask(ts.projectName, &sqlTask)
 	if err != nil {

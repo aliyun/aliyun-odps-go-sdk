@@ -33,6 +33,7 @@ type CredentialProvider interface {
 
 type stsAccountProvider interface {
 	_signRequest(req *http.Request, endpoint string) error
+	Credential() (*credentials.CredentialModel, error)
 }
 
 type stsStringProvider struct {
@@ -48,6 +49,14 @@ func (sp *stsStringProvider) _signRequest(req *http.Request, endpoint string) er
 
 	req.Header.Set(common.HttpHeaderAuthorizationSTSToken, sp.stsToken)
 	return nil
+}
+
+func (sp *stsStringProvider) Credential() (*credentials.CredentialModel, error) {
+	return &credentials.CredentialModel{
+		AccessKeyId:     &sp.accessId,
+		AccessKeySecret: &sp.accessKey,
+		SecurityToken:   &sp.stsToken,
+	}, nil
 }
 
 type stsAliyunCredentialProvider struct {
@@ -71,6 +80,10 @@ func (sp *stsAliyunCredentialProvider) _signRequest(req *http.Request, endpoint 
 	return nil
 }
 
+func (sp *stsAliyunCredentialProvider) Credential() (*credentials.CredentialModel, error) {
+	return sp.aliyunCredential.GetCredential()
+}
+
 type stsCustomCredentialProvider struct {
 	provider CredentialProvider
 }
@@ -90,6 +103,10 @@ func (sp *stsCustomCredentialProvider) _signRequest(req *http.Request, endpoint 
 	req.Header.Set(common.HttpHeaderAuthorizationSTSToken, *cred.BearerToken)
 
 	return nil
+}
+
+func (sp *stsCustomCredentialProvider) Credential() (*credentials.CredentialModel, error) {
+	return sp.provider.GetCredential()
 }
 
 func NewStsAccount(accessId, accessKey, securityToken string) *StsAccount {
@@ -132,4 +149,9 @@ func (account *StsAccount) GetType() Provider {
 
 func (account *StsAccount) SignRequest(req *http.Request, endpoint string) error {
 	return account.sp._signRequest(req, endpoint)
+}
+
+func (account *StsAccount) Credential() (*credentials.CredentialModel, error) {
+
+	return account.sp.Credential()
 }

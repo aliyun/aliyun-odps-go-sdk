@@ -42,9 +42,9 @@ func ExampleTables_List() {
 func ExampleTables_BatchLoadTables() {
 	tablesIns := odps.NewTables(odpsIns, "", "")
 	tableNames := []string{
-		"jet_mr_input",
-		"jet_smode_test",
-		"odps_smoke_table",
+		"has_struct",
+		"sale_detail",
+		"testtable",
 		"user",
 	}
 
@@ -96,6 +96,7 @@ func ExampleTables_Create() {
 	hints["odps.sql.planner.parser.odps"] = "true"
 	hints["odps.sql.ddl.odps"] = "true"
 	hints["odps.compiler.output.format"] = "lot,pot"
+	hints["odps.namespace.schema"] = "false"
 
 	builder := tableschema.NewSchemaBuilder()
 	builder.Name("user_temp").
