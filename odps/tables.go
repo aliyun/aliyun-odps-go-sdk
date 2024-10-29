@@ -31,21 +31,21 @@ import (
 // Tables used for get all the tables in an odps project
 type Tables struct {
 	projectName string
+	schemaName  string
 	odpsIns     *Odps
 }
 
 // NewTables if projectName is not set，the default projectName of odps will be used
-func NewTables(odpsIns *Odps, projectName ...string) Tables {
-	var _projectName string
-
-	if projectName == nil {
-		_projectName = odpsIns.DefaultProjectName()
-	} else {
-		_projectName = projectName[0]
+func NewTables(odpsIns *Odps, projectName, schemaName string) *Tables {
+	if projectName == "" {
+		projectName = odpsIns.DefaultProjectName()
 	}
-
-	return Tables{
-		projectName: _projectName,
+	if schemaName == "" {
+		schemaName = odpsIns.CurrentSchemaName()
+	}
+	return &Tables{
+		projectName: projectName,
+		schemaName:  schemaName,
 		odpsIns:     odpsIns,
 	}
 }
@@ -55,9 +55,12 @@ func NewTables(odpsIns *Odps, projectName ...string) Tables {
 func (ts *Tables) List(f func(*Table, error), filters ...TFilterFunc) {
 	queryArgs := make(url.Values, 4)
 	queryArgs.Set("expectmarker", "true")
+	queryArgs.Set("curr_schema", ts.schemaName)
 
 	for _, filter := range filters {
-		filter(queryArgs)
+		if filter != nil {
+			filter(queryArgs)
+		}
 	}
 
 	rb := common.ResourceBuilder{ProjectName: ts.projectName}
@@ -80,10 +83,10 @@ func (ts *Tables) List(f func(*Table, error), filters ...TFilterFunc) {
 		}
 
 		for _, tableModel := range resModel.Tables {
-			table := NewTable(ts.odpsIns, ts.projectName, tableModel.Name)
-			table.model.Owner = tableModel.Owner
+			table := NewTable(ts.odpsIns, ts.projectName, ts.schemaName, tableModel.Name)
+			table.model = tableModel
 
-			f(&table, nil)
+			f(table, nil)
 		}
 
 		if resModel.Marker != "" {
@@ -96,7 +99,7 @@ func (ts *Tables) List(f func(*Table, error), filters ...TFilterFunc) {
 }
 
 // BatchLoadTables can get at most 100 tables, and the information of table is according to the permission
-func (ts *Tables) BatchLoadTables(tableNames []string) ([]Table, error) {
+func (ts *Tables) BatchLoadTables(tableNames []string) ([]*Table, error) {
 	type PostBodyModel struct {
 		XMLName xml.Name `xml:"Tables"`
 		Tables  []struct {
@@ -120,8 +123,11 @@ func (ts *Tables) BatchLoadTables(tableNames []string) ([]Table, error) {
 
 	var resModel ResModel
 
-	queryArgs := make(url.Values, 1)
+	queryArgs := make(url.Values, 4)
 	queryArgs.Set("query", "")
+	if ts.schemaName != "" {
+		queryArgs.Set("curr_schema", ts.schemaName)
+	}
 	rb := common.ResourceBuilder{ProjectName: ts.projectName}
 	resource := rb.Tables()
 	client := ts.odpsIns.restClient
@@ -131,15 +137,20 @@ func (ts *Tables) BatchLoadTables(tableNames []string) ([]Table, error) {
 		return nil, errors.WithStack(err)
 	}
 
-	ret := make([]Table, len(resModel.Table))
+	ret := make([]*Table, len(resModel.Table))
 
 	for i, tableModel := range resModel.Table {
-		table := NewTable(ts.odpsIns, ts.projectName, tableModel.Name)
+		table := NewTable(ts.odpsIns, ts.projectName, ts.schemaName, tableModel.Name)
 		table.model = tableModel
 		ret[i] = table
 	}
 
 	return ret, nil
+}
+
+func (ts *Tables) Get(tableName string) *Table {
+	table := NewTable(ts.odpsIns, ts.projectName, ts.schemaName, tableName)
+	return table
 }
 
 // Create table with schema, the schema can be build with tableschema.SchemaBuilder
@@ -150,12 +161,20 @@ func (ts *Tables) Create(
 	createIfNotExists bool,
 	hints, alias map[string]string) error {
 
-	sql, err := schema.ToSQLString(ts.projectName, createIfNotExists)
+	sql, err := schema.ToSQLString(ts.projectName, ts.schemaName, createIfNotExists)
 	if err != nil {
 		return errors.WithStack(err)
 	}
+	if hints == nil {
+		hints = make(map[string]string)
+	}
+	if ts.schemaName == "" {
+		hints["odps.namespace.schema"] = "false"
+	} else {
+		hints["odps.namespace.schema"] = "true"
+	}
 
-	task := NewSqlTask("SQLCreateTableTask", sql, "", hints)
+	task := NewSqlTask("SQLCreateTableTask", sql, hints)
 
 	// TODO rm aliases
 	if alias != nil {
@@ -181,12 +200,20 @@ func (ts *Tables) CreateExternal(
 	jars []string,
 	hints, alias map[string]string) error {
 
-	sql, err := schema.ToExternalSQLString(ts.projectName, createIfNotExists, serdeProperties, jars)
+	sql, err := schema.ToExternalSQLString(ts.projectName, ts.schemaName, createIfNotExists, serdeProperties, jars)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	task := NewSqlTask("SQLCreateExternalTableTask", sql, "", nil)
+	if hints == nil {
+		hints = make(map[string]string)
+	}
+	if ts.schemaName == "" {
+		hints["odps.namespace.schema"] = "false"
+	} else {
+		hints["odps.namespace.schema"] = "true"
+	}
+	task := NewSqlTask("SQLCreateExternalTableTask", sql, hints)
 
 	if alias != nil {
 		aliasJson, _ := json.Marshal(hints)
@@ -209,7 +236,7 @@ func (ts *Tables) CreateWithDataHub(
 	hubLifecycle int,
 ) error {
 
-	sql, err := schema.ToBaseSQLString(ts.projectName, createIfNotExists, false)
+	sql, err := schema.ToBaseSQLString(ts.projectName, ts.schemaName, createIfNotExists, false)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -225,7 +252,13 @@ func (ts *Tables) CreateWithDataHub(
 	sb.WriteString(fmt.Sprintf("\nhubLifecycle %d", hubLifecycle))
 	sb.WriteRune(';')
 
-	task := NewSqlTask("SQLCreateTableTaskWithDataHub", sb.String(), "", nil)
+	hints := make(map[string]string)
+	if ts.schemaName == "" {
+		hints["odps.namespace.schema"] = "false"
+	} else {
+		hints["odps.namespace.schema"] = "true"
+	}
+	task := NewSqlTask("SQLCreateTableTaskWithDataHub", sb.String(), hints)
 
 	instances := NewInstances(ts.odpsIns, ts.projectName)
 	i, err := instances.CreateTask(ts.projectName, &task)
@@ -240,6 +273,8 @@ func (ts *Tables) CreateWithDataHub(
 // Delete delete table
 func (ts *Tables) Delete(tableName string, ifExists bool) error {
 	var sqlBuilder strings.Builder
+	hints := make(map[string]string)
+	hints["odps.namespace.schema"] = "false"
 	sqlBuilder.WriteString("drop table")
 	if ifExists {
 		sqlBuilder.WriteString(" if exists")
@@ -248,10 +283,15 @@ func (ts *Tables) Delete(tableName string, ifExists bool) error {
 	sqlBuilder.WriteRune(' ')
 	sqlBuilder.WriteString(ts.projectName)
 	sqlBuilder.WriteRune('.')
-	sqlBuilder.WriteString(tableName)
+	if ts.schemaName != "" {
+		hints["odps.namespace.schema"] = "true"
+		sqlBuilder.WriteString("`" + ts.schemaName + "`")
+		sqlBuilder.WriteRune('.')
+	}
+	sqlBuilder.WriteString("`" + tableName + "`")
 	sqlBuilder.WriteString(";")
 
-	sqlTask := NewSqlTask("SQLDropTableTask", sqlBuilder.String(), "", nil)
+	sqlTask := NewSqlTask("SQLDropTableTask", sqlBuilder.String(), hints)
 	instances := NewInstances(ts.odpsIns, ts.projectName)
 	i, err := instances.CreateTask(ts.projectName, &sqlTask)
 	if err != nil {

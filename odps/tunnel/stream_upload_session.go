@@ -46,9 +46,11 @@ type StreamUploadSession struct {
 	Columns         []string
 	P2PMode         bool
 	CreatePartition bool
+	QuotaName       string
 	SlotNum         int
 	slotSelector    slotSelector
 	schema          tableschema.TableSchema
+	schemaVersion   int
 }
 
 func (su *StreamUploadSession) ResourceUrl() string {
@@ -83,6 +85,7 @@ func CreateStreamUploadSession(
 		Columns:         cfg.Columns,
 		CreatePartition: cfg.CreatePartition,
 		SlotNum:         cfg.SlotNum,
+		schemaVersion:   cfg.SchemaVersion,
 	}
 
 	req, err := session.newInitiationRequest()
@@ -107,8 +110,12 @@ func (su *StreamUploadSession) Schema() tableschema.TableSchema {
 	return su.schema
 }
 
+func (su *StreamUploadSession) SchemaVersion() int {
+	return su.schemaVersion
+}
+
 func (su *StreamUploadSession) newInitiationRequest() (*http.Request, error) {
-	queryArgs := make(url.Values, 4)
+	queryArgs := make(url.Values, 7)
 
 	if su.partitionKey != "" {
 		queryArgs.Set("partition", su.partitionKey)
@@ -126,6 +133,16 @@ func (su *StreamUploadSession) newInitiationRequest() (*http.Request, error) {
 		queryArgs.Set("odps-tunnel-slot-num", strconv.Itoa(su.SlotNum))
 	}
 
+	if su.schemaVersion >= 0 {
+		queryArgs.Set("schema_version", strconv.Itoa(su.schemaVersion))
+	}
+
+	queryArgs.Set("check_latest_schema", "true")
+
+	if su.QuotaName != "" {
+		queryArgs.Set("quotaName", su.QuotaName)
+	}
+
 	resource := su.ResourceUrl()
 	req, err := su.RestClient.NewRequestWithUrlQuery(common.HttpMethod.PostMethod, resource, nil, queryArgs)
 	if err != nil {
@@ -137,10 +154,15 @@ func (su *StreamUploadSession) newInitiationRequest() (*http.Request, error) {
 }
 
 func (su *StreamUploadSession) newReLoadRequest() (*http.Request, error) {
-	queryArgs := make(url.Values, 2)
+	queryArgs := make(url.Values, 4)
 	queryArgs.Set("uploadid", su.id)
 	if su.partitionKey != "" {
 		queryArgs.Set("partition", su.partitionKey)
+	}
+	queryArgs.Set("schema_version", strconv.Itoa(su.schemaVersion))
+
+	if su.QuotaName != "" {
+		queryArgs.Set("quotaName", su.QuotaName)
 	}
 
 	resource := su.ResourceUrl()
@@ -155,12 +177,14 @@ func (su *StreamUploadSession) newReLoadRequest() (*http.Request, error) {
 
 func (su *StreamUploadSession) loadInformation(req *http.Request, inited bool) error {
 	type ResModel struct {
-		CompressMode string          `json:"compress_mode"`
-		FileFormat   string          `json:"file_format"`
-		Schema       schemaResModel  `json:"Schema"`
-		SessionName  string          `json:"session_name"`
-		Slots        [][]interface{} `json:"slots"`
-		Status       string          `json:"status"`
+		CompressMode  string          `json:"compress_mode"`
+		FileFormat    string          `json:"file_format"`
+		Schema        schemaResModel  `json:"Schema"`
+		SessionName   string          `json:"session_name"`
+		Slots         [][]interface{} `json:"slots"`
+		Status        string          `json:"status"`
+		QuotaName     string          `json:"QuotaName"`
+		SchemaVersion int             `json:"schema_version"`
 	}
 
 	var resModel ResModel
@@ -192,6 +216,11 @@ func (su *StreamUploadSession) loadInformation(req *http.Request, inited bool) e
 
 		su.id = resModel.SessionName
 		su.schema = tableSchema
+		su.schemaVersion = resModel.SchemaVersion
+
+		if resModel.QuotaName != "" {
+			su.QuotaName = resModel.QuotaName
+		}
 	}
 
 	slots := make([]slot, len(resModel.Slots))

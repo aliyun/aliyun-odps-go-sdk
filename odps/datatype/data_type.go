@@ -393,6 +393,10 @@ func (j JsonType) Name() string {
 	return JSON.String()
 }
 
+func (j JsonType) String() string {
+	return j.Name()
+}
+
 func IsTypeEqual(t1, t2 DataType) bool {
 	if t1 == nil || t2 == nil {
 		return false

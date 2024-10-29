@@ -18,11 +18,24 @@ package odps_test
 
 import (
 	"fmt"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"log"
 	"time"
 )
 
-func ExampleOdps_RunSQl() {
+func ExampleOdps_RunSQL() {
+
+	column := tableschema.Column{
+		Name: "id",
+		Type: datatype.DateType,
+	}
+	tableSchema := tableschema.NewSchemaBuilder().Columns(column).Name("has_date").Build()
+	err2 := odpsIns.Tables().Create(tableSchema, true, nil, nil)
+	if err2 != nil {
+		log.Fatalf("%+v", err2)
+	}
+
 	t := time.Now()
 	ts := t.Format("2006-01-02")
 	sql := fmt.Sprintf("insert into has_date values (date'%s');", ts)
@@ -36,15 +49,5 @@ func ExampleOdps_RunSQl() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-
-	result, err := ins.GetResult()
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
-
-	for _, r := range result {
-		println(r.Result)
-	}
-
 	// Output:
 }

@@ -26,7 +26,7 @@ import (
 )
 
 func ExampleTables_List() {
-	ts := odps.NewTables(odpsIns)
+	ts := odps.NewTables(odpsIns, "", "")
 	var f = func(t *odps.Table, err error) {
 		if err != nil {
 			log.Fatalf("%+v", err)
@@ -40,11 +40,11 @@ func ExampleTables_List() {
 }
 
 func ExampleTables_BatchLoadTables() {
-	tablesIns := odps.NewTables(odpsIns)
+	tablesIns := odps.NewTables(odpsIns, "", "")
 	tableNames := []string{
-		"jet_mr_input",
-		"jet_smode_test",
-		"odps_smoke_table",
+		"has_struct",
+		"sale_detail",
+		"testtable",
 		"user",
 	}
 
@@ -57,10 +57,7 @@ func ExampleTables_BatchLoadTables() {
 		println(fmt.Sprintf("%s, %s, %s", table.Name(), table.TableID(), table.Type()))
 	}
 
-	schema, err := tables[len(tables)-1].GetSchema()
-	if err != nil {
-		log.Fatalf("%+v", err)
-	}
+	schema := tables[len(tables)-1].Schema()
 
 	for _, c := range schema.Columns {
 		println(fmt.Sprintf("%s, %s, %t, %s", c.Name, c.Type, c.IsNullable, c.Comment))
@@ -99,6 +96,7 @@ func ExampleTables_Create() {
 	hints["odps.sql.planner.parser.odps"] = "true"
 	hints["odps.sql.ddl.odps"] = "true"
 	hints["odps.compiler.output.format"] = "lot,pot"
+	hints["odps.namespace.schema"] = "false"
 
 	builder := tableschema.NewSchemaBuilder()
 	builder.Name("user_temp").
@@ -108,10 +106,10 @@ func ExampleTables_Create() {
 		Lifecycle(2)
 
 	schema := builder.Build()
-	sql, _ := schema.ToSQLString(defaultProjectName, false)
+	sql, _ := schema.ToSQLString(defaultProjectName, "", false)
 	println(sql)
 
-	tables := odps.NewTables(odpsIns)
+	tables := odps.NewTables(odpsIns, odpsIns.DefaultProjectName(), "")
 	err := tables.Create(schema, true, hints, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -121,7 +119,7 @@ func ExampleTables_Create() {
 }
 
 func ExampleTables_Delete() {
-	tables := odps.NewTables(odpsIns, odpsIns.DefaultProjectName())
+	tables := odps.NewTables(odpsIns, odpsIns.DefaultProjectName(), "")
 	err := tables.Delete("user_temp", false)
 	if err != nil {
 		log.Fatalf("%+v", err)

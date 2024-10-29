@@ -27,11 +27,11 @@ import (
 )
 
 func Example_tunnel_download_instance_result() {
-	var account = account2.AliyunAccountFromEnv()
+	var account = account2.AccountFromEnv()
 	var endpoint = restclient.LoadEndpointFromEnv()
 	var odpsIns = odps.NewOdps(account, endpoint)
 
-	projectName := "project_1"
+	projectName := "go_sdk_regression_testing"
 	odpsIns.SetDefaultProjectName(projectName)
 	project := odpsIns.DefaultProject()
 	tunnelIns, err := tunnel.NewTunnelFromProject(project)
@@ -77,9 +77,9 @@ func Example_tunnel_download_instance_result() {
 	// }
 
 	// 或用iterator遍历读取
-	reader.Iterator(func(record data.Record, err error) {
+	err = reader.Iterator(func(record data.Record, err error) {
 		if err != nil {
-			log.Fatalf("%+v", err)
+			return
 		}
 
 		for i, n := 0, record.Len(); i < n; i++ {
@@ -87,6 +87,10 @@ func Example_tunnel_download_instance_result() {
 			println(f.String())
 		}
 	})
+
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
 
 	// Output:
 }

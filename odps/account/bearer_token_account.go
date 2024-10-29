@@ -35,6 +35,8 @@ func (account *BearerTokenAccount) GetType() Provider {
 	return BearToken
 }
 
-func (account *BearerTokenAccount) SignRequest(req *http.Request, _ string) {
+func (account *BearerTokenAccount) SignRequest(req *http.Request, _ string) error {
 	req.Header.Set(common.HttpHeaderODPSBearerToken, account.token)
+
+	return nil
 }

@@ -34,12 +34,14 @@ type sessionConfig struct {
 	// CreatePartition for stream upload session only
 	CreatePartition bool
 	// Columns for stream upload session only
-	Columns []string
+	Columns       []string
+	SchemaVersion int
 }
 
 func newSessionConfig(opts ...Option) *sessionConfig {
 	cfg := &sessionConfig{
-		Compressor: nil,
+		Compressor:    nil,
+		SchemaVersion: -1,
 	}
 
 	for _, opt := range opts {
@@ -119,6 +121,12 @@ func withColumns(c []string) Option {
 	}
 }
 
+func withSchemaVersion(schemaVersion int) Option {
+	return func(cfg *sessionConfig) {
+		cfg.SchemaVersion = schemaVersion
+	}
+}
+
 var SessionCfg = struct {
 	WithPartitionKey             func(string) Option
 	WithSchemaName               func(string) Option
@@ -131,6 +139,7 @@ var SessionCfg = struct {
 	WithSlotNum                  func(int) Option
 	WithCreatePartition          func() Option
 	WithColumns                  func([]string) Option
+	WithSchemaVersion            func(int) Option
 }{
 	WithPartitionKey:             withPartitionKey,
 	WithSchemaName:               withSchemaName,
@@ -143,4 +152,5 @@ var SessionCfg = struct {
 	WithSlotNum:                  withSlotNum,
 	WithCreatePartition:          withCreatePartition,
 	WithColumns:                  withColumns,
+	WithSchemaVersion:            withSchemaVersion,
 }

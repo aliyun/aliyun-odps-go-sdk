@@ -190,6 +190,10 @@ func (r *RecordProtocWriter) writeField(val data.Data) error {
 	case data.TinyInt:
 		r.recordCrc.Update(int64(val))
 		return errors.WithStack(r.protocWriter.WriteSInt64(int64(val)))
+	case *data.String:
+		b := []byte(string(*val))
+		r.recordCrc.Update(b)
+		return errors.WithStack(r.protocWriter.WriteBytes(b))
 	case data.String:
 		b := []byte(string(val))
 		r.recordCrc.Update(b)

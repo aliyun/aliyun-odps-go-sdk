@@ -26,13 +26,13 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 )
 
-var account = account2.AliyunAccountFromEnv()
+var account = account2.AccountFromEnv()
 var endpoint = restclient.LoadEndpointFromEnv()
 var odpsIns = odps.NewOdps(account, endpoint)
-var defaultProjectName = "project_1"
+var defaultProjectName = "go_sdk_regression_testing"
 
 func init() {
-	if account.AccessId() == "" {
+	if account == nil {
 		panic("account environments are not set")
 	}
 
@@ -43,6 +43,7 @@ func init() {
 	createUserTable("user_temp")
 	createTableWithComplexData()
 	createSaleDetailTable()
+	createTestSchema()
 }
 
 func createUserTable(tableName string) {
@@ -75,6 +76,7 @@ func createUserTable(tableName string) {
 	hints["odps.sql.planner.parser.odps"] = "true"
 	hints["odps.sql.ddl.odps"] = "true"
 	hints["odps.compiler.output.format"] = "lot,pot"
+	hints["odps.namespace.schema"] = "false"
 
 	builder := tableschema.NewSchemaBuilder()
 	builder.Name(tableName).
@@ -84,7 +86,7 @@ func createUserTable(tableName string) {
 		Lifecycle(2)
 
 	schema := builder.Build()
-	tables := odps.NewTables(odpsIns, defaultProjectName)
+	tables := odps.NewTables(odpsIns, defaultProjectName, "")
 	err := tables.Create(schema, true, hints, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -102,8 +104,10 @@ func createTableWithComplexData() {
 	builder.Name("has_struct").Columns(column)
 	schema := builder.Build()
 
-	tables := odps.NewTables(odpsIns, defaultProjectName)
-	err := tables.Create(schema, true, nil, nil)
+	hints := make(map[string]string)
+	hints["odps.namespace.schema"] = "false"
+	tables := odps.NewTables(odpsIns, defaultProjectName, "")
+	err := tables.Create(schema, true, hints, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -142,9 +146,35 @@ func createSaleDetailTable() {
 		Lifecycle(2)
 
 	schema := builder.Build()
-	tables := odps.NewTables(odpsIns, defaultProjectName)
-	err := tables.Create(schema, true, nil, nil)
+	tables := odps.NewTables(odpsIns, defaultProjectName, "")
+
+	hints := make(map[string]string)
+	hints["odps.namespace.schema"] = "false"
+	err := tables.Create(schema, true, hints, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
+	}
+}
+
+func createTestSchema() {
+	schemas := odps.NewSchemas(odpsIns, defaultProjectName)
+	err := schemas.Create("exist_schema", true, "create by ut")
+	if err != nil {
+		log.Fatalf("%+v", err)
+		return
+	}
+
+	// create some tables in exist_schema
+	tables := odps.NewTables(odpsIns, defaultProjectName, "exist_schema")
+	c := tableschema.Column{
+		Name: "name",
+		Type: datatype2.StringType,
+	}
+	schemaBuilder := tableschema.NewSchemaBuilder()
+	err = tables.Create(schemaBuilder.Name("table1").Column(c).Build(), true, nil, nil)
+	err = tables.Create(schemaBuilder.Name("table2").Build(), true, nil, nil)
+	if err != nil {
+		log.Fatalf("%+v", err)
+		return
 	}
 }

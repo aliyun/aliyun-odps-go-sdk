@@ -28,6 +28,12 @@ import (
 )
 
 func Example_tunnel_upload_arrow() {
+
+	err := odpsIns.Tables().Get("sale_detail").AddPartition(true, "sale_date=202111/region=hangzhou")
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
 	tunnelIns.SetHttpTimeout(10 * time.Second)
 
 	session, err := tunnelIns.CreateUploadSession(
@@ -86,12 +92,14 @@ func Example_tunnel_upload_arrow() {
 			case "shop_name":
 				builder := fieldBuilder.(*array.StringBuilder)
 				builder.AppendValues(data.ShopNames, nil)
-			case "customer_id":
+			case "custom_id":
 				builder := fieldBuilder.(*array.StringBuilder)
 				builder.AppendValues(data.CustomIDs, nil)
 			case "total_price":
 				builder := fieldBuilder.(*array.Float64Builder)
 				builder.AppendValues(data.totalPrice, nil)
+			default:
+				log.Fatalf("unknown field: %s", field.Name)
 			}
 		}
 
@@ -137,7 +145,7 @@ func Example_tunnel_upload_arrow() {
 
 func Example_tunnel_download_arrow_simple() {
 	session, err := tunnelIns.CreateDownloadSession(
-		"test_new_console_gcc",
+		ProjectName,
 		// "upload_sample_arrow",
 		"has_struct",
 	)
@@ -177,7 +185,7 @@ func Example_tunnel_download_arrow_simple() {
 
 func Example_tunnel_download_arrow_with_partition() {
 	session, err := tunnelIns.CreateDownloadSession(
-		"test_new_console_gcc",
+		"go_sdk_regression_testing",
 		"sale_detail",
 		tunnel2.SessionCfg.WithPartitionKey("sale_date='202111',region='hangzhou'"),
 	)

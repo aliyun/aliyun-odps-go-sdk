@@ -21,6 +21,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/pkg/errors"
 	"net/url"
@@ -32,8 +33,7 @@ import (
 type TableType int
 
 const (
-	_ TableType = iota
-	ManagedTable
+	ManagedTable TableType = iota
 	VirtualView
 	ExternalTable
 	TableTypeUnknown
@@ -54,22 +54,24 @@ type TableOrErr struct {
 }
 
 type tableModel struct {
-	XMLName     xml.Name `xml:"Table"`
-	Name        string
-	TableId     string
-	Format      string
-	Schema      string
-	Comment     string
-	Owner       string
-	ProjectName string `xml:"Project"`
-	TableLabel  string
-	CryptoAlgo  string
-	Type        TableType
+	XMLName       xml.Name `xml:"Table"`
+	Name          string
+	TableId       string
+	Format        string
+	Schema        string
+	Comment       string
+	Owner         string
+	ProjectName   string `xml:"Project"`
+	SchemaName    string
+	TableLabel    string
+	CryptoAlgo    string
+	TableMaskInfo string
+	Type          TableType
 }
 
-func NewTable(odpsIns *Odps, projectName string, tableName string) Table {
-	return Table{
-		model:   tableModel{ProjectName: projectName, Name: tableName},
+func NewTable(odpsIns *Odps, projectName string, schemaName string, tableName string) *Table {
+	return &Table{
+		model:   tableModel{ProjectName: projectName, SchemaName: schemaName, Name: tableName},
 		odpsIns: odpsIns,
 	}
 }
@@ -83,7 +85,12 @@ func (t *Table) Load() error {
 	resource := t.ResourceUrl()
 	t.beLoaded = true
 
-	err := client.GetWithModel(resource, nil, &t.model)
+	queryArgs := make(url.Values, 4)
+	if t.SchemaName() != "" {
+		queryArgs.Set("curr_schema", t.SchemaName())
+	}
+
+	err := client.GetWithModel(resource, queryArgs, &t.model)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -93,6 +100,7 @@ func (t *Table) Load() error {
 		return errors.WithStack(err)
 	}
 
+	// LoadExtendedInfo会加载其他额外信息，主要是table schema信息
 	return errors.WithStack(t.LoadExtendedInfo())
 }
 
@@ -100,11 +108,14 @@ func (t *Table) LoadExtendedInfo() error {
 	client := t.odpsIns.restClient
 	resource := t.ResourceUrl()
 
-	urlQuery := make(url.Values)
-	urlQuery.Set("extended", "")
+	queryArgs := make(url.Values, 4)
+	queryArgs.Set("extended", "")
+	if t.SchemaName() != "" {
+		queryArgs.Set("curr_schema", t.SchemaName())
+	}
 
 	var model tableModel
-	err := client.GetWithModel(resource, urlQuery, &model)
+	err := client.GetWithModel(resource, queryArgs, &model)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -134,10 +145,18 @@ func (t *Table) ResourceUrl() string {
 }
 
 func (t *Table) Comment() string {
+	// both model.Comment and tableSchema.Comment can get the value, the latter takes precedence
+	if t.tableSchema.Comment != "" {
+		return t.tableSchema.Comment
+	}
 	return t.model.Comment
 }
 
 func (t *Table) Owner() string {
+	// both model.Owner and tableSchema.Owner can get the value, the latter takes precedence
+	if t.tableSchema.Owner != "" {
+		return t.tableSchema.Owner
+	}
 	return t.model.Owner
 }
 
@@ -153,6 +172,10 @@ func (t *Table) ProjectName() string {
 	return t.model.ProjectName
 }
 
+func (t *Table) SchemaName() string {
+	return t.model.SchemaName
+}
+
 func (t *Table) Type() TableType {
 	return t.model.Type
 }
@@ -162,6 +185,10 @@ func (t *Table) CreatedTime() time.Time {
 }
 
 func (t *Table) TableLabel() string {
+	// Service will return 0 if nothing set
+	if t.tableSchema.TableLabel == "0" {
+		return ""
+	}
 	return t.tableSchema.TableLabel
 }
 
@@ -258,6 +285,20 @@ func calculateMaxLabel(labels []string) string {
 
 	return fmt.Sprintf("%s%d", category, maxLevel)
 }
+func (t *Table) Exists() (bool, error) {
+	err := t.Load()
+
+	var httpErr restclient.HttpNotOk
+	if errors.As(err, &httpErr) {
+		if httpErr.Status == "404 Not Found" {
+			return false, nil
+		}
+
+		return false, err
+	}
+
+	return true, nil
+}
 
 func (t *Table) LastDDLTime() time.Time {
 	return time.Time(t.tableSchema.LastDDLTime)
@@ -279,7 +320,7 @@ func (t *Table) ViewText() string {
 	return t.tableSchema.ViewText
 }
 
-func (t *Table) Size() int {
+func (t *Table) Size() int64 {
 	return t.tableSchema.Size
 }
 
@@ -303,18 +344,6 @@ func (t *Table) ShardInfoJson() string {
 	return t.tableSchema.ShardInfo
 }
 
-func (t *Table) GetSchema() (*tableschema.TableSchema, error) {
-	if !t.beLoaded {
-		err := t.Load()
-
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return &t.tableSchema, nil
-}
-
 func (t *Table) Schema() tableschema.TableSchema {
 	return t.tableSchema
 }
@@ -323,8 +352,28 @@ func (t *Table) SchemaJson() string {
 	return t.model.Schema
 }
 
+func (t *Table) Delete() error {
+	var sqlBuilder strings.Builder
+	sqlBuilder.WriteString("drop table")
+	sqlBuilder.WriteString(" if exists")
+
+	sqlBuilder.WriteRune(' ')
+	sqlBuilder.WriteString(t.ProjectName())
+	sqlBuilder.WriteRune('.')
+	sqlBuilder.WriteString(t.Name())
+	sqlBuilder.WriteString(";")
+
+	sqlTask := NewSqlTask("SQLDropTableTask", sqlBuilder.String(), nil)
+	instances := NewInstances(t.odpsIns, t.ProjectName())
+	i, err := instances.CreateTask(t.ProjectName(), &sqlTask)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	return errors.WithStack(i.WaitForSuccess())
+}
+
 func (t *Table) ExecSqlWithHints(taskName, sql string, hints map[string]string) (*Instance, error) {
-	task := NewSqlTask(taskName, sql, "", hints)
+	task := NewSqlTask(taskName, sql, hints)
 	instances := NewInstances(t.odpsIns, t.ProjectName())
 	i, err := instances.CreateTask(t.ProjectName(), &task)
 	return i, errors.WithStack(err)
@@ -334,19 +383,51 @@ func (t *Table) ExecSql(taskName, sql string) (*Instance, error) {
 	return t.ExecSqlWithHints(taskName, sql, nil)
 }
 
-// AddPartition Example: AddPartition(true, "region='10026, name='abc'")
-func (t *Table) AddPartition(ifNotExists bool, partitionKey string) error {
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("alter table %s.%s add", t.ProjectName(), t.Name()))
-	if ifNotExists {
-		sb.WriteString(" if not exists")
+// 将格式为region=1026/name=abc格式的“分区值”转换为格式为region='1026',name='abc'的"分区spec"值
+func partitionValueToSpec(value string) string {
+	columns := strings.Split(value, "/")
+
+	sb := strings.Builder{}
+	for i, n := 0, len(columns); i < n; i++ {
+		kv := strings.Split(columns[i], "=")
+
+		sb.WriteString(fmt.Sprintf("%s='%s'", kv[0], kv[1]))
+
+		if i < n-1 {
+			sb.WriteString(",")
+		}
 	}
 
-	sb.WriteString(" partition (\n")
-	sb.WriteString(partitionKey)
-	sb.WriteString("\n);")
+	return sb.String()
+}
 
-	i, err := t.ExecSql("SQLAddPartitionTask", sb.String())
+// AddPartitions Example: AddPartitions(true, []string{"region=10026/name=abc", "region=10027/name=mhn"})
+func (t *Table) AddPartitions(ifNotExists bool, partitionValues []string) error {
+	var sb strings.Builder
+	sb.WriteString("alter table ")
+	hints := make(map[string]string)
+	if t.SchemaName() == "" {
+		sb.WriteString(fmt.Sprintf("%s.%s", t.ProjectName(), t.Name()))
+		hints["odps.namespace.schema"] = "false"
+	} else {
+		sb.WriteString(fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name()))
+		hints["odps.namespace.schema"] = "true"
+	}
+	sb.WriteString(" add")
+	if ifNotExists {
+		sb.WriteString(" if not exists\n")
+	}
+
+	for _, partitionValue := range partitionValues {
+		sb.WriteString("partition (")
+		sb.WriteString(partitionValueToSpec(partitionValue))
+		sb.WriteString(")\n")
+	}
+
+	sb.WriteString(";")
+	println(sb.String())
+
+	i, err := t.ExecSqlWithHints("SQLAddPartitionTask", sb.String(), hints)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -354,19 +435,42 @@ func (t *Table) AddPartition(ifNotExists bool, partitionKey string) error {
 	return errors.WithStack(i.WaitForSuccess())
 }
 
-// DeletePartition Example: DeletePartition(true, "region='10026, name='abc'")
-func (t *Table) DeletePartition(ifExists bool, partitionKey string) error {
+// AddPartition Example: AddPartition(true, "region=10026/name=abc")
+func (t *Table) AddPartition(ifNotExists bool, partitionValue string) error {
+	return t.AddPartitions(ifNotExists, []string{partitionValue})
+}
+
+// DeletePartitions Example: DeletePartitions(true, []string{"region=10026/name=abc", "region=10027/name=mhn"})
+func (t *Table) DeletePartitions(ifExists bool, partitionValues []string) error {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("alter table %s.%s drop", t.ProjectName(), t.Name()))
+	sb.WriteString("alter table ")
+	hints := make(map[string]string)
+	if t.SchemaName() == "" {
+		hints["odps.namespace.schema"] = "false"
+		sb.WriteString(fmt.Sprintf("%s.%s", t.ProjectName(), t.Name()))
+	} else {
+		hints["odps.namespace.schema"] = "true"
+		sb.WriteString(fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name()))
+	}
+	sb.WriteString(" drop")
 	if ifExists {
 		sb.WriteString(" if exists")
 	}
 
-	sb.WriteString(" partition (\n")
-	sb.WriteString(partitionKey)
-	sb.WriteString("\n);")
+	n := len(partitionValues)
+	for i, partitionValue := range partitionValues {
+		sb.WriteString(" partition (")
+		sb.WriteString(partitionValueToSpec(partitionValue))
+		sb.WriteString(")")
 
-	ins, err := t.ExecSql("SQLDropPartitionTask", sb.String())
+		if i < n-1 {
+			sb.WriteString(",\n")
+		}
+	}
+
+	sb.WriteString(";")
+
+	ins, err := t.ExecSqlWithHints("SQLDropPartitionTask", sb.String(), hints)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -379,14 +483,93 @@ func (t *Table) DeletePartition(ifExists bool, partitionKey string) error {
 	return nil
 }
 
-// GetPartitions get partitions with partitionKey like "region='10026, name='abc'"
-func (t *Table) GetPartitions(partitionKey string) ([]Partition, error) {
+// DeletePartition Example: DeletePartition(true, "region=10026/name=abc")
+func (t *Table) DeletePartition(ifExists bool, partitionValue string) error {
+	return t.DeletePartitions(ifExists, []string{partitionValue})
+}
+
+func (t *Table) GetPartitionValues() ([]string, error) {
+	queryArgs := make(url.Values, 4)
+	queryArgs.Set("partitions", "")
+	// 指定name为空后，接口只会返回分区的“名字”，也就是分区的值q
+	queryArgs.Set("name", "")
+
+	if t.SchemaName() != "" {
+		queryArgs.Set("curr_schema", t.SchemaName())
+	}
+
+	resource := t.ResourceUrl()
+	client := t.odpsIns.restClient
+
+	type ResModel struct {
+		XMLName    xml.Name `xml:"Partitions"`
+		Marker     string
+		MaxItems   string
+		Partitions []struct {
+			Name string
+		} `xml:"Partition"`
+	}
+
+	var resModel ResModel
+	err := client.GetWithModel(resource, queryArgs, &resModel)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	partitionValues := make([]string, len(resModel.Partitions))
+	for i, p := range resModel.Partitions {
+		partitionValues[i] = p.Name
+	}
+
+	return partitionValues, err
+}
+
+// GetPartition get partitions with partitionKey like "region=10026/name=abc", error if not found
+func (t *Table) GetPartition(partitionValue string) (Partition, error) {
+	// 将region=10026/name=abc格式的分区值转换为region='10026',name='abc'
+	columns := strings.Split(partitionValue, "/")
+
+	sb := strings.Builder{}
+	for i, n := 0, len(columns); i < n; i++ {
+		kv := strings.Split(columns[i], "=")
+
+		sb.WriteString(fmt.Sprintf("%s='%s'", kv[0], kv[1]))
+
+		if i < n-1 {
+			sb.WriteString(",")
+		}
+	}
+
+	partitionSpec := sb.String()
+	partitions, err := t.getPartitions(partitionSpec)
+	if err != nil {
+		return Partition{}, err
+	}
+
+	if len(partitions) == 0 {
+		return Partition{}, errors.Errorf("Partition(%s) is not found", partitionValue)
+	}
+
+	return partitions[0], nil
+}
+
+// GetPartitions get partitions
+func (t *Table) GetPartitions() ([]Partition, error) {
+	return t.getPartitions("")
+}
+
+// partitionSpec格式为: region='10026',name='abc'
+func (t *Table) getPartitions(partitionSpec string) ([]Partition, error) {
 	queryArgs := make(url.Values, 4)
 	queryArgs.Set("partitions", "")
 	queryArgs.Set("expectmarker", "true")
+	queryArgs.Set("maxitems", "10000")
 
-	if partitionKey != "" {
-		queryArgs.Set("partition", partitionKey)
+	if partitionSpec != "" {
+		queryArgs.Set("partition", partitionSpec)
+	}
+	if t.SchemaName() != "" {
+		queryArgs.Set("curr_schema", t.SchemaName())
 	}
 
 	resource := t.ResourceUrl()
@@ -421,9 +604,12 @@ func (t *Table) GetPartitions(partitionKey string) ([]Partition, error) {
 		var pModel partitionModel
 
 		for _, p := range resModel.Partitions {
-			kv := make(map[string]string, len(p.Columns))
-			for _, c := range p.Columns {
-				kv[c.Name] = c.Value
+			pModel.Value = make([]PartitionColumn, len(p.Columns))
+			for i, c := range p.Columns {
+				pModel.Value[i] = PartitionColumn{
+					Name:  c.Name,
+					Value: c.Value,
+				}
 			}
 
 			pModel.CreateTime = common.GMTTime(time.Unix(p.CreationTime, 0))
@@ -432,8 +618,13 @@ func (t *Table) GetPartitions(partitionKey string) ([]Partition, error) {
 			pModel.PartitionSize = p.PartitionSize
 			pModel.PartitionRecordNum = p.PartitionRecordCount
 
-			partition := NewPartition(t.odpsIns, t.ProjectName(), t.Name(), kv)
-			partition.model = pModel
+			partition := Partition{
+				odpsIns:     t.odpsIns,
+				projectName: t.ProjectName(),
+				tableName:   t.Name(),
+				model:       pModel,
+			}
+
 			partitions = append(partitions, partition)
 		}
 
@@ -489,9 +680,17 @@ func (t *Table) GetPartitions(partitionKey string) ([]Partition, error) {
 
 func (t *Table) CreateShards(shardCount int) error {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("alter table %s.%s", t.ProjectName(), t.Name()))
+	sb.WriteString("alter table ")
+	hints := make(map[string]string)
+	if t.SchemaName() == "" {
+		sb.WriteString(fmt.Sprintf("%s.%s", t.ProjectName(), t.Name()))
+		hints["odps.namespace.schema"] = "false"
+	} else {
+		sb.WriteString(fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name()))
+		hints["odps.namespace.schema"] = "true"
+	}
 	sb.WriteString(fmt.Sprintf("\ninto %d shards;", shardCount))
-	ins, err := t.ExecSql("SQLCreateShardsTask", sb.String())
+	ins, err := t.ExecSqlWithHints("SQLCreateShardsTask", sb.String(), hints)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -526,7 +725,7 @@ func (t TableType) String() string {
 	case ExternalTable:
 		return "EXTERNAL_TABLE"
 	default:
-		return "TableTypeUnknown"
+		return "Unknown"
 	}
 }
 

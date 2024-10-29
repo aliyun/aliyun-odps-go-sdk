@@ -35,7 +35,7 @@ import (
 
 // Todo 请求方法需要重构，加入header参数
 const (
-	DefaultHttpTimeout          = 5
+	DefaultHttpTimeout          = 30
 	DefaultTcpConnectionTimeout = 30
 )
 
@@ -49,6 +49,7 @@ type RestClient struct {
 	DisableCompression   bool
 	_client              *http.Client
 	defaultProject       string
+	currentSchema        string
 	endpoint             string
 	userAgent            string
 }
@@ -73,6 +74,10 @@ func LoadEndpointFromEnv() string {
 
 func (client *RestClient) SetDefaultProject(projectName string) {
 	client.defaultProject = projectName
+}
+
+func (client *RestClient) SetCurrentSchema(schemaName string) {
+	client.currentSchema = schemaName
 }
 
 func (client *RestClient) SetUserAgent(userAgent string) {
@@ -160,7 +165,10 @@ func (client *RestClient) Do(req *http.Request) (*http.Response, error) {
 	}
 	req.URL.RawQuery = query.Encode()
 
-	client.SignRequest(req, client.endpoint)
+	err := client.SignRequest(req, client.endpoint)
+	if err != nil {
+		return nil, err
+	}
 
 	res, err := client.client().Do(req)
 	return res, errors.WithStack(err)

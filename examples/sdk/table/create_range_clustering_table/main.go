@@ -66,7 +66,7 @@ func main() {
 	schema := sb.Build()
 
 	// print sql for debugging
-	println(schema.ToSQLString("test_cluster", true))
+	println(schema.ToSQLString("test_cluster", "", true))
 
 	err = tablesIns.Create(schema, true, nil, nil)
 	if err != nil {

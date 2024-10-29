@@ -36,8 +36,13 @@ func NewAppAccount(accessId string, accessKey string) *AppAccount {
 	}
 }
 
-func (account *AppAccount) SignRequest(req *http.Request, endpoint string) {
-	account.AliyunAccount.SignRequest(req, endpoint)
+func (account *AppAccount) SignRequest(req *http.Request, endpoint string) error {
+	err := account.AliyunAccount.SignRequest(req, endpoint)
+
+	if err != nil {
+		return err
+	}
+
 	signature := req.Header.Get(common.HttpHeaderAuthorization)
 	signature = base64HmacSha1([]byte(account.accessKey), []byte(signature))
 
@@ -49,4 +54,6 @@ func (account *AppAccount) SignRequest(req *http.Request, endpoint string) {
 	)
 
 	req.Header.Set(common.HttpHeaderAppAuthentication, appAuth)
+
+	return nil
 }
