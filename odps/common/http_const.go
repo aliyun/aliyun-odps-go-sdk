@@ -63,8 +63,7 @@ const (
 	HttpHeaderOdpsSlotNum                   = "odps-tunnel-slot-num"
 	HttpHeaderRoutedServer                  = "odps-tunnel-routed-server"
 	HttpHeaderTransferEncoding              = "Transfer-Encoding"
-  HttpHeaderAcceptEncoding                = "Accept-Encoding"
-	HttpHeaderContentEncoding               = "Content-Encoding"
+	HttpHeaderAcceptEncoding                = "Accept-Encoding"
 	HttpHeaderOdpsSdkSupportSchemaEvolution = "odps-tunnel-sdk-support-schema-evolution"
 	HttpHeaderOdpsTunnelLatestSchemaVersion = "odps-tunnel-latest-schema-version"
 

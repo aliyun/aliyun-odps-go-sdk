@@ -28,7 +28,7 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	reader, err := tableTunnel.ReadTable(&ts, "", 10)
+	reader, err := tableTunnel.ReadTable(ts, "", 10)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

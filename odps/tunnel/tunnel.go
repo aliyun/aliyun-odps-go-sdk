@@ -269,33 +269,13 @@ func (t *Tunnel) ReadTable(table *odps.Table, partition string, limit int64) (*A
 	}
 	//
 	tableSchema := table.Schema()
-	//if len(columnNames) == 0 {
-	//	columnNames = make([]string, len(tableSchema.Columns))
-	//	for i, c := range tableSchema.Columns {
-	//		columnNames[i] = c.Name
-	//	}
-	//	if tableSchema.PartitionColumns != nil {
-	//		for _, c := range tableSchema.PartitionColumns {
-	//			columnNames = append(columnNames, c.Name)
-	//		}
-	//	}
-	//}
-	//
+
 	opt := tableschema.ToArrowSchemaOption{
 		WithExtensionTimeStamp: true,
 		WithPartitionColumns:   true,
 	}
 	arrowSchema := tableSchema.ToArrowSchema(opt)
-	//arrowFields := make([]arrow.Field, 0, len(columnNames))
-	//for _, columnName := range columnNames {
-	//	fs, ok := arrowSchema.FieldsByName(columnName)
-	//	if !ok {
-	//		return nil, errors.Errorf("no column names %s in table %s", columnName, table.Name())
-	//	}
-	//	arrowFields = append(arrowFields, fs...)
-	//}
-	//arrowSchema = arrow.NewSchema(arrowFields, nil)
-	//
+
 	httpResp, err :=
 		t.Preview(table.ProjectName(), table.SchemaName(), table.Name(), limit, SessionCfg.WithPartitionKey(partition))
 	if err != nil {

@@ -19,7 +19,7 @@ package tableschema
 import (
 	"bytes"
 	"fmt"
-  "strconv"
+	"strconv"
 	"strings"
 	"text/template"
 
