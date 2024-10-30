@@ -18,9 +18,10 @@ package odps_test
 
 import (
 	"fmt"
+	"log"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"log"
 )
 
 func ExampleTableSchema_ToSQLString() {
@@ -67,13 +68,14 @@ func ExampleTableSchema_ToSQLString() {
 
 	schema := builder.Build()
 
-	sql, _ := schema.ToSQLString("project_1", true)
+	sql, _ := schema.ToSQLString("go_sdk_regression_testing", "schema", true)
 	println("sql of create table:")
 	println(sql)
 	println()
 
 	externalSql, err := schema.ToExternalSQLString(
-		"project_1",
+		"go_sdk_regression_testing",
+		"",
 		true,
 		serdeProperties,
 		jars,
@@ -103,7 +105,7 @@ func ExampleTable_Load() {
 
 func ExampleTable_AddPartition() {
 	table := odpsIns.Table("sale_detail")
-	err := table.AddPartition(true, "sale_date='202111',region='hangzhou'")
+	err := table.AddPartition(true, "sale_date=202111/region=hangzhou")
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -113,13 +115,13 @@ func ExampleTable_AddPartition() {
 
 func ExampleTable_GetPartitions() {
 	table := odpsIns.Table("sale_detail")
-	partitions, err := table.GetPartitions("")
+	partitions, err := table.GetPartitions()
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
 
 	for _, p := range partitions {
-		println(fmt.Sprintf("Name: %s", p.Name()))
+		println(fmt.Sprintf("Value: %s", p.Value()))
 		println(fmt.Sprintf("Create time: %s", p.CreatedTime()))
 		println(fmt.Sprintf("Last DDL time: %s", p.LastDDLTime()))
 		println(fmt.Sprintf("Last Modified time: %s", p.LastModifiedTime()))
@@ -130,7 +132,7 @@ func ExampleTable_GetPartitions() {
 }
 
 func ExampleTable_ExecSql() {
-	//table := odps.NewTable(odpsIns, "project_1", "sale_detail")
+	//table := odps.NewTable(odpsIns, "go_sdk_regression_testing", "sale_detail")
 	table := odpsIns.Table("has_struct")
 	//instance, err := table.ExecSql("SelectSale_detail", "select * from sale_detail;")
 	instance, err := table.ExecSql("Select_has_struct", "select * from has_struct;")

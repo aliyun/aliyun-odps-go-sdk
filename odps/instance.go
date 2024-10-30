@@ -61,10 +61,10 @@ type InstanceOrErr struct {
 	Err error
 }
 
-func NewInstance(odpsIns *Odps, projectName, instanceId string) Instance {
+func NewInstance(odpsIns *Odps, projectName, instanceId string) *Instance {
 	rb := common.ResourceBuilder{ProjectName: projectName}
 
-	return Instance{
+	return &Instance{
 		id:          instanceId,
 		projectName: projectName,
 		odpsIns:     odpsIns,
@@ -129,7 +129,7 @@ func (instance *Instance) Terminate() error {
 	}
 
 	client := instance.odpsIns.restClient
-	err := client.DoXmlWithParseFunc("PUT", instance.resourceUrl, nil, &bodyModel, nil)
+	err := client.DoXmlWithParseFunc("PUT", instance.resourceUrl, nil, nil, &bodyModel, nil)
 	return errors.WithStack(err)
 }
 

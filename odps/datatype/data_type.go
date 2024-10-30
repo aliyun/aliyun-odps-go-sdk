@@ -18,10 +18,11 @@ package datatype
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 type TypeID int
@@ -45,10 +46,12 @@ const (
 	VARCHAR
 	DATE
 	TIMESTAMP
+	TIMESTAMP_NTZ
 	BINARY
 	IntervalDayTime
 	IntervalYearMonth
 	STRUCT
+	JSON
 	TypeUnknown
 )
 
@@ -88,6 +91,8 @@ func TypeCodeFromStr(s string) TypeID {
 		return DATE
 	case "TIMESTAMP":
 		return TIMESTAMP
+	case "TIMESTAMP_NTZ":
+		return TIMESTAMP_NTZ
 	case "BINARY":
 		return BINARY
 	case "INTERVAL_DAY_TIME":
@@ -96,6 +101,8 @@ func TypeCodeFromStr(s string) TypeID {
 		return IntervalYearMonth
 	case "STRUCT":
 		return STRUCT
+	case "JSON":
+		return JSON
 	default:
 		return TypeUnknown
 	}
@@ -148,6 +155,8 @@ func (t TypeID) String() string {
 		return "DATE"
 	case TIMESTAMP:
 		return "TIMESTAMP"
+	case TIMESTAMP_NTZ:
+		return "TIMESTAMP_NTZ"
 	case BINARY:
 		return "BINARY"
 	case IntervalDayTime:
@@ -156,6 +165,8 @@ func (t TypeID) String() string {
 		return "INTERVAL_YEAR_MONTH"
 	case STRUCT:
 		return "STRUCT"
+	case JSON:
+		return "JSON"
 	default:
 		return "TYPE_UNKNOWN"
 	}
@@ -367,6 +378,25 @@ func (s StructFields) Less(i, j int) bool {
 	return strings.Compare(s[i].Name, s[j].Name) < 0
 }
 
+type JsonType struct {
+}
+
+func NewJsonType() JsonType {
+	return JsonType{}
+}
+
+func (j JsonType) ID() TypeID {
+	return JSON
+}
+
+func (j JsonType) Name() string {
+	return JSON.String()
+}
+
+func (j JsonType) String() string {
+	return j.Name()
+}
+
 func IsTypeEqual(t1, t2 DataType) bool {
 	if t1 == nil || t2 == nil {
 		return false
@@ -437,6 +467,7 @@ var BooleanType = PrimitiveType{BOOLEAN}
 var DateType = PrimitiveType{DATE}
 var DateTimeType = PrimitiveType{DATETIME}
 var TimestampType = PrimitiveType{TIMESTAMP}
+var TimestampNtzType = PrimitiveType{TIMESTAMP_NTZ}
 var StringType = PrimitiveType{STRING}
 var FloatType = PrimitiveType{FLOAT}
 var BinaryType = PrimitiveType{BINARY}

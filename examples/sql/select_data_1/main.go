@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 	"log"
-	"os"
 	"reflect"
 )
 
 func main() {
-	config, err := sqldriver.NewConfigFromIni(os.Args[1])
+	config, err := sqldriver.NewConfigFromIni("./config.ini")
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -23,11 +22,13 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	selectSql := "select * from all_types_demo where bigint_type=@bigint_type and p1=20 and p2='hangzhou';"
+	selectSql := "select * from all_types_demo where bigint_type=@bigint_type and p1=@p1 and p2='@p2';"
 
 	rows, err := db.Query(
 		selectSql,
 		sql.Named("bigint_type", 100000000000),
+		sql.Named("p1", 20),
+		sql.Named("p2", "hangzhou"),
 	)
 
 	if err != nil {
@@ -87,6 +88,8 @@ func main() {
 					fmt.Printf("%s=%s", columns[i], r)
 				case *sqldriver.NullTimeStamp:
 					fmt.Printf("%s=%s", columns[i], r)
+				case *sqldriver.NullTimeStampNtz:
+					fmt.Printf("%s=%s", columns[i], r)
 				case *sqldriver.NullBool:
 					fmt.Printf("%s=%v", columns[i], r.(*sqldriver.NullBool).Bool)
 				case *sqldriver.Map:
@@ -94,6 +97,8 @@ func main() {
 				case *sqldriver.Array:
 					fmt.Printf("%s=%s", columns[i], r)
 				case *sqldriver.Struct:
+					fmt.Printf("%s=%s", columns[i], r)
+				case *sqldriver.Json:
 					fmt.Printf("%s=%s", columns[i], r)
 				}
 			}

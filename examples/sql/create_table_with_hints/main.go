@@ -13,12 +13,9 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	sqlStr := `create table table_with_date (
-				 date_col DATE);
-				`
+	sqlStr := "create table table_with_date (date_col DATE);"
 	_, err = db.Exec(sqlStr)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-
 }

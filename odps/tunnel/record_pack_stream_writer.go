@@ -19,6 +19,7 @@ package tunnel
 import (
 	"bytes"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/pkg/errors"
 	"time"
 )
@@ -45,7 +46,12 @@ func (rsw *RecordPackStreamWriter) Append(record data.Record) error {
 	if rsw.flushing {
 		return errors.New("There's an unsuccessful flush called, you should call flush to retry or call reset to drop the data")
 	}
-
+	if !rsw.session.allowSchemaMismatch {
+		err := checkIfRecordSchemaMatchSessionSchema(&record, rsw.session.schema.Columns)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+	}
 	err := rsw.protocWriter.Write(record)
 	if err == nil {
 		rsw.recordCount += 1
@@ -54,34 +60,67 @@ func (rsw *RecordPackStreamWriter) Append(record data.Record) error {
 	return errors.WithStack(err)
 }
 
-func (rsw *RecordPackStreamWriter) Flush(timeout_ ...time.Duration) (string, error) {
-	rsw.flushing = true
+func checkIfRecordSchemaMatchSessionSchema(record *data.Record, schema []tableschema.Column) error {
+	if record.Len() != len(schema) {
+		return errors.Errorf("Record schema not match session schema, record len: %d, session schema len: %d",
+			record.Len(), len(schema))
+	}
+	for index, recordData := range *record {
+		colType := schema[index].Type.ID()
+		if recordData != nil && recordData.Type().ID() != colType {
+			return errors.Errorf("Record schema not match session schema, index: %d, record type: %s, session schema type: %s",
+				index, recordData.Type().Name(), schema[index].Type.Name())
+		}
+	}
+	return nil
+}
 
+// Flush send all buffered data to server. return (traceId, recordCount, recordBytes, error)
+// `recordCount` and `recordBytes` is the count and bytes count of the records uploaded
+func (rsw *RecordPackStreamWriter) Flush(timeout_ ...time.Duration) (string, int64, int64, error) {
 	timeout := time.Duration(0)
 	if len(timeout_) > 0 {
 		timeout = timeout_[0]
 	}
 
-	reqId, err := rsw.session.flushStream(rsw, timeout)
-	if err != nil {
-		return "", errors.WithStack(err)
+	if rsw.recordCount == 0 {
+		return "", 0, 0, nil
 	}
 
+	// close protoc stream writer， the protoc stream will write the last protoc tags
+	if (!rsw.flushing) && (!rsw.protocWriter.closed) {
+		err := rsw.protocWriter.Close()
+		if err != nil {
+			return "", 0, 0, errors.WithStack(err)
+		}
+	}
+
+	rsw.flushing = true
+
+	reqId, bytesSend, err := rsw.session.flushStream(rsw, timeout)
+	if err != nil {
+		return "", 0, 0, err
+	}
+
+	recordCount := rsw.recordCount
 	rsw.flushing = false
 	rsw.reset()
 
-	return reqId, nil
+	return reqId, recordCount, int64(bytesSend), nil
 }
 
+// RecordCount the buffered record count
 func (rsw *RecordPackStreamWriter) RecordCount() int64 {
 	return rsw.recordCount
 }
 
+// DataSize the buffered data size
 func (rsw *RecordPackStreamWriter) DataSize() int64 {
 	return int64(rsw.buffer.Len())
 }
 
 func (rsw *RecordPackStreamWriter) reset() {
 	rsw.buffer.Reset()
+	rsw.protocWriter = newRecordProtocWriter(&bufWriter{rsw.buffer}, rsw.session.schema.Columns, false)
 	rsw.recordCount = 0
 }

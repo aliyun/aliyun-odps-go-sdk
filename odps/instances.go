@@ -38,7 +38,7 @@ type Instances struct {
 
 // NewInstances create Instances object, if the projectName is not set,
 // the default project name of odpsIns will be used
-func NewInstances(odpsIns *Odps, projectName ...string) Instances {
+func NewInstances(odpsIns *Odps, projectName ...string) *Instances {
 	var _projectName string
 
 	if projectName == nil {
@@ -47,18 +47,18 @@ func NewInstances(odpsIns *Odps, projectName ...string) Instances {
 		_projectName = projectName[0]
 	}
 
-	return Instances{
+	return &Instances{
 		projectName: _projectName,
 		odpsIns:     odpsIns,
 	}
 }
 
-func (instances Instances) CreateTask(projectName string, task Task) (*Instance, error) {
+func (instances *Instances) CreateTask(projectName string, task Task) (*Instance, error) {
 	i, err := instances.CreateTaskWithPriority(projectName, task, DefaultJobPriority)
 	return i, errors.WithStack(err)
 }
 
-func (instances Instances) CreateTaskWithPriority(projectName string, task Task, jobPriority int) (*Instance, error) {
+func (instances *Instances) CreateTaskWithPriority(projectName string, task Task, jobPriority int) (*Instance, error) {
 	uuidStr := uuid.New().String()
 	task.AddProperty("uuid", uuidStr)
 
@@ -93,7 +93,7 @@ func (instances Instances) CreateTaskWithPriority(projectName string, task Task,
 	var instanceId string
 	var isSync bool
 
-	err := client.DoXmlWithParseFunc(common.HttpMethod.PostMethod, resource, nil, &instanceCreationModel, func(res *http.Response) error {
+	err := client.DoXmlWithParseFunc(common.HttpMethod.PostMethod, resource, nil, nil, &instanceCreationModel, func(res *http.Response) error {
 		location := res.Header.Get(common.HttpHeaderLocation)
 
 		if location == "" {
@@ -125,12 +125,12 @@ func (instances Instances) CreateTaskWithPriority(projectName string, task Task,
 	instance.taskResults = resModel.Tasks
 	instance.isSync = isSync
 
-	return &instance, nil
+	return instance, nil
 }
 
 // List Get all instances, the filters can be given with InstanceFilter.Status, InstanceFilter.OnlyOwner,
 // InstanceFilter.QuotaIndex, InstanceFilter.TimeRange
-func (instances Instances) List(f func(*Instance, error), filters ...InsFilterFunc) {
+func (instances *Instances) List(f func(*Instance), filters ...InsFilterFunc) error {
 	queryArgs := make(url.Values)
 	queryArgs.Set("onlyowner", "no")
 
@@ -159,12 +159,7 @@ func (instances Instances) List(f func(*Instance, error), filters ...InsFilterFu
 	for {
 		err := client.GetWithModel(resources, queryArgs, &resModel)
 		if err != nil {
-			f(nil, err)
-			break
-		}
-
-		if len(resModel.Instances) == 0 {
-			break
+			return err
 		}
 
 		for _, model := range resModel.Instances {
@@ -174,7 +169,7 @@ func (instances Instances) List(f func(*Instance, error), filters ...InsFilterFu
 			instance.status = model.Status
 			instance.owner = model.Owner
 
-			f(&instance, nil)
+			f(instance)
 		}
 
 		if resModel.Marker != "" {
@@ -184,12 +179,14 @@ func (instances Instances) List(f func(*Instance, error), filters ...InsFilterFu
 			break
 		}
 	}
+
+	return nil
 }
 
 // ListInstancesQueued Get all instance Queued information, the information is in json string，you need parse it yourself。
 // The filters can be given with InstanceFilter.Status, InstanceFilter.OnlyOwner, InstanceFilter.QuotaIndex,
 // InstanceFilter.TimeRange
-func (instances Instances) ListInstancesQueued(filters ...InsFilterFunc) ([]string, error) {
+func (instances *Instances) ListInstancesQueued(filters ...InsFilterFunc) ([]string, error) {
 	queryArgs := make(url.Values)
 	queryArgs.Set("onlyowner", "no")
 
@@ -276,4 +273,8 @@ var InstanceFilter = struct {
 			values.Set("daterange", dateRange)
 		}
 	},
+}
+
+func (instances *Instances) Get(instanceId string) *Instance {
+	return NewInstance(instances.odpsIns, instances.projectName, instanceId)
 }

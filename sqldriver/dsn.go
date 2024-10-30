@@ -19,6 +19,7 @@ package sqldriver
 import (
 	"errors"
 	"net/url"
+	"os"
 	"strconv"
 	"time"
 
@@ -44,12 +45,20 @@ func ParseDSN(dsn string) (*Config, error) {
 
 	accessId := u.User.Username()
 	if accessId == "" {
-		return nil, errors.New("AccessId is not set")
+		accessId = os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_ID")
+
+		if accessId == "" {
+			return nil, errors.New("AccessId is not set")
+		}
 	}
 
 	accessKey, _ := u.User.Password()
 	if accessKey == "" {
-		return nil, errors.New("AccessKey is not set")
+		accessKey = os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
+
+		if accessKey == "" {
+			return nil, errors.New("AccessKey is not set")
+		}
 	}
 
 	queryParams := u.Query()
@@ -82,6 +91,13 @@ func ParseDSN(dsn string) (*Config, error) {
 			*paramPointer[i] = v
 		}
 		queryParams.Del(p)
+	}
+
+	if config.StsToken == "" {
+		stsTokenFromEnv := os.Getenv("ALIBABA_CLOUD_SECURITY_TOKEN")
+		if stsTokenFromEnv != "" {
+			config.StsToken = stsTokenFromEnv
+		}
 	}
 
 	if connTimeout != "" {

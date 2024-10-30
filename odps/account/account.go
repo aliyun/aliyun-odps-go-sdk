@@ -52,7 +52,7 @@ func (p Provider) String() string {
 
 type Account interface {
 	GetType() Provider
-	SignRequest(req *http.Request, endpoint string)
+	SignRequest(req *http.Request, endpoint string) error
 }
 
 func base64HmacSha1(key []byte, data []byte) string {

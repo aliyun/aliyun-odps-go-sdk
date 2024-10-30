@@ -24,11 +24,6 @@ func NewRecord(columnNums int) Record {
 	return make([]Data, columnNums)
 }
 
-func (r *Record) Append(d Data) {
-	s := []Data(*r)
-	*r = append(s, d)
-}
-
 func (r *Record) Len() int {
 	return len(*r)
 }

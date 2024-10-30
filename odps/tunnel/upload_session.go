@@ -100,7 +100,7 @@ func (u *UploadSession) PartitionKey() string {
 
 func (u *UploadSession) SetPartitionKey(partitionKey string) {
 	u.partitionKey = strings.ReplaceAll(partitionKey, "'", "")
-	u.partitionKey = strings.ReplaceAll(u.partitionKey, " ", "")
+	u.partitionKey = strings.ReplaceAll(u.partitionKey, "\"", "")
 }
 
 // CreateUploadSession create a new upload session before uploading data。
@@ -287,6 +287,7 @@ func (u *UploadSession) loadInformation(req *http.Request) error {
 		Schema            schemaResModel `json:"Schema"`
 		Status            string         `json:"Status"`
 		UploadID          string         `json:"UploadID"`
+		QuotaName         string         `json:"QuotaName"`
 		UploadedBlockList []struct {
 			BlockID     int    `json:"BlockID"`
 			CreateTime  int    `json:"CreateTime"`
@@ -320,6 +321,11 @@ func (u *UploadSession) loadInformation(req *http.Request) error {
 
 	u.Id = resModel.UploadID
 	u.fieldMaxSize = resModel.MaxFieldSize
+
+	if resModel.QuotaName != "" {
+		u.QuotaName = resModel.QuotaName
+	}
+
 	u.status = UploadStatusFromStr(resModel.Status)
 	u.schema = tableSchema
 	u.arrowSchema = tableSchema.ToArrowSchema()
@@ -401,7 +407,6 @@ func (u *UploadSession) newUploadConnection(blockId int, useArrow bool) (*httpCo
 
 	if u.Compressor != nil {
 		req.Header.Set("Content-Encoding", u.Compressor.Name())
-		writer = u.Compressor.NewWriter(writer)
 	}
 
 	resChan := make(chan resOrErr)
@@ -411,10 +416,8 @@ func (u *UploadSession) newUploadConnection(blockId int, useArrow bool) (*httpCo
 		resChan <- resOrErr{err: err, res: res}
 	}()
 
-	return &httpConnection{
-		Writer:  writer,
-		resChan: resChan,
-	}, nil
+	httpConn := newHttpConnection(writer, resChan, u.Compressor)
+	return httpConn, nil
 }
 
 func UploadStatusFromStr(s string) UploadStatus {

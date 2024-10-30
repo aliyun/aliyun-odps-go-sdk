@@ -35,7 +35,7 @@ func NewProjects(odps *Odps) Projects {
 // List get all the projects thant current account can access in the specific endpoint
 // filters can be specified with ProjectFilter.NamePrefix, ProjectFilter.Owner,
 // ProjectFilter.User, ProjectFilter.Group
-func (p *Projects) List(filters ...PFilterFunc) ([]Project, error) {
+func (p *Projects) List(filters ...PFilterFunc) ([]*Project, error) {
 	queryArgs := make(url.Values)
 
 	for _, filter := range filters {
@@ -54,16 +54,12 @@ func (p *Projects) List(filters ...PFilterFunc) ([]Project, error) {
 	}
 
 	var resModel ResModel
-	var projects []Project
+	var projects []*Project
 
 	for {
 		err := client.GetWithModel(resource, queryArgs, &resModel)
 		if err != nil {
 			return projects, errors.WithStack(err)
-		}
-
-		if len(resModel.Projects) == 0 {
-			break
 		}
 
 		for _, projectModel := range resModel.Projects {
@@ -84,11 +80,11 @@ func (p *Projects) List(filters ...PFilterFunc) ([]Project, error) {
 	return projects, nil
 }
 
-func (p *Projects) GetDefaultProject() Project {
+func (p *Projects) GetDefaultProject() *Project {
 	return p.Get(p.odpsIns.defaultProject)
 }
 
-func (p *Projects) Get(projectName string) Project {
+func (p *Projects) Get(projectName string) *Project {
 	return NewProject(projectName, p.odpsIns)
 }
 

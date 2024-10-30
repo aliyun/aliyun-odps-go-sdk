@@ -308,6 +308,16 @@ func (sm *Manager) ListUsersForRole(roleName string) ([]User, error) {
 }
 
 func (sm *Manager) RunQuery(query string, jsonOutput bool, supervisionToken string) (string, error) {
+	authIns, err := sm.Run(query, jsonOutput, supervisionToken)
+
+	if err != nil {
+		return "", err
+	}
+
+	return authIns.WaitForSuccess()
+}
+
+func (sm *Manager) Run(query string, jsonOutput bool, supervisionToken string) (*AuthQueryInstance, error) {
 	rb := sm.rb()
 	resource := rb.Authorization()
 	client := sm.restClient
@@ -329,8 +339,12 @@ func (sm *Manager) RunQuery(query string, jsonOutput bool, supervisionToken stri
 	}
 	var resModel ResModel
 	var isAsync bool
+	headers := make(map[string]string)
+	if supervisionToken != "" {
+		headers["odps-x-supervision-token"] = supervisionToken
+	}
 
-	err := client.DoXmlWithParseRes(common.HttpMethod.PostMethod, resource, nil, reqBody, func(res *http.Response) error {
+	err := client.DoXmlWithParseRes(common.HttpMethod.PostMethod, resource, nil, nil, reqBody, func(res *http.Response) error {
 		if res.StatusCode < 200 || res.StatusCode >= 300 {
 			return errors.WithStack(restclient.NewHttpNotOk(res))
 		}
@@ -340,22 +354,19 @@ func (sm *Manager) RunQuery(query string, jsonOutput bool, supervisionToken stri
 		return errors.WithStack(decoder.Decode(&resModel))
 	})
 
-	if httpNodeOk, ok := err.(restclient.HttpNotOk); ok {
-		return string(httpNodeOk.Body), errors.WithStack(err)
+	if _, ok := err.(restclient.HttpError); ok {
+		return nil, errors.WithStack(err)
 	}
 
 	if err != nil {
-		return "", errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
 
 	if !isAsync {
-		return resModel.Result, nil
+		return newAuthQueryInstanceWithResult(resModel.Result), nil
 	}
 
-	authResource := rb.AuthorizationId(resModel.Result)
-	var resModel1 ResModel
-	err = client.GetWithModel(authResource, nil, &resModel1)
-	return resModel1.Result, errors.WithStack(err)
+	return newAuthQueryInstance(sm, resModel.Result), nil
 }
 
 func (sm *Manager) GenerateAuthorizationToken(policy string) (string, error) {

@@ -1,33 +1,32 @@
 package main
 
 import (
-	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"log"
-	"os"
 )
 
 func main() {
-	conf, err := odps.NewConfigFromIni(os.Args[1])
+	// Specify the ini file path
+	configPath := "./config.ini"
+	conf, err := odps.NewConfigFromIni(configPath)
+
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
 
 	aliAccount := account.NewAliyunAccount(conf.AccessId, conf.AccessKey)
 	odpsIns := odps.NewOdps(aliAccount, conf.Endpoint)
+	// Set the Default Maxcompute project used By Odps instance
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
 
-	ts := odpsIns.Tables()
-	ts.List(
-		func(t *odps.Table, err error) {
-			if err != nil {
-				log.Fatalf("%+v", err)
-			}
+	project := odpsIns.Project(conf.ProjectName)
+	tables := project.Tables()
+	table := tables.Get("all_types_demo")
 
-			println(fmt.Sprintf("%s, %s, %s", t.Name(), t.Owner(), t.Type()))
-		},
-		odps.TableFilter.Extended(),
-		odps.TableFilter.Type(odps.ManagedTable),
-	)
+	err = table.Delete()
+
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
 }

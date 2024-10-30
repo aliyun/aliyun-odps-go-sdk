@@ -34,12 +34,17 @@ type sessionConfig struct {
 	// CreatePartition for stream upload session only
 	CreatePartition bool
 	// Columns for stream upload session only
-	Columns []string
+	Columns       []string
+	SchemaVersion int
+	// AllowSchemaMismatch for stream upload session only
+	AllowSchemaMismatch bool
 }
 
 func newSessionConfig(opts ...Option) *sessionConfig {
 	cfg := &sessionConfig{
-		Compressor: nil,
+		Compressor:          nil,
+		SchemaVersion:       -1,
+		AllowSchemaMismatch: true,
 	}
 
 	for _, opt := range opts {
@@ -55,7 +60,7 @@ type Option func(cfg *sessionConfig)
 func withPartitionKey(partitionKey string) Option {
 	return func(cfg *sessionConfig) {
 		cfg.PartitionKey = strings.ReplaceAll(partitionKey, "'", "")
-		cfg.PartitionKey = strings.ReplaceAll(cfg.PartitionKey, " ", "")
+		cfg.PartitionKey = strings.ReplaceAll(cfg.PartitionKey, "\"", "")
 	}
 }
 
@@ -119,6 +124,18 @@ func withColumns(c []string) Option {
 	}
 }
 
+func withSchemaVersion(schemaVersion int) Option {
+	return func(cfg *sessionConfig) {
+		cfg.SchemaVersion = schemaVersion
+	}
+}
+
+func withAllowSchemaMismatch(allowSchemaMismatch bool) Option {
+	return func(cfg *sessionConfig) {
+		cfg.AllowSchemaMismatch = allowSchemaMismatch
+	}
+}
+
 var SessionCfg = struct {
 	WithPartitionKey             func(string) Option
 	WithSchemaName               func(string) Option
@@ -131,6 +148,8 @@ var SessionCfg = struct {
 	WithSlotNum                  func(int) Option
 	WithCreatePartition          func() Option
 	WithColumns                  func([]string) Option
+	WithSchemaVersion            func(int) Option
+	WithAllowSchemaMismatch      func(bool) Option
 }{
 	WithPartitionKey:             withPartitionKey,
 	WithSchemaName:               withSchemaName,
@@ -143,4 +162,6 @@ var SessionCfg = struct {
 	WithSlotNum:                  withSlotNum,
 	WithCreatePartition:          withCreatePartition,
 	WithColumns:                  withColumns,
+	WithSchemaVersion:            withSchemaVersion,
+	WithAllowSchemaMismatch:      withAllowSchemaMismatch,
 }

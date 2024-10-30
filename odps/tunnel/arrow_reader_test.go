@@ -19,11 +19,12 @@ package tunnel
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"testing"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/ipc"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"io"
-	"testing"
 )
 
 var structTypeArrowData = []byte{

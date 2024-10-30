@@ -18,14 +18,15 @@ package sqldriver
 
 import (
 	"database/sql/driver"
+	"io"
+	"reflect"
+	"time"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 	"github.com/pkg/errors"
-	"io"
-	"reflect"
-	"time"
 )
 
 type rowsReader struct {
@@ -50,8 +51,8 @@ func (rr *rowsReader) Close() error {
 func (rr *rowsReader) Next(dst []driver.Value) error {
 	record, err := rr.inner.Read()
 
-	if err == io.EOF {
-		return err
+	if errors.Is(err, io.EOF) {
+		return io.EOF
 	}
 
 	if err != nil {
@@ -101,6 +102,8 @@ func (rr *rowsReader) Next(dst []driver.Value) error {
 			dst[i] = time.Time(ri.(data.Date))
 		case datatype.TIMESTAMP:
 			dst[i] = time.Time(ri.(data.Timestamp))
+		case datatype.TIMESTAMP_NTZ:
+			dst[i] = time.Time(ri.(data.TimestampNtz))
 		//case datatype.DECIMAL:
 		//	dst[i] = ri
 		//case datatype.MAP:
@@ -190,6 +193,8 @@ func (rr *rowsReader) ColumnTypeScanType(index int) reflect.Type {
 		return reflect.TypeOf(NullDate{})
 	case datatype.TIMESTAMP:
 		return reflect.TypeOf(NullTimeStamp{})
+	case datatype.TIMESTAMP_NTZ:
+		return reflect.TypeOf(NullTimeStampNtz{})
 	case datatype.DECIMAL:
 		return reflect.TypeOf(Decimal{})
 	case datatype.MAP:
@@ -198,6 +203,8 @@ func (rr *rowsReader) ColumnTypeScanType(index int) reflect.Type {
 		return reflect.TypeOf(Array{})
 	case datatype.STRUCT:
 		return reflect.TypeOf(Struct{})
+	case datatype.JSON:
+		return reflect.TypeOf(Json{})
 	case datatype.VOID:
 		return reflect.TypeOf(data.Null)
 	case datatype.IntervalDayTime:

@@ -37,10 +37,12 @@ func main() {
 		"    date_type             date," +
 		"    datetime_type         datetime," +
 		"    timestamp_type        timestamp," +
+		"    timestamp_ntz_type    timestamp_ntz," +
 		"    boolean_type          boolean," +
 		"    map_type              map<string, bigint>," +
 		"    array_type            array< string>," +
-		"    struct_type           struct<arr:ARRAY<STRING>, name:STRING>" +
+		"    struct_type           struct<arr:ARRAY<STRING>, name:STRING>," +
+		"    json_type             json" +
 		") " +
 		"partitioned by (p1 bigint, p2 string);"
 

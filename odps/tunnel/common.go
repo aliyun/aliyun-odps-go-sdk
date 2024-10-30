@@ -22,6 +22,7 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/pkg/errors"
+	"io"
 	"net/http"
 	"time"
 )
@@ -124,4 +125,34 @@ func (bw *bufWriter) Write(b []byte) (int, error) {
 
 func (bw *bufWriter) Close() error {
 	return nil
+}
+
+// 用于记录tunnel上传时http发送的数据量大小。对于压缩后的数据不能通过
+// write方法返回的n来确定压缩后的数据大小。只能
+// 1. 用bytesRecordWriter包装http conn
+// 2. 用compressor writer包装bytesRecordWriter
+// 3. compressor在压缩数据后，会调用bytesRecordWriter.write
+// 4. bytesRecordWriter.write接收到的数据就是经过compressor压缩后的数据
+// 5. bytesRecordWriter.write记录接收到的数据大小
+type bytesRecordWriter struct {
+	writer io.WriteCloser
+	bytesN int
+}
+
+func newBytesRecordWriter(writer io.WriteCloser) *bytesRecordWriter {
+	return &bytesRecordWriter{writer: writer}
+}
+
+func (brw *bytesRecordWriter) BytesN() int {
+	return brw.bytesN
+}
+
+func (brw *bytesRecordWriter) Write(b []byte) (int, error) {
+	n, err := brw.writer.Write(b)
+	brw.bytesN += n
+	return n, err
+}
+
+func (brw *bytesRecordWriter) Close() error {
+	return brw.writer.Close()
 }

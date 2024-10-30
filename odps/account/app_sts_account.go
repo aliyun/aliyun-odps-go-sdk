@@ -38,8 +38,13 @@ func NewAppStsAccount(accessId, accessKey, stsToken string) *AppStsAccount {
 	}
 }
 
-func (account *AppStsAccount) SignRequest(req *http.Request, endpoint string) {
-	account.AliyunAccount.SignRequest(req, endpoint)
+func (account *AppStsAccount) SignRequest(req *http.Request, endpoint string) error {
+	err := account.AliyunAccount.SignRequest(req, endpoint)
+
+	if err != nil {
+		return err
+	}
+
 	signature := req.Header.Get(common.HttpHeaderAuthorization)
 	signature = base64HmacSha1([]byte(account.accessKey), []byte(signature))
 
@@ -52,4 +57,6 @@ func (account *AppStsAccount) SignRequest(req *http.Request, endpoint string) {
 
 	req.Header.Set(common.HttpHeaderSTSAuthentication, stsAuth)
 	req.Header.Set(common.HttpHeaderSTSToken, account.stsToken)
+
+	return nil
 }

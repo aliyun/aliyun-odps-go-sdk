@@ -19,6 +19,7 @@ package tableschema
 import (
 	"bytes"
 	"fmt"
+  "strconv"
 	"strings"
 	"text/template"
 
@@ -29,26 +30,31 @@ import (
 )
 
 type TableSchema struct {
-	TableName          string
-	Columns            []Column
-	Comment            string
-	CreateTime         common.GMTTime
-	ExtendedLabel      []string
-	HubLifecycle       int
-	IsExternal         bool
-	IsMaterializedView bool
-	IsVirtualView      bool
-	LastDDLTime        common.GMTTime
-	LastModifiedTime   common.GMTTime
-	Lifecycle          int
-	Owner              string
-	PartitionColumns   []Column `json:"PartitionKeys"`
-	RecordNum          int
-	ShardExist         bool
-	ShardInfo          string
-	Size               int
-	TableLabel         string
-	ViewText           string
+	TableName                        string
+	Columns                          []Column
+	Comment                          string
+	CreateTime                       common.GMTTime
+	ExtendedLabel                    []string
+	HubLifecycle                     int
+	IsExternal                       bool
+	IsMaterializedView               bool
+	IsMaterializedViewRewriteEnabled bool
+	IsMaterializedViewOutdated       bool
+
+	IsVirtualView    bool
+	LastDDLTime      common.GMTTime
+	LastModifiedTime common.GMTTime
+	LastAccessTime   common.GMTTime
+	Lifecycle        int
+	Owner            string
+	PartitionColumns []Column `json:"PartitionKeys"`
+	RecordNum        int
+	ShardExist       bool
+	ShardInfo        string
+	Size             int64
+	TableLabel       string
+	ViewText         string
+	ViewExpandedText string
 
 	// extended schema, got by adding "?extended" to table api
 	FileNum      int
@@ -57,24 +63,48 @@ type TableSchema struct {
 	Reserved     string // reserved json string, 字段不固定
 
 	// for external table extended info
-	StorageHandler string
-	Location       string
-	resources      string
+	StorageHandler  string
+	Location        string
+	resources       string
+	SerDeProperties map[string]string
+	Props           string
+	RefreshHistory  string
 
 	// for clustered info
 	ClusterInfo ClusterInfo
 }
 
+type ClusterType = string
+
 // ClusterInfo 聚簇信息
 type ClusterInfo struct {
-	ClusterType string
-	ClusterInfo []string
+	ClusterType ClusterType
+	ClusterCols []string
 	SortCols    []SortColumn
+	BucketNum   int
+}
+
+var CLUSTER_TYPE = struct {
+	Hash  ClusterType
+	Range ClusterType
+}{
+	Hash:  "hash",
+	Range: "range",
+}
+
+type SortOrder string
+
+var SORT_ORDER = struct {
+	ASC  SortOrder
+	DESC SortOrder
+}{
+	ASC:  "asc",
+	DESC: "desc",
 }
 
 type SortColumn struct {
-	name  string
-	order string
+	Name  string
+	Order SortOrder
 }
 
 type SchemaBuilder struct {
@@ -85,6 +115,7 @@ type SchemaBuilder struct {
 	storageHandler   string
 	location         string
 	lifecycle        int
+	clusterInfo      ClusterInfo
 }
 
 type ToArrowSchemaOption struct {
@@ -92,8 +123,8 @@ type ToArrowSchemaOption struct {
 	WithExtensionTimeStamp bool
 }
 
-func NewSchemaBuilder() SchemaBuilder {
-	return SchemaBuilder{}
+func NewSchemaBuilder() *SchemaBuilder {
+	return &SchemaBuilder{}
 }
 
 func (builder *SchemaBuilder) Name(name string) *SchemaBuilder {
@@ -142,6 +173,26 @@ func (builder *SchemaBuilder) Lifecycle(lifecycle int) *SchemaBuilder {
 	return builder
 }
 
+func (builder *SchemaBuilder) ClusterType(clusterType ClusterType) *SchemaBuilder {
+	builder.clusterInfo.ClusterType = clusterType
+	return builder
+}
+
+func (builder *SchemaBuilder) ClusterColumns(clusterCols []string) *SchemaBuilder {
+	builder.clusterInfo.ClusterCols = clusterCols
+	return builder
+}
+
+func (builder *SchemaBuilder) ClusterSortColumns(clusterSortCols []SortColumn) *SchemaBuilder {
+	builder.clusterInfo.SortCols = clusterSortCols
+	return builder
+}
+
+func (builder *SchemaBuilder) ClusterBucketNum(bucketNum int) *SchemaBuilder {
+	builder.clusterInfo.BucketNum = bucketNum
+	return builder
+}
+
 func (builder *SchemaBuilder) Build() TableSchema {
 	return TableSchema{
 		TableName:        builder.name,
@@ -151,10 +202,11 @@ func (builder *SchemaBuilder) Build() TableSchema {
 		Lifecycle:        builder.lifecycle,
 		StorageHandler:   builder.storageHandler,
 		Location:         builder.location,
+		ClusterInfo:      builder.clusterInfo,
 	}
 }
 
-func (schema *TableSchema) ToBaseSQLString(projectName string, createIfNotExists, isExternal bool) (string, error) {
+func (schema *TableSchema) ToBaseSQLString(projectName string, schemaName string, createIfNotExists, isExternal bool) (string, error) {
 	if schema.TableName == "" {
 		return "", errors.New("table name is not set")
 	}
@@ -172,9 +224,10 @@ func (schema *TableSchema) ToBaseSQLString(projectName string, createIfNotExists
 	tplStr :=
 		"{{$columnNum := len .Schema.Columns}}" +
 			"{{$partitionNum := len .Schema.PartitionColumns}}" +
-			"create {{if .IsExternal -}} external {{ end -}} table {{ if .CreateIfNotExists }}if not exists{{ end }} {{.ProjectName}}.`{{.Schema.TableName}}` (\n" +
+			"create {{if .IsExternal -}} external {{ end -}} table {{ if .CreateIfNotExists }}if not exists{{ end }} " +
+			"{{.ProjectName}}.{{if ne .SchemaName \"\"}}`{{.SchemaName}}`.{{end}}`{{.Schema.TableName}}` (\n" +
 			"{{ range $i, $column := .Schema.Columns  }}" +
-			"    `{{.Name}}` {{.Type | print}} {{ if ne .Comment \"\" }}comment '{{.Comment}}'{{ end }}{{ if notLast $i $columnNum  }},{{ end }}\n" +
+			"    `{{.Name}}` {{.Type.Name | print}} {{ if ne .Comment \"\" }}comment '{{.Comment}}'{{ end }}{{ if notLast $i $columnNum  }},{{ end }}\n" +
 			"{{ end }}" +
 			")" +
 			"{{ if ne .Schema.Comment \"\"  }}" +
@@ -195,26 +248,58 @@ func (schema *TableSchema) ToBaseSQLString(projectName string, createIfNotExists
 
 	type Data struct {
 		ProjectName       string
+		SchemaName        string
 		Schema            *TableSchema
 		IsExternal        bool
 		CreateIfNotExists bool
 	}
 
-	data := Data{projectName, schema, isExternal, createIfNotExists}
+	data := Data{projectName, schemaName, schema, isExternal, createIfNotExists}
 
 	var out bytes.Buffer
 	err = tpl.Execute(&out, data)
 	if err != nil {
 		panic(err)
-	} else {
-		return out.String(), nil
 	}
+	return out.String(), nil
 }
 
-func (schema *TableSchema) ToSQLString(projectName string, createIfNotExists bool) (string, error) {
-	baseSql, err := schema.ToBaseSQLString(projectName, createIfNotExists, false)
+func (schema *TableSchema) ToSQLString(projectName string, schemaName string, createIfNotExists bool) (string, error) {
+	baseSql, err := schema.ToBaseSQLString(projectName, schemaName, createIfNotExists, false)
 	if err != nil {
 		return "", errors.WithStack(err)
+	}
+
+	// 添加hash clustering或range clustering
+	clusterInfo := schema.ClusterInfo
+	if len(clusterInfo.ClusterCols) > 0 {
+
+		if clusterInfo.ClusterType == CLUSTER_TYPE.Hash {
+			baseSql += "\nclustered by (" + strings.Join(clusterInfo.ClusterCols, ", ") + ")"
+		}
+
+		if clusterInfo.ClusterType == CLUSTER_TYPE.Range {
+			baseSql += "\nrange clustered by (" + strings.Join(clusterInfo.ClusterCols, ", ") + ")"
+		}
+
+		sortColsNum := len(clusterInfo.SortCols)
+		if sortColsNum > 0 {
+			baseSql += "\nsorted by ("
+
+			for i, sc := range clusterInfo.SortCols {
+				baseSql += sc.Name + " " + string(sc.Order)
+
+				if i < sortColsNum-1 {
+					baseSql += ", "
+				}
+			}
+
+			baseSql += ")"
+		}
+
+		if clusterInfo.BucketNum > 0 {
+			baseSql += "\nINTO " + strconv.Itoa(clusterInfo.BucketNum) + " BUCKETS"
+		}
 	}
 
 	if schema.Lifecycle > 0 {
@@ -228,6 +313,7 @@ func (schema *TableSchema) ToSQLString(projectName string, createIfNotExists boo
 
 func (schema *TableSchema) ToExternalSQLString(
 	projectName string,
+	schemaName string,
 	createIfNotExists bool,
 	serdeProperties map[string]string,
 	jars []string) (string, error) {
@@ -240,7 +326,7 @@ func (schema *TableSchema) ToExternalSQLString(
 		return "", errors.New("TableSchema.Location is not set")
 	}
 
-	baseSql, err := schema.ToBaseSQLString(projectName, createIfNotExists, true)
+	baseSql, err := schema.ToBaseSQLString(projectName, schemaName, createIfNotExists, true)
 
 	if err != nil {
 		return "", errors.WithStack(err)

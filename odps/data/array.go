@@ -17,9 +17,10 @@
 package data
 
 import (
+	"strings"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/pkg/errors"
-	"strings"
 )
 
 type Array struct {
@@ -81,7 +82,11 @@ func (a Array) Sql() string {
 	sb.WriteString("array(")
 
 	for i, d := range a.data {
-		sb.WriteString(d.Sql())
+		if d != nil {
+			sb.WriteString(d.Sql())
+		} else {
+			sb.WriteString("null")
+		}
 
 		if i+1 < n {
 			sb.WriteString(", ")

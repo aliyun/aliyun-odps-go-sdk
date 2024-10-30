@@ -73,9 +73,9 @@ var TypeConvertConfig = struct {
 // *      struct              |  struct
 // *      array               |  list
 // *      map                 |  map
+
 func TypeToArrowType(odpsType datatype.DataType, opt ...TypeConvertOption) (arrow.DataType, error) {
 	cfg := newTypeConvertConfig(opt...)
-
 	switch odpsType.ID() {
 	case datatype.BOOLEAN:
 		return arrow.FixedWidthTypes.Boolean, nil
@@ -99,7 +99,7 @@ func TypeToArrowType(odpsType datatype.DataType, opt ...TypeConvertOption) (arro
 		return arrow.FixedWidthTypes.Date32, nil
 	case datatype.DATETIME:
 		return &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "UTC"}, nil
-	case datatype.TIMESTAMP:
+	case datatype.TIMESTAMP, datatype.TIMESTAMP_NTZ:
 		if cfg.IsExtensionTimeStamp {
 			arrowFields := make([]arrow.Field, 2)
 			//

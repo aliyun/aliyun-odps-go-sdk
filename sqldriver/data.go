@@ -2,9 +2,10 @@ package sqldriver
 
 import (
 	"database/sql"
+	"reflect"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/pkg/errors"
-	"reflect"
 )
 
 type NullBool sql.NullBool
@@ -15,11 +16,14 @@ type NullString sql.NullString
 type NullDate sql.NullTime
 type NullDateTime sql.NullTime
 type NullTimeStamp sql.NullTime
+type NullTimeStampNtz sql.NullTime
 type Binary sql.RawBytes
 type Decimal data.Decimal
 type Map data.Map
 type Array data.Array
 type Struct data.Struct
+type Json data.Json
+
 type NullInt8 struct {
 	Int8  int8
 	Valid bool //Valid is true if Int16 is not NULL
@@ -61,6 +65,10 @@ func (n *NullTimeStamp) Scan(value interface{}) error {
 	return (*sql.NullTime)(n).Scan(value)
 }
 
+func (n *NullTimeStampNtz) Scan(value interface{}) error {
+	return (*sql.NullTime)(n).Scan(value)
+}
+
 func (n *Decimal) Scan(value interface{}) error {
 	return (*data.Decimal)(n).Scan(value)
 }
@@ -75,6 +83,10 @@ func (n *Array) Scan(value interface{}) error {
 
 func (n *Struct) Scan(value interface{}) error {
 	return (*data.Struct)(n).Scan(value)
+}
+
+func (n *Json) Scan(value interface{}) error {
+	return (*data.Json)(n).Scan(value)
 }
 
 func (n *NullInt16) Scan(value interface{}) error {
@@ -189,6 +201,10 @@ func (n NullTimeStamp) IsNull() bool {
 	return !n.Valid
 }
 
+func (n NullTimeStampNtz) IsNull() bool {
+	return !n.Valid
+}
+
 func (n NullBool) IsNull() bool {
 	return !n.Valid
 }
@@ -217,6 +233,10 @@ func (n Struct) IsNull() bool {
 	return !n.Valid
 }
 
+func (n Json) IsNull() bool {
+	return !n.Valid
+}
+
 func (n NullDate) String() string {
 	return data.Date(n.Time).String()
 }
@@ -227,6 +247,10 @@ func (n NullDateTime) String() string {
 
 func (n NullTimeStamp) String() string {
 	return data.Timestamp(n.Time).String()
+}
+
+func (n NullTimeStampNtz) String() string {
+	return data.TimestampNtz(n.Time).String()
 }
 
 func (n Decimal) String() string {
@@ -243,6 +267,10 @@ func (n Array) String() string {
 
 func (n Struct) String() string {
 	return data.Struct(n).String()
+}
+
+func (n Json) String() string {
+	return data.Json(n).String()
 }
 
 func (n Binary) String() string {

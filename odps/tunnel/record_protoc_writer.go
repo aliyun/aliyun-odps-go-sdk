@@ -35,6 +35,7 @@ type RecordProtocWriter struct {
 	recordCrc           Crc32CheckSum
 	crcOfCrc            Crc32CheckSum // crc of record crc
 	count               int64
+	closed              bool
 }
 
 func newRecordProtocWriter(w io.WriteCloser, columns []tableschema.Column, shouldTransformDate bool) RecordProtocWriter {
@@ -46,6 +47,7 @@ func newRecordProtocWriter(w io.WriteCloser, columns []tableschema.Column, shoul
 		shouldTransformDate: shouldTransformDate,
 		recordCrc:           NewCrc32CheckSum(),
 		crcOfCrc:            NewCrc32CheckSum(),
+		closed:              false,
 	}
 }
 
@@ -62,6 +64,24 @@ func newRecordProtocHttpWriter(conn *httpConnection, columns []tableschema.Colum
 }
 
 func (r *RecordProtocWriter) Write(record data.Record) error {
+	err := r.write(record)
+
+	if err != nil {
+		err1 := r.Close()
+
+		if err1 != nil {
+			return errors.WithStack(err1)
+		}
+	}
+
+	return errors.WithStack(err)
+}
+
+func (r *RecordProtocWriter) write(record data.Record) error {
+	// 这里加一个判断会引起不必要的耗时
+	//if r.closed {
+	//	return errors.New("cannot write to a closed RecordProtocWriter")
+	//}
 	recordColNum := record.Len()
 
 	if recordColNum > len(r.columns) {
@@ -121,6 +141,7 @@ func (r *RecordProtocWriter) writeFieldTag(colIndex int, dt datatype.DataType) e
 		wireType = protowire.Fixed32Type
 	case datatype.IntervalDayTime,
 		datatype.TIMESTAMP,
+		datatype.TIMESTAMP_NTZ,
 		datatype.STRING,
 		datatype.CHAR,
 		datatype.VARCHAR,
@@ -128,7 +149,8 @@ func (r *RecordProtocWriter) writeFieldTag(colIndex int, dt datatype.DataType) e
 		datatype.DECIMAL,
 		datatype.ARRAY,
 		datatype.MAP,
-		datatype.STRUCT:
+		datatype.STRUCT,
+		datatype.JSON:
 		wireType = protowire.BytesType
 	default:
 		return errors.Errorf("Invalid data type, %s", dt.Name())
@@ -168,6 +190,10 @@ func (r *RecordProtocWriter) writeField(val data.Data) error {
 	case data.TinyInt:
 		r.recordCrc.Update(int64(val))
 		return errors.WithStack(r.protocWriter.WriteSInt64(int64(val)))
+	case *data.String:
+		b := []byte(string(*val))
+		r.recordCrc.Update(b)
+		return errors.WithStack(r.protocWriter.WriteBytes(b))
 	case data.String:
 		b := []byte(string(val))
 		r.recordCrc.Update(b)
@@ -237,6 +263,20 @@ func (r *RecordProtocWriter) writeField(val data.Data) error {
 		}
 
 		return errors.WithStack(r.protocWriter.WriteSInt32(nanoSeconds))
+	case data.TimestampNtz:
+		t := val.Time()
+		seconds := t.Unix()
+		nanoSeconds := int32(t.Nanosecond())
+
+		r.recordCrc.Update(seconds)
+		r.recordCrc.Update(nanoSeconds)
+
+		err := r.protocWriter.WriteSInt64(seconds)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		return errors.WithStack(r.protocWriter.WriteSInt32(nanoSeconds))
 	case data.Decimal:
 		b := []byte(val.Value())
 		r.recordCrc.Update(b)
@@ -257,6 +297,10 @@ func (r *RecordProtocWriter) writeField(val data.Data) error {
 		return errors.WithStack(r.writeStruct(&val))
 	case *data.Struct:
 		return errors.WithStack(r.writeStruct(val))
+	case data.Json:
+		return errors.WithStack(r.writeJson(&val))
+	case *data.Json:
+		return errors.WithStack(r.writeJson(val))
 	}
 
 	return errors.Errorf("invalid data type %v", val.Type())
@@ -331,7 +375,15 @@ func (r *RecordProtocWriter) writeStruct(val *data.Struct) error {
 	return nil
 }
 
-func (r *RecordProtocWriter) Close() error {
+func (r *RecordProtocWriter) writeJson(val *data.Json) error {
+	jsonStr := val.GetData()
+	b := []byte(jsonStr)
+	r.recordCrc.Update(b)
+
+	return errors.WithStack(r.protocWriter.WriteBytes(b))
+}
+
+func (r *RecordProtocWriter) close() error {
 	err := r.protocWriter.WriteTag(MetaCount, protowire.VarintType)
 	if err != nil {
 		return errors.WithStack(err)
@@ -357,9 +409,32 @@ func (r *RecordProtocWriter) Close() error {
 		return errors.WithStack(err)
 	}
 
-	if r.httpRes != nil {
-		return errors.WithStack(r.httpRes.closeRes())
+	return nil
+}
+
+func (r *RecordProtocWriter) Close() error {
+	if r.closed {
+		return errors.New("try to close a closed RecordProtocWriter")
 	}
 
-	return nil
+	r.closed = true
+	err := r.close()
+
+	if r.httpRes != nil {
+		closeHttpError := errors.WithStack(r.httpRes.closeRes())
+
+		if closeHttpError != nil {
+			return errors.WithStack(closeHttpError)
+		}
+	}
+
+	return errors.WithStack(err)
+}
+
+func (r *RecordProtocWriter) RecordCount() int64 {
+	return r.count
+}
+
+func (r *RecordProtocWriter) BytesCount() int64 {
+	return int64(r.httpRes.bytesCount())
 }

@@ -96,8 +96,8 @@ type Cluster struct {
 	Quotas  []OptionalQuota `xml:"Quotas"`
 }
 
-func NewProject(name string, odpsIns *Odps) Project {
-	return Project{
+func NewProject(name string, odpsIns *Odps) *Project {
+	return &Project{
 		model:   projectModel{Name: name},
 		odpsIns: odpsIns,
 		rb:      common.ResourceBuilder{ProjectName: name},
@@ -174,7 +174,7 @@ func (p *Project) Load() error {
 	p.beLoaded = true
 
 	if err != nil {
-		if httpNoteOk, ok := err.(restclient.HttpNotOk); ok {
+		if httpNoteOk, ok := err.(restclient.HttpError); ok {
 			if httpNoteOk.StatusCode == 404 {
 				p.exists = false
 			}
@@ -371,6 +371,14 @@ func (p *Project) Update(properties map[string]string) error {
 	resource := p.rb.Project()
 	client := p.RestClient()
 	return client.DoXmlWithModel(common.HttpMethod.PutMethod, resource, nil, &bodyModel, nil)
+}
+
+func (p *Project) Schemas() *Schemas {
+	return NewSchemas(p.odpsIns, p.Name())
+}
+
+func (p *Project) Tables() *Tables {
+	return NewTables(p.odpsIns, p.Name(), "")
 }
 
 func (status *ProjectStatus) FromStr(s string) {

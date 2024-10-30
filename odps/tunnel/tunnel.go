@@ -53,10 +53,11 @@ type Tunnel struct {
 	quotaName            string
 	httpTimeout          time.Duration
 	tcpConnectionTimeout time.Duration
+	odpsUserAgent        string
 }
 
 // Once the tunnel endpoint is set, it cannot be modified anymore.
-func NewTunnel(odpsIns *odps.Odps, endpoint ...string) Tunnel {
+func NewTunnel(odpsIns *odps.Odps, endpoint ...string) *Tunnel {
 	tunnel := Tunnel{
 		odpsIns: odpsIns,
 	}
@@ -64,13 +65,13 @@ func NewTunnel(odpsIns *odps.Odps, endpoint ...string) Tunnel {
 		tunnel.endpoint = endpoint[0]
 	}
 
-	return tunnel
+	return &tunnel
 }
 
-func NewTunnelFromProject(project odps.Project) (Tunnel, error) {
+func NewTunnelFromProject(project *odps.Project) (*Tunnel, error) {
 	endpoint, err := project.GetTunnelEndpoint()
 	if err != nil {
-		return Tunnel{}, errors.WithStack(err)
+		return &Tunnel{}, errors.WithStack(err)
 	}
 
 	tunnel := Tunnel{
@@ -78,7 +79,7 @@ func NewTunnelFromProject(project odps.Project) (Tunnel, error) {
 		endpoint: endpoint,
 	}
 
-	return tunnel, nil
+	return &tunnel, nil
 }
 
 func (t *Tunnel) HttpTimeout() time.Duration {
@@ -99,6 +100,14 @@ func (t *Tunnel) TcpConnectionTimeout() time.Duration {
 
 func (t *Tunnel) SetTcpConnectionTimeout(tcpConnectionTimeout time.Duration) {
 	t.tcpConnectionTimeout = tcpConnectionTimeout
+}
+
+func (t *Tunnel) OdpsUserAgent() string {
+	return t.odpsUserAgent
+}
+
+func (t *Tunnel) SetOdpsUserAgent(odpsUserAgent string) {
+	t.odpsUserAgent = odpsUserAgent
 }
 
 func (t *Tunnel) CreateUploadSession(projectName, tableName string, opts ...Option) (*UploadSession, error) {
@@ -176,6 +185,7 @@ func (t *Tunnel) getRestClient(projectName string) (restclient.RestClient, error
 	client := restclient.NewOdpsRestClient(t.odpsIns.Account(), t.endpoint)
 	client.HttpTimeout = t.HttpTimeout()
 	client.TcpConnectionTimeout = t.TcpConnectionTimeout()
+	client.SetUserAgent(t.odpsUserAgent)
 
 	return client, nil
 }

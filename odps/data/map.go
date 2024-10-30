@@ -64,7 +64,11 @@ func (m Map) Sql() string {
 	for key, value := range m.data {
 		sb.WriteString(key.Sql())
 		sb.WriteString(", ")
-		sb.WriteString(value.Sql())
+		if value != nil {
+			sb.WriteString(value.Sql())
+		} else {
+			sb.WriteString("null")
+		}
 
 		i += 1
 		if i < n {
@@ -82,12 +86,17 @@ func (m *Map) Set(keyI interface{}, valueI interface{}) error {
 		return errors.WithStack(err)
 	}
 
-	value, err := TryConvertGoToOdpsData(valueI)
-	if err != nil {
-		return errors.WithStack(err)
+	if valueI != nil {
+		value, err := TryConvertGoToOdpsData(valueI)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		m.data[key] = value
+	} else {
+		m.data[key] = nil
 	}
 
-	m.data[key] = value
 	return nil
 }
 

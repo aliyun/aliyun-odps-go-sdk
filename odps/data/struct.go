@@ -17,11 +17,12 @@
 package data
 
 import (
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
-	"github.com/pkg/errors"
 	"reflect"
 	"strings"
 	"sync"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+	"github.com/pkg/errors"
 )
 
 type StructField struct {
@@ -94,7 +95,12 @@ func (s Struct) Sql() string {
 		sb.WriteString(field.Name)
 		sb.WriteString("'")
 		sb.WriteString(", ")
-		sb.WriteString(field.Value.Sql())
+
+		if field.Value != nil {
+			sb.WriteString(field.Value.Sql())
+		} else {
+			sb.WriteString("null")
+		}
 
 		if i < n {
 			sb.WriteString(", ")

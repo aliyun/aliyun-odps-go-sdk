@@ -53,7 +53,7 @@ func (r *RecordProtocReader) HttpRes() *http.Response {
 }
 
 func (r *RecordProtocReader) Read() (data.Record, error) {
-	record := data.NewRecord(len(r.columns))
+	record := make([]data.Data, len(r.columns))
 
 LOOP:
 	for {
@@ -98,7 +98,7 @@ LOOP:
 			crcOfCrc, err := r.protocReader.ReadUInt32()
 			if err == nil {
 				_, err = r.protocReader.inner.Read([]byte{'0'})
-				if err != io.EOF && err != io.ErrUnexpectedEOF {
+				if (!errors.Is(err, io.EOF)) && (!errors.Is(err, io.ErrUnexpectedEOF)) {
 					return nil, errors.New("expect end of stream, but not")
 				}
 			}
@@ -126,18 +126,20 @@ LOOP:
 	return record, nil
 }
 
-func (r *RecordProtocReader) Iterator(f func(record data.Record, err error)) {
+func (r *RecordProtocReader) Iterator(f func(record data.Record, err error)) error {
 	for {
 		record, err := r.Read()
+
 		isEOF := errors.Is(err, io.EOF)
 		if isEOF {
-			return
+			return nil
 		}
-		if err != nil {
-			f(record, err)
-			return
-		}
+
 		f(record, err)
+
+		if err != nil {
+			return err
+		}
 	}
 }
 
@@ -293,6 +295,18 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 		r.recordCrc.Update(nanoSeconds)
 
 		fieldValue = data.Timestamp(time.Unix(seconds, int64(nanoSeconds)))
+	case datatype.TIMESTAMP_NTZ:
+		seconds, err := r.protocReader.ReadSInt64()
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		nanoSeconds, err := r.protocReader.ReadSInt32()
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		r.recordCrc.Update(seconds)
+		r.recordCrc.Update(nanoSeconds)
+		fieldValue = data.TimestampNtz(time.Unix(seconds, int64(nanoSeconds)).UTC())
 	case datatype.DECIMAL:
 		v, err := r.protocReader.ReadBytes()
 		if err != nil {
@@ -319,6 +333,18 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 		fieldValue, err = r.readStruct(dt.(datatype.StructType))
 		if err != nil {
 			return nil, errors.WithStack(err)
+		}
+	case datatype.JSON:
+		v, err := r.protocReader.ReadBytes()
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+
+		r.recordCrc.Update(v)
+
+		fieldValue = &data.Json{
+			Data:  string(v),
+			Valid: true,
 		}
 	}
 
