@@ -32,7 +32,6 @@ func main() {
 	//	stored by 'com.aliyun.odps.udf.example.text.TextStorageHandler'
 	//	with serdeproperties('odps.text.option.delimiter'='|', 'my.own.option'='value')
 	//	location 'MOCKoss://full/uri/path/to/oss/directory/'
-	//	using 'odps-udf-example.jar, another.jar'
 	//	lifecycle 10;
 
 	tableName := "testCreateExternalTableWithUserDefinedStorageHandler"
@@ -72,12 +71,6 @@ func main() {
 
 	schema := sb.Build()
 
-	// 定义 jars 切片
-	jars := []string{
-		"odps-udf-example.jar",
-		"another.jar",
-	}
-
 	// 定义 properties 映射
 	serDeProperties := map[string]string{
 		"odps.text.option.delimiter": "|",
@@ -93,10 +86,10 @@ func main() {
 		"odps.compiler.output.format":   "lot,pot",
 	}
 
-	sql, err := schema.ToExternalSQLString(odpsIns.DefaultProjectName(), "", true, serDeProperties, jars)
+	sql, err := schema.ToExternalSQLString(odpsIns.DefaultProjectName(), "", true, serDeProperties, nil)
 	print(sql)
 
-	err = tablesIns.CreateExternal(schema, true, serDeProperties, jars, hints, nil)
+	err = tablesIns.CreateExternal(schema, true, serDeProperties, nil, hints, nil)
 
 	if err != nil {
 		log.Fatalf("%+v", err)
