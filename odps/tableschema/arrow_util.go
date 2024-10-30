@@ -91,7 +91,7 @@ func TypeToArrowType(odpsType datatype.DataType, opt ...TypeConvertOption) (arro
 		return arrow.PrimitiveTypes.Float32, nil
 	case datatype.DOUBLE:
 		return arrow.PrimitiveTypes.Float64, nil
-	case datatype.CHAR, datatype.VARCHAR, datatype.STRING:
+	case datatype.CHAR, datatype.VARCHAR, datatype.STRING, datatype.JSON:
 		return arrow.BinaryTypes.String, nil
 	case datatype.BINARY:
 		return arrow.BinaryTypes.Binary, nil
