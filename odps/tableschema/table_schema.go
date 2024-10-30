@@ -403,6 +403,13 @@ func (schema *TableSchema) ToArrowSchema(opt ...ToArrowSchemaOption) *arrow.Sche
 				[]string{"odps_timestamp", "odps_timestamp"},
 			)
 		}
+		if column.Type.ID() == datatype.TIMESTAMP_NTZ && usingExtensionTimeStamp {
+			arrowType, _ = TypeToArrowType(column.Type, withExtensionTimeStamp())
+			metadata = arrow.NewMetadata(
+				[]string{"ARROW:extension:metadata", "ARROW:extension:name"},
+				[]string{"odps_timestamp_ntz", "odps_timestamp_ntz"},
+			)
+		}
 		fields[i] = arrow.Field{
 			Name:     column.Name,
 			Type:     arrowType,
@@ -420,6 +427,13 @@ func (schema *TableSchema) ToArrowSchema(opt ...ToArrowSchemaOption) *arrow.Sche
 				metadata = arrow.NewMetadata(
 					[]string{"ARROW:extension:metadata", "ARROW:extension:name"},
 					[]string{"odps_timestamp", "odps_timestamp"},
+				)
+			}
+			if column.Type.ID() == datatype.TIMESTAMP_NTZ && usingExtensionTimeStamp {
+				arrowType, _ = TypeToArrowType(column.Type, withExtensionTimeStamp())
+				metadata = arrow.NewMetadata(
+					[]string{"ARROW:extension:metadata", "ARROW:extension:name"},
+					[]string{"odps_timestamp_ntz", "odps_timestamp_ntz"},
 				)
 			}
 			fields = append(fields, arrow.Field{
