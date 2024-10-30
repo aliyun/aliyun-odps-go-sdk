@@ -102,6 +102,8 @@ func (rr *rowsReader) Next(dst []driver.Value) error {
 			dst[i] = time.Time(ri.(data.Date))
 		case datatype.TIMESTAMP:
 			dst[i] = time.Time(ri.(data.Timestamp))
+		case datatype.TIMESTAMP_NTZ:
+			dst[i] = time.Time(ri.(data.TimestampNtz))
 		//case datatype.DECIMAL:
 		//	dst[i] = ri
 		//case datatype.MAP:
@@ -191,6 +193,8 @@ func (rr *rowsReader) ColumnTypeScanType(index int) reflect.Type {
 		return reflect.TypeOf(NullDate{})
 	case datatype.TIMESTAMP:
 		return reflect.TypeOf(NullTimeStamp{})
+	case datatype.TIMESTAMP_NTZ:
+		return reflect.TypeOf(NullTimeStampNtz{})
 	case datatype.DECIMAL:
 		return reflect.TypeOf(Decimal{})
 	case datatype.MAP:

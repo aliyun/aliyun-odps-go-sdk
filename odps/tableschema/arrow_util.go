@@ -23,28 +23,28 @@ import (
 )
 
 // TypeToArrowType convert odps field type to arrow field type
-//*        Storage Type      |  Arrow Type
-//*    ----------------------+---------------------
-//*      boolean             |  boolean
-//*      tinyint             |  int8
-//*      smallint            |  int16
-//*      int                 |  int32
-//*      bigint              |  int64
-//*      float               |  float32
-//*      double              |  float64
-//*      char                |  utf8
-//*      varchar             |  utf8
-//*      string              |  utf8
-//*      binary              |  binary
-//*      date                |  date32
-//*      datetime            |  timestamp(nano)
-//*      timestamp           |  timestamp(nano) 【注：精度选择功能开发中】
-//*      interval_day_time   |  day_time_interval
-//*      interval_year_month |  month_interval
-//*      decimal             |  decimal
-//*      struct              |  struct
-//*      array               |  list
-//*      map                 |  map
+// *        Storage Type      |  Arrow Type
+// *    ----------------------+---------------------
+// *      boolean             |  boolean
+// *      tinyint             |  int8
+// *      smallint            |  int16
+// *      int                 |  int32
+// *      bigint              |  int64
+// *      float               |  float32
+// *      double              |  float64
+// *      char                |  utf8
+// *      varchar             |  utf8
+// *      string              |  utf8
+// *      binary              |  binary
+// *      date                |  date32
+// *      datetime            |  timestamp(nano)
+// *      timestamp           |  timestamp(nano) 【注：精度选择功能开发中】
+// *      interval_day_time   |  day_time_interval
+// *      interval_year_month |  month_interval
+// *      decimal             |  decimal
+// *      struct              |  struct
+// *      array               |  list
+// *      map                 |  map
 func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error) {
 	switch odpsType.ID() {
 	case datatype.BOOLEAN:
@@ -71,6 +71,8 @@ func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error) {
 		return arrow.FixedWidthTypes.Timestamp_ns, nil
 		//return &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "UTC"}, nil
 	case datatype.TIMESTAMP:
+		return arrow.FixedWidthTypes.Timestamp_ns, nil
+	case datatype.TIMESTAMP_NTZ:
 		return arrow.FixedWidthTypes.Timestamp_ns, nil
 		//return &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "UTC"}, nil
 	case datatype.IntervalDayTime:

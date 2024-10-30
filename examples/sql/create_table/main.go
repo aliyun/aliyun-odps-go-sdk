@@ -37,6 +37,7 @@ func main() {
 		"    date_type             date," +
 		"    datetime_type         datetime," +
 		"    timestamp_type        timestamp," +
+		"    timestamp_ntz_type    timestamp_ntz," +
 		"    boolean_type          boolean," +
 		"    map_type              map<string, bigint>," +
 		"    array_type            array< string>," +
