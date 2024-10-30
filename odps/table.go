@@ -308,7 +308,7 @@ func calculateMaxLabel(labels []string) string {
 func (t *Table) Exists() (bool, error) {
 	err := t.Load()
 
-	var httpErr restclient.HttpNotOk
+	var httpErr restclient.HttpError
 	if errors.As(err, &httpErr) {
 		if httpErr.Status == "404 Not Found" {
 			return false, nil
@@ -378,12 +378,18 @@ func (t *Table) Delete() error {
 	sqlBuilder.WriteString(" if exists")
 
 	sqlBuilder.WriteRune(' ')
-	sqlBuilder.WriteString(t.ProjectName())
-	sqlBuilder.WriteRune('.')
-	sqlBuilder.WriteString(t.Name())
+
+	hints := make(map[string]string)
+	if t.SchemaName() == "" {
+		hints["odps.namespace.schema"] = "false"
+		sqlBuilder.WriteString(fmt.Sprintf("%s.%s", t.ProjectName(), t.Name()))
+	} else {
+		hints["odps.namespace.schema"] = "true"
+		sqlBuilder.WriteString(fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name()))
+	}
 	sqlBuilder.WriteString(";")
 
-	sqlTask := NewSqlTask("SQLDropTableTask", sqlBuilder.String(), nil)
+	sqlTask := NewSqlTask("SQLDropTableTask", sqlBuilder.String(), hints)
 	instances := NewInstances(t.odpsIns, t.ProjectName())
 	i, err := instances.CreateTask(t.ProjectName(), &sqlTask)
 	if err != nil {

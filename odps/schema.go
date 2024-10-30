@@ -45,7 +45,7 @@ func (s *Schema) Tables() *Tables {
 func (s *Schema) Exists() (bool, error) {
 	err := s.Load()
 
-	var httpErr restclient.HttpNotOk
+	var httpErr restclient.HttpError
 	if errors.As(err, &httpErr) {
 		if httpErr.Status == "404 Not Found" {
 			return false, nil

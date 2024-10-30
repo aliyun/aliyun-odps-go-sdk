@@ -150,6 +150,19 @@ func (client *RestClient) NewRequestWithUrlQuery(method, resource string, body i
 	return req, nil
 }
 
+func (client *RestClient) NewRequestWithParamsAndHeaders(method, resource string, body io.Reader, params url.Values, headers map[string]string) (*http.Request, error) {
+	req, err := client.NewRequestWithUrlQuery(method, resource, body, params)
+	if err != nil {
+		return nil, err
+	}
+	if headers != nil {
+		for name, value := range headers {
+			req.Header.Set(name, value)
+		}
+	}
+	return req, nil
+}
+
 func (client *RestClient) Do(req *http.Request) (*http.Response, error) {
 	req.Header.Set(common.HttpHeaderUserAgent, common.UserAgentValue)
 	req.Header.Set(common.HttpHeaderXOdpsUserAgent, client.UserAgent())

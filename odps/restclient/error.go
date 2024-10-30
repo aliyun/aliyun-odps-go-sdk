@@ -17,19 +17,30 @@
 package restclient
 
 import (
+	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 )
 
-type HttpNotOk struct {
-	Status     string
-	StatusCode int
-	RequestId  string
-	Body       []byte
+type HttpError struct {
+	Status       string
+	StatusCode   int
+	RequestId    string
+	Body         []byte
+	ErrorMessage *ErrorMessage
+	Response     *http.Response
 }
 
-func (e HttpNotOk) Error() string {
+type ErrorMessage struct {
+	ErrorCode string `json:"Code" xml:"Code"`
+	Message   string `json:"Message" xml:"Message"`
+	RequestId string `json:"RequestId" xml:"RequestId"`
+	HostId    string `json:"HostId" xml:"HostId"`
+}
+
+func (e HttpError) Error() string {
 	if e.RequestId == "" {
 		return fmt.Sprintf("%s\n%s", e.Status, e.Body)
 	}
@@ -37,7 +48,7 @@ func (e HttpNotOk) Error() string {
 	return fmt.Sprintf("requestId=%s\nstatus=%s\n%s", e.RequestId, e.Status, e.Body)
 }
 
-func NewHttpNotOk(res *http.Response) HttpNotOk {
+func NewHttpNotOk(res *http.Response) HttpError {
 	var body []byte
 
 	if res.Body != nil {
@@ -45,10 +56,33 @@ func NewHttpNotOk(res *http.Response) HttpNotOk {
 		_ = res.Body.Close()
 	}
 
-	return HttpNotOk{
-		Status:     res.Status,
-		StatusCode: res.StatusCode,
-		RequestId:  res.Header.Get("x-odps-request-id"),
-		Body:       body,
+	return HttpError{
+		Status:       res.Status,
+		StatusCode:   res.StatusCode,
+		RequestId:    res.Header.Get("x-odps-request-id"),
+		Body:         body,
+		ErrorMessage: NewErrorMessage(body),
+		Response:     res,
 	}
+}
+
+func NewErrorMessage(body []byte) *ErrorMessage {
+	if body == nil {
+		return nil
+	}
+
+	var errorMessage ErrorMessage
+
+	// 尝试解析为 XML
+	if err := xml.Unmarshal(body, &errorMessage); err == nil {
+		return &errorMessage
+	}
+
+	// 尝试解析为 JSON
+	if err := json.Unmarshal(body, &errorMessage); err == nil {
+		return &errorMessage
+	}
+
+	// 如果都失败了，返回 nil
+	return nil
 }
