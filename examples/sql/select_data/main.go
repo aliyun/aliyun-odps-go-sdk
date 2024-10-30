@@ -47,6 +47,7 @@ func main() {
 	var date sqldriver.NullDate           // if the column is not nullable, odps/data.Date is ok too
 	var dateTime sqldriver.NullDateTime   // if the column is not nullable, odps/data.Datetime is ok too
 	var timestamp sqldriver.NullTimeStamp // if the column is not nullable, odps/data.TimeStamp is ok too
+	var timestampNtz sqldriver.NullTimeStampNtz // if the column is not nullable, odps/data.TimeStamp is ok too
 	var boolData sqldriver.NullBool       // if the column is not nullable, bool is ok too
 	var mapData sqldriver.Map
 	var arrayData sqldriver.Array
@@ -56,7 +57,7 @@ func main() {
 
 	record := []interface{}{
 		&tinyInt, &smallInt, &intData, &bigInt, &binaryData, &floatData, &doubleData, &decimal, &varchar,
-		&char, &stringData, &date, &dateTime, &timestamp, &boolData, &mapData, &arrayData, &structType,
+		&char, &stringData, &date, &dateTime, &timestamp, &timestampNtz, &boolData, &mapData, &arrayData, &structType,
 		&p1, &p2,
 	}
 

@@ -105,6 +105,7 @@ func (ts *Tables) BatchLoadTables(tableNames []string) ([]*Table, error) {
 		Tables  []struct {
 			Project string
 			Name    string
+			Schema  string
 		} `xml:"Table"`
 	}
 
@@ -113,7 +114,8 @@ func (ts *Tables) BatchLoadTables(tableNames []string) ([]*Table, error) {
 		postBodyModel.Tables = append(postBodyModel.Tables, struct {
 			Project string
 			Name    string
-		}{Project: ts.projectName, Name: tableName})
+			Schema  string
+		}{Project: ts.projectName, Name: tableName, Schema: ts.schemaName})
 	}
 
 	type ResModel struct {
@@ -139,9 +141,12 @@ func (ts *Tables) BatchLoadTables(tableNames []string) ([]*Table, error) {
 
 	ret := make([]*Table, len(resModel.Table))
 
-	for i, tableModel := range resModel.Table {
-		table := NewTable(ts.odpsIns, ts.projectName, ts.schemaName, tableModel.Name)
-		table.model = tableModel
+	for i, _ := range resModel.Table {
+		tableModel := &resModel.Table[i]
+		table, err := newTableWithModel(ts.odpsIns, tableModel)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
 		ret[i] = table
 	}
 

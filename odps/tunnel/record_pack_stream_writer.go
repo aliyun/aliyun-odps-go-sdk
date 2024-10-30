@@ -19,6 +19,7 @@ package tunnel
 import (
 	"bytes"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/pkg/errors"
 	"time"
 )
@@ -45,13 +46,33 @@ func (rsw *RecordPackStreamWriter) Append(record data.Record) error {
 	if rsw.flushing {
 		return errors.New("There's an unsuccessful flush called, you should call flush to retry or call reset to drop the data")
 	}
-
+	if !rsw.session.allowSchemaMismatch {
+		err := checkIfRecordSchemaMatchSessionSchema(&record, rsw.session.schema.Columns)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+	}
 	err := rsw.protocWriter.Write(record)
 	if err == nil {
 		rsw.recordCount += 1
 	}
 
 	return errors.WithStack(err)
+}
+
+func checkIfRecordSchemaMatchSessionSchema(record *data.Record, schema []tableschema.Column) error {
+	if record.Len() != len(schema) {
+		return errors.Errorf("Record schema not match session schema, record len: %d, session schema len: %d",
+			record.Len(), len(schema))
+	}
+	for index, recordData := range *record {
+		colType := schema[index].Type.ID()
+		if recordData != nil && recordData.Type().ID() != colType {
+			return errors.Errorf("Record schema not match session schema, index: %d, record type: %s, session schema type: %s",
+				index, recordData.Type().Name(), schema[index].Type.Name())
+		}
+	}
+	return nil
 }
 
 // Flush send all buffered data to server. return (traceId, recordCount, recordBytes, error)
@@ -78,7 +99,7 @@ func (rsw *RecordPackStreamWriter) Flush(timeout_ ...time.Duration) (string, int
 
 	reqId, bytesSend, err := rsw.session.flushStream(rsw, timeout)
 	if err != nil {
-		return "", 0, 0, errors.WithStack(err)
+		return "", 0, 0, err
 	}
 
 	recordCount := rsw.recordCount

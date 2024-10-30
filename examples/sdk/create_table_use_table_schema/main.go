@@ -89,6 +89,11 @@ func main() {
 	}
 
 	c15 := tableschema.Column{
+		Name: "timestamp_ntz_type",
+		Type: datatype.TimestampNtzType,
+	}
+
+	c16 := tableschema.Column{
 		Name: "boolean_type",
 		Type: datatype.BooleanType,
 	}
@@ -101,22 +106,22 @@ func main() {
 	)
 	jsonType := datatype.NewJsonType()
 
-	c16 := tableschema.Column{
+	c17 := tableschema.Column{
 		Name: "map_type",
 		Type: mapType,
 	}
 
-	c17 := tableschema.Column{
+	c18 := tableschema.Column{
 		Name: "array_type",
 		Type: arrayType,
 	}
 
-	c18 := tableschema.Column{
+	c19 := tableschema.Column{
 		Name: "struct_type",
 		Type: structType,
 	}
 
-	c19 := tableschema.Column{
+	c20 := tableschema.Column{
 		Name: "json_type",
 		Type: jsonType,
 	}
@@ -133,7 +138,7 @@ func main() {
 
 	schemaBuilder := tableschema.NewSchemaBuilder()
 	schemaBuilder.Name("all_types_demo").
-		Columns(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19).
+		Columns(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19, c20).
 		PartitionColumns(p1, p2).
 		Lifecycle(2) // 单位: 天
 

@@ -40,17 +40,18 @@ type StreamUploadSession struct {
 	// positive case, and "region='hangzhou'" is a negative case. But the partition keys like "region='hangzhou'" are more
 	// common, to avoid the users use the error format, the partitionKey of UploadSession is private, it can be set when
 	// creating a session or using SetPartitionKey.
-	partitionKey    string
-	Compressor      Compressor
-	RestClient      restclient.RestClient
-	Columns         []string
-	P2PMode         bool
-	CreatePartition bool
-	QuotaName       string
-	SlotNum         int
-	slotSelector    slotSelector
-	schema          tableschema.TableSchema
-	schemaVersion   int
+	partitionKey        string
+	Compressor          Compressor
+	RestClient          restclient.RestClient
+	Columns             []string
+	P2PMode             bool
+	CreatePartition     bool
+	QuotaName           string
+	SlotNum             int
+	slotSelector        slotSelector
+	schema              tableschema.TableSchema
+	schemaVersion       int
+	allowSchemaMismatch bool
 }
 
 func (su *StreamUploadSession) ResourceUrl() string {
@@ -61,12 +62,13 @@ func (su *StreamUploadSession) ResourceUrl() string {
 // CreateStreamUploadSession create a new stream upload session before uploading data。
 // The opts can be one or more of:
 // SessionCfg.WithPartitionKey
-// SessionCfg.WithSchemaName, it doesn't work now
+// SessionCfg.WithSchemaName
 // SessionCfg.WithDefaultDeflateCompressor, using deflate compressor with default level
 // SessionCfg.WithDeflateCompressor, using deflate compressor with specific level
 // SessionCfg.WithSnappyFramedCompressor
 // SessionCfg.SlotNum, 暂不对外开放
 // SessionCfg.CreatePartition, create partition if the partition specified by WithPartitionKey does not exist
+// SessionCfg.AllowSchemaMismatch, Whether to allow the schema of uploaded data to be inconsistent with the table schema. The default value is true. When set to false, the Append operation will check the type of uploaded data, and the server will throw a specific exception during Flush.
 // SessionCfg.Columns, TODO 作用待明确
 func CreateStreamUploadSession(
 	projectName, tableName string,
@@ -76,16 +78,17 @@ func CreateStreamUploadSession(
 	cfg := newSessionConfig(opts...)
 
 	session := StreamUploadSession{
-		ProjectName:     projectName,
-		SchemaName:      cfg.SchemaName,
-		TableName:       tableName,
-		partitionKey:    cfg.PartitionKey,
-		Compressor:      cfg.Compressor,
-		RestClient:      restClient,
-		Columns:         cfg.Columns,
-		CreatePartition: cfg.CreatePartition,
-		SlotNum:         cfg.SlotNum,
-		schemaVersion:   cfg.SchemaVersion,
+		ProjectName:         projectName,
+		SchemaName:          cfg.SchemaName,
+		TableName:           tableName,
+		partitionKey:        cfg.PartitionKey,
+		Compressor:          cfg.Compressor,
+		RestClient:          restClient,
+		Columns:             cfg.Columns,
+		CreatePartition:     cfg.CreatePartition,
+		SlotNum:             cfg.SlotNum,
+		schemaVersion:       cfg.SchemaVersion,
+		allowSchemaMismatch: cfg.AllowSchemaMismatch,
 	}
 
 	req, err := session.newInitiationRequest()
@@ -106,8 +109,8 @@ func (su *StreamUploadSession) OpenRecordPackWriter() *RecordPackStreamWriter {
 	return &w
 }
 
-func (su *StreamUploadSession) Schema() tableschema.TableSchema {
-	return su.schema
+func (su *StreamUploadSession) Schema() *tableschema.TableSchema {
+	return &su.schema
 }
 
 func (su *StreamUploadSession) SchemaVersion() int {
@@ -129,49 +132,48 @@ func (su *StreamUploadSession) newInitiationRequest() (*http.Request, error) {
 		queryArgs.Set("zorder_columns", strings.Join(su.Columns, ","))
 	}
 
-	if su.SlotNum > 0 {
-		queryArgs.Set("odps-tunnel-slot-num", strconv.Itoa(su.SlotNum))
-	}
-
 	if su.schemaVersion >= 0 {
 		queryArgs.Set("schema_version", strconv.Itoa(su.schemaVersion))
 	}
-
-	queryArgs.Set("check_latest_schema", "true")
 
 	if su.QuotaName != "" {
 		queryArgs.Set("quotaName", su.QuotaName)
 	}
 
+	headers := getCommonHeaders()
+	if su.SlotNum > 0 {
+		headers["odps-tunnel-slot-num"] = strconv.Itoa(su.SlotNum)
+	}
+
 	resource := su.ResourceUrl()
-	req, err := su.RestClient.NewRequestWithUrlQuery(common.HttpMethod.PostMethod, resource, nil, queryArgs)
+	req, err := su.RestClient.NewRequestWithParamsAndHeaders(common.HttpMethod.PostMethod, resource, nil, queryArgs, headers)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-
-	addCommonSessionHttpHeader(req.Header)
 	return req, nil
 }
 
 func (su *StreamUploadSession) newReLoadRequest() (*http.Request, error) {
 	queryArgs := make(url.Values, 4)
 	queryArgs.Set("uploadid", su.id)
+	if su.schemaVersion >= 0 {
+		queryArgs.Set("schema_version", strconv.Itoa(su.schemaVersion))
+	}
+
 	if su.partitionKey != "" {
 		queryArgs.Set("partition", su.partitionKey)
 	}
-	queryArgs.Set("schema_version", strconv.Itoa(su.schemaVersion))
-
 	if su.QuotaName != "" {
 		queryArgs.Set("quotaName", su.QuotaName)
 	}
 
+	headers := getCommonHeaders()
+
 	resource := su.ResourceUrl()
-	req, err := su.RestClient.NewRequestWithUrlQuery(common.HttpMethod.PostMethod, resource, nil, queryArgs)
+	req, err := su.RestClient.NewRequestWithParamsAndHeaders(common.HttpMethod.PostMethod, resource, nil, queryArgs, headers)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-
-	addCommonSessionHttpHeader(req.Header)
 	return req, nil
 }
 
@@ -179,11 +181,11 @@ func (su *StreamUploadSession) loadInformation(req *http.Request, inited bool) e
 	type ResModel struct {
 		CompressMode  string          `json:"compress_mode"`
 		FileFormat    string          `json:"file_format"`
-		Schema        schemaResModel  `json:"Schema"`
+		Schema        schemaResModel  `json:"schema"`
 		SessionName   string          `json:"session_name"`
 		Slots         [][]interface{} `json:"slots"`
 		Status        string          `json:"status"`
-		QuotaName     string          `json:"QuotaName"`
+		QuotaName     string          `json:"quota_name"`
 		SchemaVersion int             `json:"schema_version"`
 	}
 
@@ -205,7 +207,7 @@ func (su *StreamUploadSession) loadInformation(req *http.Request, inited bool) e
 	}
 
 	if resModel.Status == "init" {
-		return errors.Errorf("Session is initiating. RequestId:%s Session name:%s", requestId, resModel.SessionName)
+		return errors.Errorf("Session is initiating. RequestId:%s Session ID:%s", requestId, resModel.SessionName)
 	}
 
 	if inited {
@@ -241,7 +243,9 @@ func (su *StreamUploadSession) flushStream(streamWriter *RecordPackStreamWriter,
 	var reader io.ReadCloser
 	var writer io.WriteCloser
 	reader, writer = io.Pipe()
-	conn, err := su.newUploadConnection(reader, writer, streamWriter.DataSize(), streamWriter.RecordCount(), timeout)
+	currentSlot := su.slotSelector.NextSlot()
+
+	conn, err := su.newUploadConnection(reader, writer, currentSlot, streamWriter.DataSize(), streamWriter.RecordCount(), timeout)
 	if err != nil {
 		return "", 0, errors.WithStack(err)
 	}
@@ -280,16 +284,18 @@ func (su *StreamUploadSession) flushStream(streamWriter *RecordPackStreamWriter,
 	}
 
 	res := rOrE.res
-	err = res.Body.Close()
-	if err != nil {
-		return "", 0, errors.WithStack(err)
-	}
 
 	if res.StatusCode/100 != 2 {
 		return "", 0, errors.WithStack(restclient.NewHttpNotOk(res))
 	}
 
+	err = res.Body.Close()
+	if err != nil {
+		return "", 0, errors.WithStack(err)
+	}
+
 	slotNumStr := res.Header.Get(common.HttpHeaderOdpsSlotNum)
+	newSlotServer := res.Header.Get(common.HttpHeaderRoutedServer)
 	newSlotNum, err := strconv.Atoi(slotNumStr)
 	if err != nil {
 		return "", 0, errors.WithMessage(err, "invalid slot num get from http odps-tunnel-slot-num header")
@@ -300,15 +306,22 @@ func (su *StreamUploadSession) flushStream(streamWriter *RecordPackStreamWriter,
 		if err != nil {
 			return "", 0, errors.WithStack(err)
 		}
+	} else if newSlotServer != currentSlot.Server() {
+		err := currentSlot.SetServer(newSlotServer)
+		if err != nil {
+			return "", 0, errors.WithStack(err)
+		}
 	}
-
 	return res.Header.Get(common.HttpHeaderOdpsRequestId), conn.bytesCount(), nil
 }
 
-func (su *StreamUploadSession) newUploadConnection(reader io.ReadCloser, writer io.WriteCloser, dataSize int64, recordCount int64, timeout time.Duration) (*httpConnection, error) {
+func (su *StreamUploadSession) newUploadConnection(reader io.ReadCloser, writer io.WriteCloser, currentSlot *slot, dataSize int64, recordCount int64, timeout time.Duration) (*httpConnection, error) {
 	queryArgs := make(url.Values, 5)
 	queryArgs.Set("uploadid", su.id)
-	queryArgs.Set("slotid", su.slotSelector.NextSlot().id)
+	queryArgs.Set("slotid", currentSlot.id)
+	if su.schemaVersion >= 0 {
+		queryArgs.Set("schema_version", strconv.Itoa(su.schemaVersion))
+	}
 
 	if su.partitionKey != "" {
 		queryArgs.Set("partition", su.partitionKey)
@@ -321,30 +334,31 @@ func (su *StreamUploadSession) newUploadConnection(reader io.ReadCloser, writer 
 	if len(su.Columns) > 0 {
 		queryArgs.Set("zorder_columns", strings.Join(su.Columns, ","))
 	}
+	if su.QuotaName != "" {
+		queryArgs.Set("quotaName", su.QuotaName)
+	}
+
+	queryArgs.Set("check_latest_schema", strconv.FormatBool(!su.allowSchemaMismatch))
+
+	headers := getCommonHeaders()
+	if dataSize < 0 {
+		headers[common.HttpHeaderTransferEncoding] = "chunked"
+	} else {
+		headers[common.HttpHeaderContentLength] = strconv.FormatInt(dataSize, 10)
+	}
+	headers[common.HttpHeaderContentType] = "application/octet-stream"
+	headers[common.HttpHeaderOdpsSlotNum] = strconv.Itoa(su.slotSelector.SlotNum())
+
+	if su.Compressor != nil {
+		headers[common.HttpHeaderContentEncoding] = su.Compressor.Name()
+	}
+	headers[common.HttpHeaderRoutedServer] = currentSlot.Server()
 
 	resource := su.ResourceUrl()
-	req, err := su.RestClient.NewRequestWithUrlQuery(common.HttpMethod.PutMethod, resource, reader, queryArgs)
+	req, err := su.RestClient.NewRequestWithParamsAndHeaders(common.HttpMethod.PutMethod, resource, reader, queryArgs, headers)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-
-	if dataSize < 0 {
-		req.Header.Set(common.HttpHeaderTransferEncoding, "chunked")
-	} else {
-		req.Header.Set(common.HttpHeaderContentLength, strconv.FormatInt(dataSize, 10))
-	}
-
-	req.Header.Set(common.HttpHeaderContentType, "application/octet-stream")
-	req.Header.Set(common.HttpHeaderOdpsTunnelVersion, Version)
-	req.Header.Set(common.HttpHeaderOdpsSlotNum, strconv.Itoa(su.slotSelector.SlotNum()))
-
-	slot := su.slotSelector.NextSlot()
-
-	if su.Compressor != nil {
-		req.Header.Set("Content-Encoding", su.Compressor.Name())
-	}
-
-	req.Header.Set(common.HttpHeaderRoutedServer, slot.Server())
 
 	resChan := make(chan resOrErr)
 	go func() {
@@ -354,7 +368,7 @@ func (su *StreamUploadSession) newUploadConnection(reader io.ReadCloser, writer 
 
 			newUrl := url.URL{
 				Scheme: defaultEndpoint.Scheme,
-				Host:   slot.ip,
+				Host:   currentSlot.ip,
 			}
 
 			endpoint = newUrl.String()
@@ -382,4 +396,12 @@ func (su *StreamUploadSession) reloadSlotNum() error {
 	}
 
 	return errors.WithStack(su.loadInformation(req, false))
+}
+
+func getCommonHeaders() map[string]string {
+	header := make(map[string]string)
+	header[common.HttpHeaderOdpsDateTransFrom] = DateTransformVersion
+	header[common.HttpHeaderOdpsTunnelVersion] = Version
+	header[common.HttpHeaderOdpsSdkSupportSchemaEvolution] = "true"
+	return header
 }

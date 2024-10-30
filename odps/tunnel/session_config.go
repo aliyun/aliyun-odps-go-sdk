@@ -36,12 +36,15 @@ type sessionConfig struct {
 	// Columns for stream upload session only
 	Columns       []string
 	SchemaVersion int
+	// AllowSchemaMismatch for stream upload session only
+	AllowSchemaMismatch bool
 }
 
 func newSessionConfig(opts ...Option) *sessionConfig {
 	cfg := &sessionConfig{
-		Compressor:    nil,
-		SchemaVersion: -1,
+		Compressor:          nil,
+		SchemaVersion:       -1,
+		AllowSchemaMismatch: true,
 	}
 
 	for _, opt := range opts {
@@ -127,6 +130,12 @@ func withSchemaVersion(schemaVersion int) Option {
 	}
 }
 
+func withAllowSchemaMismatch(allowSchemaMismatch bool) Option {
+	return func(cfg *sessionConfig) {
+		cfg.AllowSchemaMismatch = allowSchemaMismatch
+	}
+}
+
 var SessionCfg = struct {
 	WithPartitionKey             func(string) Option
 	WithSchemaName               func(string) Option
@@ -140,6 +149,7 @@ var SessionCfg = struct {
 	WithCreatePartition          func() Option
 	WithColumns                  func([]string) Option
 	WithSchemaVersion            func(int) Option
+	WithAllowSchemaMismatch      func(bool) Option
 }{
 	WithPartitionKey:             withPartitionKey,
 	WithSchemaName:               withSchemaName,
@@ -153,4 +163,5 @@ var SessionCfg = struct {
 	WithCreatePartition:          withCreatePartition,
 	WithColumns:                  withColumns,
 	WithSchemaVersion:            withSchemaVersion,
+	WithAllowSchemaMismatch:      withAllowSchemaMismatch,
 }

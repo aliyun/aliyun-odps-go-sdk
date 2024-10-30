@@ -16,6 +16,7 @@ type NullString sql.NullString
 type NullDate sql.NullTime
 type NullDateTime sql.NullTime
 type NullTimeStamp sql.NullTime
+type NullTimeStampNtz sql.NullTime
 type Binary sql.RawBytes
 type Decimal data.Decimal
 type Map data.Map
@@ -61,6 +62,10 @@ func (n *NullDateTime) Scan(value interface{}) error {
 }
 
 func (n *NullTimeStamp) Scan(value interface{}) error {
+	return (*sql.NullTime)(n).Scan(value)
+}
+
+func (n *NullTimeStampNtz) Scan(value interface{}) error {
 	return (*sql.NullTime)(n).Scan(value)
 }
 
@@ -196,6 +201,10 @@ func (n NullTimeStamp) IsNull() bool {
 	return !n.Valid
 }
 
+func (n NullTimeStampNtz) IsNull() bool {
+	return !n.Valid
+}
+
 func (n NullBool) IsNull() bool {
 	return !n.Valid
 }
@@ -238,6 +247,10 @@ func (n NullDateTime) String() string {
 
 func (n NullTimeStamp) String() string {
 	return data.Timestamp(n.Time).String()
+}
+
+func (n NullTimeStampNtz) String() string {
+	return data.TimestampNtz(n.Time).String()
 }
 
 func (n Decimal) String() string {
