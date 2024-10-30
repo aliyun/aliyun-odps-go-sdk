@@ -7,8 +7,6 @@ on:
   workflow_dispatch: # 支持手动触发
   push:
     branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
 
 jobs:
 
