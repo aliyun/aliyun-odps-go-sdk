@@ -9,13 +9,17 @@ import (
 )
 
 func main() {
+	// Get your AK frist
+	accessKeyId := ""
+	accessKeySecret := ""
+
 	config := new(credentials.Config).
 		// Which type of credential you want
 		SetType("ram_role_arn").
 		// AccessKeyId of your account
-		SetAccessKeyId("AccessKeyId").
+		SetAccessKeyId(accessKeyId).
 		// AccessKeySecret of your account
-		SetAccessKeySecret("AccessKeySecret").
+		SetAccessKeySecret(accessKeySecret).
 		// Format: acs:ram::USER_Id:role/ROLE_NAME
 		SetRoleArn("RoleArn").
 		// Role Session Name
