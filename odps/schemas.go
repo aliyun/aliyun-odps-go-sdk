@@ -39,7 +39,7 @@ func NewSchemas(odpsIns *Odps, projectName string) *Schemas {
 }
 
 // List get all the schemas
-func (ss *Schemas) List(f func(*Schema, error)) {
+func (ss *Schemas) List(f func(*Schema, error)) error {
 	queryArgs := make(url.Values, 4)
 	queryArgs.Set("expectmarker", "true")
 
@@ -59,7 +59,7 @@ func (ss *Schemas) List(f func(*Schema, error)) {
 		err := client.GetWithModel(resource, queryArgs, &resModel)
 		if err != nil {
 			f(nil, err)
-			break
+			return err
 		}
 
 		for _, schemaModel := range resModel.Schemas {
@@ -74,14 +74,16 @@ func (ss *Schemas) List(f func(*Schema, error)) {
 			break
 		}
 	}
+
+	return nil
 }
 
-// Get get the schema
+// Get the schema
 func (ss *Schemas) Get(schemaName string) *Schema {
 	return NewSchema(ss.odpsIns, ss.projectName, schemaName)
 }
 
-// Create create the schema
+// Create the schema
 func (ss *Schemas) Create(schemaName string, createIfNotExists bool, comment string) error {
 	type createSchemaModel struct {
 		XMLName     xml.Name `xml:"Schema"`
@@ -109,7 +111,7 @@ func (ss *Schemas) Create(schemaName string, createIfNotExists bool, comment str
 		nil)
 }
 
-// Delete delete the schema
+// Delete the schema
 func (ss *Schemas) Delete(schemaName string) error {
 	rb := common.ResourceBuilder{ProjectName: ss.projectName}
 	resource := rb.Schema(schemaName)
