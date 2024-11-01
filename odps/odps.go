@@ -97,7 +97,7 @@ func (odps *Odps) Project(name string) *Project {
 }
 
 func (odps *Odps) Schemas() *Schemas {
-	return NewSchemas(odps, odps.CurrentSchemaName())
+	return NewSchemas(odps, odps.DefaultProjectName())
 }
 
 func (odps *Odps) Schema(name string) *Schema {

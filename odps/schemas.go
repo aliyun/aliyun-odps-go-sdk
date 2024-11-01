@@ -29,7 +29,7 @@ type Schemas struct {
 
 // NewSchemas if projectName is not set，the default projectName of odps will be used
 func NewSchemas(odpsIns *Odps, projectName string) *Schemas {
-	if projectName != "" {
+	if projectName == "" {
 		projectName = odpsIns.DefaultProjectName()
 	}
 	return &Schemas{
