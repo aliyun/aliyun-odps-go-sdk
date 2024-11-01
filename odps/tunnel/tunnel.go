@@ -17,18 +17,17 @@
 package tunnel
 
 import (
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow/ipc"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"io"
 	"net/url"
 	"strconv"
 	"time"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/arrow/ipc"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
-	_ "github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/pkg/errors"
 )
 

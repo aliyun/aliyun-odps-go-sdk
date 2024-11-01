@@ -19,13 +19,14 @@ package tableschema
 import (
 	"encoding/binary"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/pkg/errors"
-	"strings"
-	"time"
 )
 
 type arrowOptions struct {
@@ -103,7 +104,7 @@ var ArrowOptionConfig = struct {
 // *      string              |  utf8
 // *      binary              |  binary
 // *      date                |  date32
-// *      datetime            |  timestamp(milli)
+// *      datetime            |  timestamp(nano)
 // *      timestamp           |  timestamp(nano) 【注：精度选择功能开发中】
 // *      interval_day_time   |  day_time_interval
 // *      interval_year_month |  month_interval
@@ -111,10 +112,7 @@ var ArrowOptionConfig = struct {
 // *      struct              |  struct
 // *      array               |  list
 // *      map                 |  map
-
-// TODO: support time unit
-func TypeToArrowType(odpsType datatype.DataType, opt ...ArrowOptions) (arrow.DataType, error) {
-	cfg := newTypeConvertConfig(opt...)
+func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error) {
 	switch odpsType.ID() {
 	case datatype.BOOLEAN:
 		return arrow.FixedWidthTypes.Boolean, nil
@@ -130,39 +128,19 @@ func TypeToArrowType(odpsType datatype.DataType, opt ...ArrowOptions) (arrow.Dat
 		return arrow.PrimitiveTypes.Float32, nil
 	case datatype.DOUBLE:
 		return arrow.PrimitiveTypes.Float64, nil
-	case datatype.CHAR, datatype.VARCHAR, datatype.STRING, datatype.JSON:
+	case datatype.CHAR, datatype.VARCHAR, datatype.STRING:
 		return arrow.BinaryTypes.String, nil
 	case datatype.BINARY:
 		return arrow.BinaryTypes.Binary, nil
 	case datatype.DATE:
 		return arrow.FixedWidthTypes.Date32, nil
 	case datatype.DATETIME:
-		// return &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "UTC"}, nil
 		return arrow.FixedWidthTypes.Timestamp_ns, nil
-	case datatype.TIMESTAMP, datatype.TIMESTAMP_NTZ:
-		if cfg.ExtendedMode {
-			arrowFields := make([]arrow.Field, 2)
-			//
-			secField := arrow.Field{
-				Name:     "sec",
-				Type:     arrow.PrimitiveTypes.Int64,
-				Nullable: true,
-			}
-			arrowFields[0] = secField
-			//
-			nanoField := arrow.Field{
-				Name:     "nano",
-				Type:     arrow.PrimitiveTypes.Int32,
-				Nullable: true,
-			}
-			arrowFields[1] = nanoField
-			//
-			arrowStruct := arrow.StructOf(arrowFields...)
-			return arrowStruct, nil
-		} else {
-			return arrow.FixedWidthTypes.Timestamp_ns, nil
-		}
-		// TODO: why Timestamp_ns?
+		//return &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "UTC"}, nil
+	case datatype.TIMESTAMP:
+		return arrow.FixedWidthTypes.Timestamp_ns, nil
+	case datatype.TIMESTAMP_NTZ:
+		return arrow.FixedWidthTypes.Timestamp_ns, nil
 		//return &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "UTC"}, nil
 	case datatype.IntervalDayTime:
 		return arrow.FixedWidthTypes.DayTimeInterval, nil
@@ -184,9 +162,8 @@ func TypeToArrowType(odpsType datatype.DataType, opt ...ArrowOptions) (arrow.Dat
 			}
 
 			arrowFields[i] = arrow.Field{
-				Name:     field.Name,
-				Type:     arrowType,
-				Nullable: true,
+				Name: field.Name,
+				Type: arrowType,
 			}
 		}
 		return arrow.StructOf(arrowFields...), nil
@@ -198,17 +175,17 @@ func TypeToArrowType(odpsType datatype.DataType, opt ...ArrowOptions) (arrow.Dat
 		}
 
 		return arrow.ListOf(itemType), nil
-	case datatype.MAP:
-		mapType, _ := odpsType.(datatype.MapType)
-		keyType, err := TypeToArrowType(mapType.KeyType)
-		if err != nil {
-			return arrow.Null, err
-		}
-		valueType, err := TypeToArrowType(mapType.ValueType)
-		if err != nil {
-			return arrow.Null, err
-		}
-		return arrow.MapOf(keyType, valueType), nil
+		//case datatype.MAP:
+		//	mapType, _ := odpsType.(datatype.MapType)
+		//	keyType, err := TypeToArrowType(mapType.KeyType)
+		//	if err != nil {
+		//		return arrow.Null, err
+		//	}
+		//	valueType, err := TypeToArrowType(mapType.ValueType)
+		//	if err != nil {
+		//		return arrow.Null, err
+		//	}
+		//	return arrow.MapOf(keyType, valueType), nil
 	}
 
 	return arrow.Null, errors.Errorf("unknown odps data type: %s", odpsType.Name())
