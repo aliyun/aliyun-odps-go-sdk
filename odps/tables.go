@@ -84,7 +84,7 @@ func (ts *Tables) List(f func(*Table, error), filters ...TFilterFunc) {
 
 		for _, tableModel := range resModel.Tables {
 			table := NewTable(ts.odpsIns, ts.projectName, ts.schemaName, tableModel.Name)
-			table.model = tableModel
+			table.model.Owner = tableModel.Owner
 
 			f(table, nil)
 		}
