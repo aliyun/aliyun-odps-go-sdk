@@ -25,7 +25,6 @@ import (
 
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/pkg/errors"
 )
 
@@ -116,11 +115,6 @@ type SchemaBuilder struct {
 	location         string
 	lifecycle        int
 	clusterInfo      ClusterInfo
-}
-
-type ToArrowSchemaOption struct {
-	WithPartitionColumns   bool
-	WithExtensionTimeStamp bool
 }
 
 func NewSchemaBuilder() *SchemaBuilder {
@@ -379,72 +373,16 @@ func (schema *TableSchema) ToExternalSQLString(
 	return builder.String(), nil
 }
 
-func (schema *TableSchema) ToArrowSchema(opt ...ToArrowSchemaOption) *arrow.Schema {
+func (schema *TableSchema) ToArrowSchema() *arrow.Schema {
 	fields := make([]arrow.Field, len(schema.Columns))
-	//
-	usingPartitionColumns := false
-	usingExtensionTimeStamp := false
-	if len(opt) == 1 {
-		if opt[0].WithPartitionColumns {
-			usingPartitionColumns = true
-		}
-		if opt[0].WithExtensionTimeStamp {
-			usingExtensionTimeStamp = true
-		}
-	}
-	//
 	for i, column := range schema.Columns {
 		arrowType, _ := TypeToArrowType(column.Type)
-		metadata := arrow.NewMetadata(nil, nil)
-		if column.Type.ID() == datatype.TIMESTAMP && usingExtensionTimeStamp {
-			arrowType, _ = TypeToArrowType(column.Type, withExtensionTimeStamp())
-			metadata = arrow.NewMetadata(
-				[]string{"ARROW:extension:metadata", "ARROW:extension:name"},
-				[]string{"odps_timestamp", "odps_timestamp"},
-			)
-		}
-		if column.Type.ID() == datatype.TIMESTAMP_NTZ && usingExtensionTimeStamp {
-			arrowType, _ = TypeToArrowType(column.Type, withExtensionTimeStamp())
-			metadata = arrow.NewMetadata(
-				[]string{"ARROW:extension:metadata", "ARROW:extension:name"},
-				[]string{"odps_timestamp_ntz", "odps_timestamp_ntz"},
-			)
-		}
 		fields[i] = arrow.Field{
 			Name:     column.Name,
 			Type:     arrowType,
 			Nullable: column.IsNullable,
-			Metadata: metadata,
 		}
 	}
-
-	if schema.PartitionColumns != nil && usingPartitionColumns {
-		for _, column := range schema.PartitionColumns {
-			arrowType, _ := TypeToArrowType(column.Type)
-			metadata := arrow.NewMetadata(nil, nil)
-			if column.Type.ID() == datatype.TIMESTAMP && usingExtensionTimeStamp {
-				arrowType, _ = TypeToArrowType(column.Type, withExtensionTimeStamp())
-				metadata = arrow.NewMetadata(
-					[]string{"ARROW:extension:metadata", "ARROW:extension:name"},
-					[]string{"odps_timestamp", "odps_timestamp"},
-				)
-			}
-			if column.Type.ID() == datatype.TIMESTAMP_NTZ && usingExtensionTimeStamp {
-				arrowType, _ = TypeToArrowType(column.Type, withExtensionTimeStamp())
-				metadata = arrow.NewMetadata(
-					[]string{"ARROW:extension:metadata", "ARROW:extension:name"},
-					[]string{"odps_timestamp_ntz", "odps_timestamp_ntz"},
-				)
-			}
-			fields = append(fields, arrow.Field{
-				Name:     column.Name,
-				Type:     arrowType,
-				Nullable: true, // todo: should be false, need tunnel backend fix this bug
-				Metadata: metadata,
-			})
-		}
-	}
-
 	return arrow.NewSchema(fields, nil)
 }
 

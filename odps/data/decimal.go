@@ -20,17 +20,21 @@ import (
 	"fmt"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/pkg/errors"
+	"math/big"
 	"strconv"
 	"strings"
 )
 
 var InvalidDecimalErr = errors.New("invalid decimal")
 
+const ParseFromValue = "__ParseFromValue__"
+
 type Decimal struct {
 	precision int
 	scale     int
 	value     string
 	Valid     bool
+	intValue  *big.Int
 }
 
 func (d *Decimal) Precision() int {
@@ -45,12 +49,24 @@ func (d *Decimal) Value() string {
 	return d.value
 }
 
+// NewDecimal value means readable string of the decimal, because MaxCompute uses string as the serialization method of decimal
 func NewDecimal(precision, scale int, value string) *Decimal {
 	return &Decimal{
 		precision: precision,
 		scale:     scale,
 		value:     value,
 		Valid:     true,
+	}
+}
+
+// NewDecimalFromValue typical way to construct decimal, use bigint to represent decimal values
+func NewDecimalFromValue(precision, scale int, intValue *big.Int) *Decimal {
+	return &Decimal{
+		precision: precision,
+		scale:     scale,
+		intValue:  intValue,
+		Valid:     true,
+		value:     ParseFromValue,
 	}
 }
 
@@ -95,11 +111,24 @@ func (d Decimal) Type() datatype.DataType {
 }
 
 func (d Decimal) String() string {
+	if d.value == ParseFromValue {
+		valueStr := d.intValue.String()
+		if d.scale > 0 {
+			if len(valueStr) <= d.scale {
+				valueStr = "0." + fmt.Sprintf("%0*s", d.scale, valueStr)
+			} else {
+				integerPart := valueStr[:len(valueStr)-d.scale]
+				fractionalPart := valueStr[len(valueStr)-d.scale:]
+				valueStr = integerPart + "." + fractionalPart
+			}
+		}
+		return fmt.Sprintf("%s", valueStr)
+	}
 	return fmt.Sprintf("%s", d.value)
 }
 
 func (d Decimal) Sql() string {
-	return fmt.Sprintf("%sBD", d.value)
+	return fmt.Sprintf("%sBD", d.String())
 }
 
 func (d *Decimal) Scan(value interface{}) error {

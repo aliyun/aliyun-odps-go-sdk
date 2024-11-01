@@ -225,3 +225,21 @@ func Example_tunnel_download_arrow_with_partition() {
 
 	// Output:
 }
+
+func ExampleTunnel_Preview() {
+	ts := odpsIns.Table("all_type")
+	err := ts.Load()
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	records, err := tunnelIns.Preview(ts, "", 10)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	for _, record := range records {
+		println(record.String())
+	}
+	// Output:
+}

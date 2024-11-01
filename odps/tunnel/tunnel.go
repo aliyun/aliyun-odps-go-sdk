@@ -17,7 +17,10 @@
 package tunnel
 
 import (
-	"net/http"
+	"github.com/aliyun/aliyun-odps-go-sdk/arrow/ipc"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
+	"io"
 	"net/url"
 	"strconv"
 	"time"
@@ -26,8 +29,6 @@ import (
 	_ "github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-
 	"github.com/pkg/errors"
 )
 
@@ -202,18 +203,26 @@ func (t *Tunnel) GetQuotaName() string {
 	return t.quotaName
 }
 
-func (t *Tunnel) Preview(projectName, schemaName, tableName string,
-	limit int64, opt ...Option) (*http.Response, error) {
+// Preview table records from table tunnel, max 10000 rows
+func (t *Tunnel) Preview(table *odps.Table, partition string, limit int64) ([]data.Record, error) {
 	if limit < 0 {
 		limit = -1
 	}
-	//
-	cfg := newSessionConfig(opt...)
-	//
+	if !table.IsLoaded() {
+		err := table.Load()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	projectName := table.ProjectName()
+	schemaName := table.SchemaName()
+	tableName := table.Name()
+
 	queryArgs := make(url.Values, 2)
 	queryArgs.Set("limit", strconv.FormatInt(limit, 10))
-	if cfg.PartitionKey != "" {
-		queryArgs.Set("partition", cfg.PartitionKey)
+	if partition != "" {
+		queryArgs.Set("partition", partition)
 	}
 	resource := common.NewResourceBuilder(projectName)
 	var resourceUrl string
@@ -223,7 +232,7 @@ func (t *Tunnel) Preview(projectName, schemaName, tableName string,
 		resourceUrl = resource.Table(tableName)
 	}
 	resourceUrl += "/preview"
-	//
+
 	client, err := t.getRestClient(projectName)
 	if err != nil {
 		return nil, err
@@ -237,14 +246,11 @@ func (t *Tunnel) Preview(projectName, schemaName, tableName string,
 	if err != nil {
 		return nil, err
 	}
-	//
+
 	addCommonSessionHttpHeader(req.Header)
-	//
-	if cfg.Compressor != nil {
-		req.Header.Set(common.HttpHeaderAcceptEncoding, cfg.Compressor.Name())
-	}
+
 	req.Header.Set(common.HttpHeaderContentLength, "0")
-	//
+
 	res, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -252,35 +258,38 @@ func (t *Tunnel) Preview(projectName, schemaName, tableName string,
 	if res.StatusCode/100 != 2 {
 		return nil, restclient.NewHttpNotOk(res)
 	}
-	//
+
 	contentEncoding := res.Header.Get(common.HttpHeaderContentEncoding)
 	if contentEncoding != "" {
 		res.Body = WrapByCompressor(res.Body, contentEncoding)
 	}
-	return res, nil
-}
 
-// read table records from tabletunnel, max 10000 rows
-func (t *Tunnel) ReadTable(table *odps.Table, partition string, limit int64) (*ArrowStreamRecordReader, error) {
-	if !table.IsLoaded() {
-		if err := table.Load(); err != nil {
-			return nil, err
-		}
-	}
-	//
-	tableSchema := table.Schema()
+	reader, err := ipc.NewReader(res.Body)
 
-	opt := tableschema.ToArrowSchemaOption{
-		WithExtensionTimeStamp: true,
-		WithPartitionColumns:   true,
-	}
-	arrowSchema := tableSchema.ToArrowSchema(opt)
-
-	httpResp, err :=
-		t.Preview(table.ProjectName(), table.SchemaName(), table.Name(), limit, SessionCfg.WithPartitionKey(partition))
 	if err != nil {
 		return nil, err
 	}
+	columns := table.Schema().Columns
+	partitionColumns := table.Schema().PartitionColumns
+	allColumns := append(columns, partitionColumns...)
 
-	return newArrowStreamRecordReader(httpResp, arrowSchema)
+	var results []data.Record
+
+	for {
+		arrowRecord, err := reader.Read()
+		isEOF := errors.Is(err, io.EOF)
+		if isEOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		records, err := tableschema.ToMaxComputeRecords(arrowRecord, allColumns, tableschema.ArrowOptionConfig.WithExtendedMode())
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, records...)
+		arrowRecord.Retain()
+	}
+	return results, nil
 }
