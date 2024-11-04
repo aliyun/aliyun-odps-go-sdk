@@ -27,7 +27,7 @@ import (
 
 var InvalidDecimalErr = errors.New("invalid decimal")
 
-const ParseFromValue = "__ParseFromValue__"
+const parseFromValue = "__ParseFromValue__"
 
 type Decimal struct {
 	precision int
@@ -66,7 +66,7 @@ func NewDecimalFromValue(precision, scale int, intValue *big.Int) *Decimal {
 		scale:     scale,
 		intValue:  intValue,
 		Valid:     true,
-		value:     ParseFromValue,
+		value:     parseFromValue,
 	}
 }
 
@@ -111,7 +111,7 @@ func (d Decimal) Type() datatype.DataType {
 }
 
 func (d Decimal) String() string {
-	if d.value == ParseFromValue {
+	if d.value == parseFromValue {
 		valueStr := d.intValue.String()
 		if d.scale > 0 {
 			if len(valueStr) <= d.scale {

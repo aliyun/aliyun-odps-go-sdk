@@ -20,6 +20,7 @@ import (
 	"io"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/ipc"
@@ -202,8 +203,8 @@ func (t *Tunnel) GetQuotaName() string {
 	return t.quotaName
 }
 
-// Preview table records from table tunnel, max 10000 rows
-func (t *Tunnel) Preview(table *odps.Table, partition string, limit int64) ([]data.Record, error) {
+// Preview table records from table tunnel, max 10000 rows, limit<0 means no limit
+func (t *Tunnel) Preview(table *odps.Table, partitionValue string, limit int64) ([]data.Record, error) {
 	if limit < 0 {
 		limit = -1
 	}
@@ -220,8 +221,11 @@ func (t *Tunnel) Preview(table *odps.Table, partition string, limit int64) ([]da
 
 	queryArgs := make(url.Values, 2)
 	queryArgs.Set("limit", strconv.FormatInt(limit, 10))
-	if partition != "" {
-		queryArgs.Set("partition", partition)
+	if partitionValue != "" {
+		partitionValue = strings.ReplaceAll(partitionValue, "'", "")
+		partitionValue = strings.ReplaceAll(partitionValue, "\"", "")
+		partitionValue = strings.ReplaceAll(partitionValue, "/", ",")
+		queryArgs.Set("partition", partitionValue)
 	}
 	resource := common.NewResourceBuilder(projectName)
 	var resourceUrl string
