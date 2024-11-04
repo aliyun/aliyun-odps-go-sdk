@@ -28,7 +28,15 @@ linters-settings:
     # SAxxxx checks in https://staticcheck.io/docs/configuration/options/#checks
     # Default value: ["all", "-ST1000", "-ST1003", "-ST1016", "-ST1020", "-ST1021", "-ST1022"]
     checks:
+      # default checks
       - "all"
+      - "-ST1000"
+      - "-ST1003"
+      - "-ST1016"
+      - "-ST1020"
+      - "-ST1021"
+      - "-ST1022"
+      # other checks
       - "-SA1019"  # Enable using a deprecated function, variable, constant or field. For compatibility reasons.
   goimports:
     local-prefixes: github.com/aliyun/aliyun-odps-go-sdk
