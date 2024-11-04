@@ -707,27 +707,159 @@ func (t *Table) getPartitions(partitionSpec string) ([]Partition, error) {
 
 func (t *Table) CreateShards(shardCount int) error {
 	var sb strings.Builder
-	sb.WriteString("alter table ")
+	sb.WriteString("alter table " + t.getFullName())
+	sb.WriteString(fmt.Sprintf("\ninto %d shards;", shardCount))
+	return t.executeSql(sb.String())
+}
+
+// Update Table
+
+// ChangeOwner Only the Project Owner or users with the Super_Administrator role can execute commands that modify the table Owner.
+func (t *Table) ChangeOwner(newOwner string) error {
+	return t.executeSql(t.generateChangeOwnerSQL(newOwner))
+}
+
+func (t *Table) generateChangeOwnerSQL(newOwner string) string {
+	return fmt.Sprintf("alter table %s set changeowner to %s;", t.getFullName(), common.QuoteString(newOwner))
+}
+
+// ChangeComment Modify the comment content of the table.
+func (t *Table) ChangeComment(newComment string) error {
+	return t.executeSql(t.generateChangeCommentSQL(newComment))
+}
+
+func (t *Table) generateChangeCommentSQL(newComment string) string {
+	return fmt.Sprintf("alter table %s set comment %s;", t.getFullName(), common.QuoteString(newComment))
+}
+
+// Touch can modify the LastModifiedTime of the table, make LastModifiedTime change to the current time
+func (t *Table) Touch() error {
+	return t.executeSql(t.generateTouchTableSQL())
+}
+func (t *Table) generateTouchTableSQL() string {
+	return fmt.Sprintf("alter table %s touch;", t.getFullName())
+}
+
+func (t *Table) ChangeClusterInfo(clusterInfo tableschema.ClusterInfo) error {
+	return t.executeSql(t.generateChangeClusterInfoSQL(clusterInfo))
+}
+
+func (t *Table) generateChangeClusterInfoSQL(clusterInfo tableschema.ClusterInfo) string {
+	var sb strings.Builder
+	sb.WriteString("alter table " + t.getFullName())
+
+	if len(clusterInfo.ClusterCols) > 0 {
+		if clusterInfo.ClusterType == tableschema.CLUSTER_TYPE.Range {
+			sb.WriteString(" range")
+		}
+		sb.WriteString(fmt.Sprintf(" clustered by (%s)", strings.Join(clusterInfo.ClusterCols, ",")))
+	}
+	if len(clusterInfo.SortCols) > 0 {
+		sb.WriteString(" sorted by (")
+		for index, sortCol := range clusterInfo.SortCols {
+			sb.WriteString(fmt.Sprintf("%s %s", sortCol.Name, string(sortCol.Order)))
+			if index < len(clusterInfo.SortCols)-1 {
+				sb.WriteString(", ")
+			}
+		}
+		sb.WriteString(")")
+	}
+	if clusterInfo.BucketNum > 0 {
+		sb.WriteString(fmt.Sprintf(" into %d buckets", clusterInfo.BucketNum))
+	}
+	sb.WriteString(";")
+	return sb.String()
+}
+
+func (t *Table) Rename(newName string) error {
+	return t.executeSql(t.generateRenameTableSQL(newName))
+}
+
+func (t *Table) generateRenameTableSQL(newName string) string {
+	return fmt.Sprintf("alter table %s rename to %s;", t.getFullName(), common.QuoteString(newName))
+}
+
+func (t *Table) Truncate() error {
+	return t.executeSql(t.generateTruncateTableSQL())
+}
+
+func (t *Table) generateTruncateTableSQL() string {
+	return fmt.Sprintf("truncate table %s;", t.getFullName())
+
+}
+
+func (t *Table) AddColumns(columns []tableschema.Column, ifNotExists bool) error {
+	return t.executeSql(t.generateAddColumnsSQL(columns, ifNotExists))
+}
+
+func (t *Table) generateAddColumnsSQL(columns []tableschema.Column, ifNotExists bool) string {
+	var sb strings.Builder
+	sb.WriteString("alter table " + t.getFullName() + " add columns ")
+	if ifNotExists {
+		sb.WriteString("if not exists ")
+	}
+	sb.WriteString("(")
+	for index, column := range columns {
+		sb.WriteString(fmt.Sprintf("%s %s", column.Name, column.Type))
+		if column.Comment != "" {
+			sb.WriteString(fmt.Sprintf(" comment %s", common.QuoteString(column.Comment)))
+		}
+		if index < len(columns)-1 {
+			sb.WriteString(", ")
+		}
+	}
+	sb.WriteString(");")
+	return sb.String()
+}
+
+func (t *Table) DropColumns(columnNames []string) error {
+	return t.executeSql(t.generateDropColumnsSQL(columnNames))
+}
+
+func (t *Table) generateDropColumnsSQL(columnNames []string) string {
+	return fmt.Sprintf("alter table %s drop columns %s;", t.getFullName(), strings.Join(columnNames, ", "))
+}
+
+func (t *Table) AlterColumnType(columnName string, columnType datatype.DataType) error {
+	return t.executeSql(t.generateAlterColumnTypeSQL(columnName, columnType))
+}
+
+func (t *Table) generateAlterColumnTypeSQL(columnName string, columnType datatype.DataType) string {
+	return fmt.Sprintf("alter table %s change column %s %s %s;", t.getFullName(), columnName, columnName, columnType)
+}
+
+func (t *Table) ChangeColumnName(oldColumnName string, newColumnName string) error {
+	return t.executeSql(t.generateChangeColumnNameSQL(oldColumnName, newColumnName))
+}
+
+func (t *Table) generateChangeColumnNameSQL(oldColumnName string, newColumnName string) string {
+	return fmt.Sprintf("alter table %s change column %s rename to %s;", t.getFullName(), oldColumnName, newColumnName)
+}
+
+func (t *Table) executeSql(sql string) error {
 	hints := make(map[string]string)
 	if t.SchemaName() == "" {
-		sb.WriteString(fmt.Sprintf("%s.%s", t.ProjectName(), t.Name()))
 		hints["odps.namespace.schema"] = "false"
 	} else {
-		sb.WriteString(fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name()))
 		hints["odps.namespace.schema"] = "true"
 	}
-	sb.WriteString(fmt.Sprintf("\ninto %d shards;", shardCount))
-	ins, err := t.ExecSqlWithHints("SQLCreateShardsTask", sb.String(), hints)
+	ins, err := t.ExecSqlWithHints("AnonymousSQLTask", sql, hints)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
 	err = ins.WaitForSuccess()
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
 	return nil
+}
+
+func (t *Table) getFullName() string {
+	if t.SchemaName() == "" {
+		return fmt.Sprintf("%s.%s", t.ProjectName(), t.Name())
+	} else {
+		return fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name())
+	}
 }
 
 func TableTypeFromStr(s string) TableType {
