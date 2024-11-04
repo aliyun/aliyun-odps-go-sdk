@@ -666,50 +666,9 @@ func (t *Table) getPartitions(partitionSpec string) ([]Partition, error) {
 	return partitions, nil
 }
 
-// Read can get at most 1W records or 10M bytes of records. partition is a string like "region='10026, name='abc'"
-// columns are the columns wanted. limit is the most records to get. timezone is the timezone of datetime type data,
-// it can be ""
-//func (t *Table) Read(partition string, columns []string, limit int, timezone string) (*csv.Reader, error) {
-//	queryArgs := make(url.Values, 4)
-//
-//	queryArgs.Set("data", "")
-//	if partition != "" {
-//		queryArgs.Set("partition", partition)
-//	}
-//
-//	if len(columns) > 0 {
-//		queryArgs.Set("cols", strings.Join(columns, ","))
-//	}
-//
-//	if limit > 0 {
-//		queryArgs.Set("linenum", strconv.Itoa(limit))
-//	}
-//
-//	client := t.odpsIns.restClient
-//	resource := t.ResourceUrl()
-//
-//	req, err := client.NewRequestWithUrlQuery(common.HttpMethod.GetMethod, resource, nil, queryArgs)
-//	if err != nil {
-//		return nil, errors.WithStack(err)
-//	}
-//
-//	if timezone != "" {
-//		req.Header.Set(common.HttpHeaderSqlTimezone, timezone)
-//	}
-//
-//	res, err := client.Do(req)
-//	if err != nil {
-//		return nil, errors.WithStack(err)
-//	}
-//
-//	return csv.NewReader(res.Body), nil
-//}
-
 func (t *Table) CreateShards(shardCount int) error {
-	var sb strings.Builder
-	sb.WriteString("alter table " + t.getFullName())
-	sb.WriteString(fmt.Sprintf("\ninto %d shards;", shardCount))
-	return t.executeSql(sb.String())
+	sql := fmt.Sprintf("alter table %s into %d shards;", t.getFullName(), shardCount)
+	return t.executeSql(sql)
 }
 
 // Update Table
