@@ -17,8 +17,9 @@
 package account
 
 import (
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"net/http"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
 type BearerTokenAccount struct {

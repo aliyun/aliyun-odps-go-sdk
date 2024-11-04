@@ -2,10 +2,11 @@ package main
 
 import (
 	"database/sql"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
-	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 	"log"
 	"os"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
+	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 )
 
 func main() {

@@ -17,8 +17,9 @@
 package data
 
 import (
-	"github.com/pkg/errors"
 	"reflect"
+
+	"github.com/pkg/errors"
 )
 
 func tryConvertType(src interface{}, dst interface{}) error {

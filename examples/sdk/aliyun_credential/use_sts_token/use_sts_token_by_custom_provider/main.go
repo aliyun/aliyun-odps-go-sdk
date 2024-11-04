@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+
+	"github.com/aliyun/credentials-go/credentials"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
-	"github.com/aliyun/credentials-go/credentials"
 )
 
 type CustomCredentialProvider struct {

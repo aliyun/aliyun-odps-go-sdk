@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
+	"log"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
-	"log"
 )
 
 func main() {
@@ -81,7 +82,7 @@ func makeRecord(schema *tableschema.TableSchema) (data.Record, error) {
 	date, _ := data.NewDate("2022-10-19")
 	datetime, _ := data.NewDateTime("2022-10-19 17:00:00")
 	timestamp, _ := data.NewTimestamp("2022-10-19 17:00:00.000")
-  timestampNtz, _ := data.NewTimestampNtz("2022-10-19 17:00:00.000")
+	timestampNtz, _ := data.NewTimestampNtz("2022-10-19 17:00:00.000")
 
 	mapType := schema.Columns[17].Type.(datatype.MapType)
 	mapData := data.NewMapWithType(mapType)
@@ -143,7 +144,7 @@ func makeRecord(schema *tableschema.TableSchema) (data.Record, error) {
 		date,
 		datetime,
 		timestamp,
-    timestampNtz,
+		timestampNtz,
 		data.Bool(true),
 		mapData,
 		arrayData,

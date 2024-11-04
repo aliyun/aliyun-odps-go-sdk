@@ -19,10 +19,12 @@ package security
 import (
 	"bytes"
 	"encoding/xml"
+	"net/url"
+
+	"github.com/pkg/errors"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
-	"github.com/pkg/errors"
-	"net/url"
 )
 
 type Config struct {

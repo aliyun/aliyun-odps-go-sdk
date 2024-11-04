@@ -18,12 +18,13 @@ package account
 
 import (
 	"bytes"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"net/http"
 	"net/url"
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
 type AliyunAccount struct {

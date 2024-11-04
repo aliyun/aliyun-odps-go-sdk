@@ -1,6 +1,12 @@
 package main
 
 import (
+	"log"
+	"os"
+	"time"
+
+	"github.com/pkg/errors"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/memory"
@@ -8,10 +14,6 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	odpsdata "github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
-	"github.com/pkg/errors"
-	"log"
-	"os"
-	"time"
 )
 
 func main() {

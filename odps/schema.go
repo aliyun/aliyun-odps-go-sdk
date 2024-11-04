@@ -2,11 +2,13 @@ package odps
 
 import (
 	"encoding/xml"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
-	"github.com/pkg/errors"
 	"net/http"
 	"time"
+
+	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 )
 
 // Schema represent the namespace schema in odps projects

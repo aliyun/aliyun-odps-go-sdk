@@ -18,8 +18,9 @@ package odps
 
 import (
 	"encoding/xml"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"net/url"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
 type Schemas struct {

@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"log"
 	"strings"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 )
 
 func main() {

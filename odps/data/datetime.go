@@ -20,8 +20,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 )
 
 const (

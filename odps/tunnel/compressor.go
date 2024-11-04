@@ -19,10 +19,11 @@ package tunnel
 import (
 	"compress/flate"
 	"compress/zlib"
-	"github.com/golang/snappy"
-	"github.com/pkg/errors"
 	"io"
 	"strings"
+
+	"github.com/golang/snappy"
+	"github.com/pkg/errors"
 )
 
 type Compressor interface {

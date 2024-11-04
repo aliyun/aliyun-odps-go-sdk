@@ -23,10 +23,11 @@ import (
 	"log"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/memory"
 	tunnel2 "github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
-	"github.com/pkg/errors"
 )
 
 func Example_tunnel_upload_arrow() {

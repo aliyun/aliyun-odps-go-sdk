@@ -1,11 +1,12 @@
 package main
 
 import (
+	"log"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"log"
 )
 
 func main() {
@@ -60,12 +61,12 @@ func main() {
 	sb := tableschema.NewSchemaBuilder()
 
 	sb.Name(tableName). // table name
-		Columns(c1, c2, c3). // columns
-		PartitionColumns(pc). // partition columns
-		Location("MOCKoss://full/uri/path/to/oss/directory/").
-		StorageHandler("com.aliyun.odps.udf.example.text.TextStorageHandler").
-		Comment("External table using user defined TextStorageHandler").
-		Lifecycle(10)
+				Columns(c1, c2, c3).  // columns
+				PartitionColumns(pc). // partition columns
+				Location("MOCKoss://full/uri/path/to/oss/directory/").
+				StorageHandler("com.aliyun.odps.udf.example.text.TextStorageHandler").
+				Comment("External table using user defined TextStorageHandler").
+				Lifecycle(10)
 
 	tablesIns := odpsIns.Tables()
 

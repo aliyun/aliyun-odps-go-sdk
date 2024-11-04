@@ -22,11 +22,12 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
-	"github.com/pkg/errors"
 )
 
 type rowsReader struct {

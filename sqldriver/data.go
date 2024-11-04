@@ -4,8 +4,9 @@ import (
 	"database/sql"
 	"reflect"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 )
 
 type NullBool sql.NullBool

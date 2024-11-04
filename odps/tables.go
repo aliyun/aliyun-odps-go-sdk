@@ -23,9 +23,10 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/pkg/errors"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"github.com/pkg/errors"
 )
 
 // Tables used for get all the tables in an odps project

@@ -17,8 +17,9 @@
 package tunnel
 
 import (
-	"github.com/pkg/errors"
 	"io"
+
+	"github.com/pkg/errors"
 )
 
 const DefaultChunkSize = 65536

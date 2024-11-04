@@ -19,11 +19,12 @@ package tunnel
 import (
 	"io"
 
+	"github.com/pkg/errors"
+	"google.golang.org/protobuf/encoding/protowire"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"github.com/pkg/errors"
-	"google.golang.org/protobuf/encoding/protowire"
 )
 
 type RecordProtocWriter struct {

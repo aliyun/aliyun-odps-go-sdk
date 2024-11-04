@@ -20,11 +20,13 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/pkg/errors"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
 // Partition ODPS分区表中一个特定的分区

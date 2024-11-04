@@ -18,9 +18,10 @@ package tunnel
 
 import (
 	"bytes"
-	"google.golang.org/protobuf/encoding/protowire"
 	"io"
 	"math"
+
+	"google.golang.org/protobuf/encoding/protowire"
 )
 
 type ProtocStreamWriter struct {

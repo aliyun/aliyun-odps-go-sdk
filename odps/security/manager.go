@@ -20,13 +20,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"encoding/xml"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 )
 
 type Manager struct {

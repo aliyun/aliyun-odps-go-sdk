@@ -19,9 +19,11 @@ package odps
 import (
 	"encoding/base64"
 	"encoding/xml"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/pkg/errors"
 	"strings"
+
+	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
 type TaskStatus int

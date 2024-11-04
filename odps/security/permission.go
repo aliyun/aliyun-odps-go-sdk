@@ -18,8 +18,10 @@ package security
 
 import (
 	"encoding/json"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+
 	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
 type Permission struct {

@@ -18,8 +18,9 @@ package odps
 
 import (
 	"encoding/xml"
-	"github.com/pkg/errors"
 	"net/url"
+
+	"github.com/pkg/errors"
 )
 
 type Projects struct {

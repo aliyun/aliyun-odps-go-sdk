@@ -2,8 +2,9 @@ package security
 
 import (
 	"encoding/xml"
-	"github.com/pkg/errors"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 const (

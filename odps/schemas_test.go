@@ -18,8 +18,9 @@ package odps_test
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"testing"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 )
 
 func TestSchemas_List(t *testing.T) {

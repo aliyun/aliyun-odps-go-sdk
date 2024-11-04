@@ -22,10 +22,11 @@ import (
 	"strings"
 	"time"
 
-	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/pkg/errors"
 	"gopkg.in/ini.v1"
+
+	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 )
 
 // Config is the basic config for odps. The NewConfig function should be used, which sets default values.

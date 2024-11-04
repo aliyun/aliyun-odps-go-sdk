@@ -19,13 +19,15 @@ package odps
 import (
 	"encoding/json"
 	"encoding/xml"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
 type InstanceStatus int

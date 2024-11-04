@@ -18,10 +18,11 @@ package security_test
 
 import (
 	"fmt"
+	"log"
+
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/security"
-	"log"
 )
 
 var account = account2.AccountFromEnv()

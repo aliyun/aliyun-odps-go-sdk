@@ -19,8 +19,9 @@ package odps_test
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"log"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 )
 
 func ExampleColumn() {

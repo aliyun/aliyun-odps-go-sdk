@@ -18,9 +18,10 @@ package account
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"net/http"
 	"strings"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
 type AppStsAccount struct {

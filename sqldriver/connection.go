@@ -22,9 +22,10 @@ import (
 	"log"
 	"strings"
 
+	"github.com/pkg/errors"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
-	"github.com/pkg/errors"
 )
 
 type connection struct {

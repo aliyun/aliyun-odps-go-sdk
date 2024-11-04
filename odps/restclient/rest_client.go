@@ -20,9 +20,6 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/pkg/errors"
 	"io"
 	"log"
 	"net"
@@ -31,6 +28,11 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
 // Todo 请求方法需要重构，加入header参数

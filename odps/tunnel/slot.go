@@ -18,10 +18,11 @@ package tunnel
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
-	"golang.org/x/exp/rand"
 	"strconv"
 	"strings"
+
+	"github.com/pkg/errors"
+	"golang.org/x/exp/rand"
 )
 
 type slot struct {

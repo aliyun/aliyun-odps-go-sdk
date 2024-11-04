@@ -18,9 +18,10 @@ package odps_test
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"log"
 	"time"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 )
 
 func ExampleProjects_List() {
