@@ -19,12 +19,13 @@ package tableschema
 import (
 	"bytes"
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/pkg/errors"
 	"strconv"
 	"strings"
 	"text/template"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/pkg/errors"
 )
 
 type TableSchema struct {
@@ -382,7 +383,6 @@ func (schema *TableSchema) ToArrowSchema() *arrow.Schema {
 			Nullable: column.IsNullable,
 		}
 	}
-
 	return arrow.NewSchema(fields, nil)
 }
 
