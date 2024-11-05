@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/pkg/errors"
@@ -263,7 +264,7 @@ func (t *Table) MaxLabel() string {
 }
 
 func calculateMaxLabel(labels []string) string {
-	var maxLevel = 0
+	maxLevel := 0
 	var category string
 
 	for _, label := range labels {
@@ -273,7 +274,6 @@ func calculateMaxLabel(labels []string) string {
 
 		curCategory := label[0 : len(label)-1]
 		num, err := strconv.Atoi(string(label[len(label)-1]))
-
 		if err != nil {
 			continue
 		}
@@ -306,6 +306,7 @@ func calculateMaxLabel(labels []string) string {
 
 	return fmt.Sprintf("%s%d", category, maxLevel)
 }
+
 func (t *Table) Exists() (bool, error) {
 	err := t.Load()
 
@@ -695,6 +696,7 @@ func (t *Table) generateChangeCommentSQL(newComment string) string {
 func (t *Table) Touch() error {
 	return t.executeSql(t.generateTouchTableSQL())
 }
+
 func (t *Table) generateTouchTableSQL() string {
 	return fmt.Sprintf("alter table %s touch;", t.getFullName())
 }
@@ -744,7 +746,6 @@ func (t *Table) Truncate() error {
 
 func (t *Table) generateTruncateTableSQL() string {
 	return fmt.Sprintf("truncate table %s;", t.getFullName())
-
 }
 
 func (t *Table) AddColumns(columns []tableschema.Column, ifNotExists bool) error {
