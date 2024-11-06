@@ -142,7 +142,7 @@ func (ts *Tables) BatchLoadTables(tableNames []string) ([]*Table, error) {
 
 	ret := make([]*Table, len(resModel.Table))
 
-	for i, _ := range resModel.Table {
+	for i := range resModel.Table {
 		tableModel := &resModel.Table[i]
 		table, err := newTableWithModel(ts.odpsIns, tableModel)
 		if err != nil {
@@ -165,8 +165,8 @@ func (ts *Tables) Get(tableName string) *Table {
 func (ts *Tables) Create(
 	schema tableschema.TableSchema,
 	createIfNotExists bool,
-	hints, alias map[string]string) error {
-
+	hints, alias map[string]string,
+) error {
 	sql, err := schema.ToSQLString(ts.projectName, ts.schemaName, createIfNotExists)
 	if err != nil {
 		return errors.WithStack(err)
@@ -204,8 +204,8 @@ func (ts *Tables) CreateExternal(
 	createIfNotExists bool,
 	serdeProperties map[string]string,
 	jars []string,
-	hints, alias map[string]string) error {
-
+	hints, alias map[string]string,
+) error {
 	sql, err := schema.ToExternalSQLString(ts.projectName, ts.schemaName, createIfNotExists, serdeProperties, jars)
 	if err != nil {
 		return errors.WithStack(err)
@@ -260,7 +260,6 @@ func (ts *Tables) CreateWithDataHub(
 	shardNum,
 	hubLifecycle int,
 ) error {
-
 	sql, err := schema.ToBaseSQLString(ts.projectName, ts.schemaName, createIfNotExists, false)
 	if err != nil {
 		return errors.WithStack(err)
@@ -287,7 +286,6 @@ func (ts *Tables) CreateWithDataHub(
 
 	instances := NewInstances(ts.odpsIns, ts.projectName)
 	i, err := instances.CreateTask(ts.projectName, &task)
-
 	if err != nil {
 		return errors.WithStack(err)
 	}

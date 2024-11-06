@@ -29,8 +29,8 @@ import (
 )
 
 func Example() {
-	var account = account2.AccountFromEnv()
-	var endpoint = restclient.LoadEndpointFromEnv()
+	account := account2.AccountFromEnv()
+	endpoint := restclient.LoadEndpointFromEnv()
 
 	config := sqldriver.NewConfig()
 	config.Endpoint = endpoint
@@ -91,8 +91,8 @@ func Example() {
 }
 
 func ExampleStructField() {
-	var account = account2.AccountFromEnv()
-	var endpoint = restclient.LoadEndpointFromEnv()
+	account := account2.AccountFromEnv()
+	endpoint := restclient.LoadEndpointFromEnv()
 
 	config := sqldriver.NewConfig()
 	config.Endpoint = endpoint
@@ -138,8 +138,8 @@ func ExampleStructField() {
 }
 
 func ExampleInsert() {
-	var account = account2.AccountFromEnv()
-	var endpoint = restclient.LoadEndpointFromEnv()
+	account := account2.AccountFromEnv()
+	endpoint := restclient.LoadEndpointFromEnv()
 
 	config := sqldriver.NewConfig()
 	config.Endpoint = endpoint
@@ -198,8 +198,8 @@ func ExampleInsert() {
 }
 
 func ExampleCreateTable() {
-	var account = account2.AccountFromEnv()
-	var endpoint = restclient.LoadEndpointFromEnv()
+	account := account2.AccountFromEnv()
+	endpoint := restclient.LoadEndpointFromEnv()
 
 	config := sqldriver.NewConfig()
 	config.Endpoint = endpoint

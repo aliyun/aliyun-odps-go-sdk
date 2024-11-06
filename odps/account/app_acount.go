@@ -39,7 +39,6 @@ func NewAppAccount(accessId string, accessKey string) *AppAccount {
 
 func (account *AppAccount) SignRequest(req *http.Request, endpoint string) error {
 	err := account.AliyunAccount.SignRequest(req, endpoint)
-
 	if err != nil {
 		return err
 	}

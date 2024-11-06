@@ -11,7 +11,6 @@ func main() {
 	// Specify the ini file path
 	configPath := "./config.ini"
 	conf, err := odps.NewConfigFromIni(configPath)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -48,10 +47,10 @@ func main() {
 	sql := "alter table mma_test.test_struct7 add column (v3 array<decimal(10,2)>);"
 
 	// 如果project的数据类型版本是1.0，需要通过下面的hints使用mc 2.0数据类型
-	//hints := make(map[string]string)
-	//hints["odps.sql.type.system.odps2"] = "true"
-	//hints["odps.sql.decimal.odps2"] = "true"
-	//ins, err := odpsIns.ExecSQlWithHints(sql, hints)
+	// hints := make(map[string]string)
+	// hints["odps.sql.type.system.odps2"] = "true"
+	// hints["odps.sql.decimal.odps2"] = "true"
+	// ins, err := odpsIns.ExecSQlWithHints(sql, hints)
 
 	ins, err := odpsIns.ExecSQl(sql)
 	if err != nil {

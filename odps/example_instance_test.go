@@ -30,7 +30,7 @@ func ExampleInstances_List() {
 	startTime, _ := time.Parse(timeFormat, "2021-11-15 02:15:30")
 	endTime, _ := time.Parse(timeFormat, "2021-11-18 06:22:02")
 
-	var f = func(i *odps.Instance) {
+	f := func(i *odps.Instance) {
 		println(
 			fmt.Sprintf(
 				"%s, %s, %s, %s, %s",
@@ -61,7 +61,6 @@ func ExampleInstances_CreateTask() {
 	instances := odpsIns.Instances()
 	sqlTask := odps.NewSqlTask("hello", "select count(*) from sale_detail;", nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -124,7 +123,6 @@ func ExampleInstance_Terminate() {
 	instances := odps.NewInstances(odpsIns)
 	sqlTask := odps.NewSqlTask("hello", "select count(*) from user;", nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -150,7 +148,6 @@ func ExampleInstance_GetTaskProgress() {
 	instances := odps.NewInstances(odpsIns)
 	sqlTask := odps.NewSqlTask("hello", "select count(*) from sale_detail;", nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -165,7 +162,6 @@ func ExampleInstance_GetTaskProgress() {
 
 		for _, stage := range progress {
 			println(fmt.Sprintf("%+v", stage))
-
 		}
 
 		time.Sleep(time.Second * 1)
@@ -185,7 +181,6 @@ func ExampleInstance_GetTaskSummary() {
 	instances := odps.NewInstances(odpsIns)
 	sqlTask := odps.NewSqlTask("hello1", "select count(*) from sale_detail;", nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -205,7 +200,6 @@ func ExampleInstance_GetCachedInfo() {
 	instances := odps.NewInstances(odpsIns)
 	sqlTask := odps.NewSqlTask("hello1", "select * from user;", nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

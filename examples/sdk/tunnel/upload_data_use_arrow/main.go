@@ -44,7 +44,6 @@ func main() {
 		tunnel.SessionCfg.WithPartitionKey("age=20,hometown='hangzhou'"),
 		tunnel.SessionCfg.WithDefaultDeflateCompressor(),
 	)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -140,7 +139,6 @@ func main() {
 	}
 
 	err = session.Commit([]int{1, 2})
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

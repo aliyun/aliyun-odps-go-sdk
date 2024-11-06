@@ -80,7 +80,6 @@ func ExampleTableSchema_ToSQLString() {
 		serdeProperties,
 		jars,
 	)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -132,9 +131,9 @@ func ExampleTable_GetPartitions() {
 }
 
 func ExampleTable_ExecSql() {
-	//table := odps.NewTable(odpsIns, "go_sdk_regression_testing", "sale_detail")
+	// table := odps.NewTable(odpsIns, "go_sdk_regression_testing", "sale_detail")
 	table := odpsIns.Table("has_struct")
-	//instance, err := table.ExecSql("SelectSale_detail", "select * from sale_detail;")
+	// instance, err := table.ExecSql("SelectSale_detail", "select * from sale_detail;")
 	instance, err := table.ExecSql("Select_has_struct", "select * from has_struct;")
 	if err != nil {
 		log.Fatalf("%+v", err)

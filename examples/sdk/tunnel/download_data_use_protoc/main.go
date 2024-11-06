@@ -38,7 +38,6 @@ func main() {
 		"all_types_demo",
 		tunnel2.SessionCfg.WithPartitionKey("p1=20,p2='hangzhou'"),
 	)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -78,7 +77,6 @@ func main() {
 				}
 			}
 		})
-
 		if err != nil {
 			log.Fatalf("%+v", err)
 		}

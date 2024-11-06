@@ -13,7 +13,6 @@ func main() {
 	// Read ak from environment variables: "ALIBABA_CLOUD_ACCESS_KEY_ID",
 	// "ALIBABA_CLOUD_ACCESS_KEY_SECRET", "ALIBABA_CLOUD_SECURITY_TOKEN"
 	credential, err := credentials.NewCredential(nil)
-
 	if err != nil {
 		return
 	}

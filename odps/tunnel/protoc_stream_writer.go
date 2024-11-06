@@ -61,7 +61,6 @@ func (r *ProtocStreamWriter) WriteFixed64(val uint64) error {
 
 func (r *ProtocStreamWriter) WriteBytes(b []byte) error {
 	err := r.WriteVarint(uint64(len(b)))
-
 	if err != nil {
 		return err
 	}

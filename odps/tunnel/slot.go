@@ -40,7 +40,6 @@ func newSlot(id string, server string) (slot, error) {
 
 	ip := parts[0]
 	port, err := strconv.Atoi(parts[1])
-
 	if err != nil {
 		return slot{}, errors.WithStack(err)
 	}
@@ -63,7 +62,6 @@ func (s *slot) SetServer(server string) error {
 
 	s.ip = parts[0]
 	port, err := strconv.Atoi(parts[1])
-
 	if err != nil {
 		return errors.WithStack(err)
 	}

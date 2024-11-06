@@ -102,7 +102,6 @@ func (sc *Config) Update(supervisionToken string) error {
 	queryArgs.Set("security_configuration", "")
 
 	bodyXml, err := xml.Marshal(sc.model)
-
 	if err != nil {
 		return errors.WithStack(err)
 	}

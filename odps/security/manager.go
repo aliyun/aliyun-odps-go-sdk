@@ -81,7 +81,6 @@ func (sm *Manager) CheckPermissionV1(p Permission) (*PermissionCheckResult, erro
 	req.Header.Set(common.HttpHeaderContentType, "application/json")
 	var resModel ResModel
 	err = client.DoWithModel(req, &resModel)
-
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -95,7 +94,6 @@ func (sm *Manager) CheckPermissionV0(
 	actionType PermissionActionType,
 	columns []string,
 ) (*PermissionCheckResult, error) {
-
 	rb := sm.rb()
 	resource := rb.Auth()
 	client := sm.restClient
@@ -143,7 +141,6 @@ func (sm *Manager) setPolicy(resource, policyType string, policy string) error {
 	queryArgs.Set(policyType, "")
 	client := sm.restClient
 	req, err := client.NewRequestWithUrlQuery(common.HttpMethod.PutMethod, resource, strings.NewReader(policy), queryArgs)
-
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -311,7 +308,6 @@ func (sm *Manager) ListUsersForRole(roleName string) ([]User, error) {
 
 func (sm *Manager) RunQuery(query string, jsonOutput bool, supervisionToken string) (string, error) {
 	authIns, err := sm.Run(query, jsonOutput, supervisionToken)
-
 	if err != nil {
 		return "", err
 	}

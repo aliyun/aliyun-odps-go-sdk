@@ -78,9 +78,8 @@ func (r *Resolver) Lookup(ctx context.Context, host string) ([]string, error) {
 }
 
 func (r *Resolver) lookup(ctx context.Context, host string) ([]string, error) {
-	//调用默认的resolver
+	// 调用默认的resolver
 	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
-
 	if err != nil {
 		return nil, err
 	}

@@ -22,7 +22,6 @@ func main() {
 	// Specify the ini file path
 	configPath := ""
 	conf, err := odps.NewConfigFromIni(configPath)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

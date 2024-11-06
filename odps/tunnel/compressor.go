@@ -57,7 +57,6 @@ func (s snappyWrapper) Close() error {
 }
 
 func (s SnappyFramed) NewReader(rc io.ReadCloser) io.ReadCloser {
-
 	return readCloser{
 		readCloser: snappyWrapper{snappy.NewReader(rc)},
 		closer:     rc,

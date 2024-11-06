@@ -126,7 +126,7 @@ func (instance *Instance) Terminate() error {
 		XMLName xml.Name `xml:"Instance"`
 		Status  InstanceStatus
 	}
-	var bodyModel = BodyModel{
+	bodyModel := BodyModel{
 		Status: InstanceTerminated,
 	}
 
@@ -213,7 +213,6 @@ func (instance *Instance) GetTaskSummary(taskName string) (*TaskSummary, error) 
 		decoder := json.NewDecoder(res.Body)
 		return errors.WithStack(decoder.Decode(&resModel))
 	})
-
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -239,7 +238,6 @@ func (instance *Instance) GetTaskQuotaJson(taskName string) (string, error) {
 		body, err = ioutil.ReadAll(res.Body)
 		return errors.WithStack(err)
 	})
-
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
@@ -260,7 +258,6 @@ func (instance *Instance) GetCachedInfo() (string, error) {
 		body, err = ioutil.ReadAll(res.Body)
 		return errors.WithStack(err)
 	})
-
 	if err != nil {
 		return "", errors.WithStack(err)
 	}

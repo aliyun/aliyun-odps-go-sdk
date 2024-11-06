@@ -25,10 +25,12 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/security"
 )
 
-var account = account2.AccountFromEnv()
-var endpoint = restclient.LoadEndpointFromEnv()
-var restClient = restclient.NewOdpsRestClient(account, endpoint)
-var projectName = "go_sdk_regression_testing"
+var (
+	account     = account2.AccountFromEnv()
+	endpoint    = restclient.LoadEndpointFromEnv()
+	restClient  = restclient.NewOdpsRestClient(account, endpoint)
+	projectName = "go_sdk_regression_testing"
+)
 
 func ExampleManager_GetSecurityConfig() {
 	sm := security.NewSecurityManager(restClient, projectName)
@@ -59,7 +61,6 @@ func ExampleManager_CheckPermissionV1() {
 
 	println(fmt.Sprintf("%v", r))
 	// Output:
-
 }
 
 func ExampleManager_CheckPermissionV0() {

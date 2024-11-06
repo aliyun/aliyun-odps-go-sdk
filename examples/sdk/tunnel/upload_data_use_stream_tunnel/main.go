@@ -41,7 +41,6 @@ func main() {
 		tunnel.SessionCfg.WithCreatePartition(), // create new partition if the specific partition is not existed
 		tunnel.SessionCfg.WithDefaultDeflateCompressor(),
 	)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

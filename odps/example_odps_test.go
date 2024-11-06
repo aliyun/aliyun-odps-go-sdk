@@ -26,7 +26,6 @@ import (
 )
 
 func ExampleOdps_RunSQL() {
-
 	column := tableschema.Column{
 		Name: "id",
 		Type: datatype.DateType,

@@ -133,7 +133,8 @@ func (t *Tunnel) CreateStreamUploadSession(projectName, tableName string, opts .
 
 func (t *Tunnel) AttachToExistedUploadSession(
 	projectName, tableName, sessionId string,
-	opts ...Option) (*UploadSession, error) {
+	opts ...Option,
+) (*UploadSession, error) {
 	client, err := t.getRestClient(projectName)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -153,7 +154,8 @@ func (t *Tunnel) CreateDownloadSession(projectName, tableName string, opts ...Op
 
 func (t *Tunnel) AttachToExistedDownloadSession(
 	projectName, tableName, sessionId string,
-	opts ...Option) (*DownloadSession, error) {
+	opts ...Option,
+) (*DownloadSession, error) {
 	client, err := t.getRestClient(projectName)
 	if err != nil {
 		return nil, errors.WithStack(err)

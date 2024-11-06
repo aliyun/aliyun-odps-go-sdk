@@ -94,7 +94,6 @@ func (ss *Schemas) Create(schemaName string, createIfNotExists bool, comment str
 		IfNotExists bool
 	}
 	postBodyModel := createSchemaModel{
-
 		Project:     ss.projectName,
 		Name:        schemaName,
 		Comment:     comment,

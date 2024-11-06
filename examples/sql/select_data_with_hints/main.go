@@ -24,7 +24,6 @@ func main() {
 		selectSql,
 		sql.Named("table_name", "table1"),
 	)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

@@ -27,7 +27,6 @@ import (
 func ExampleProjects_List() {
 	projectsIns := odpsIns.Projects()
 	projects, err := projectsIns.List(odps.ProjectFilter.NamePrefix("p"))
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

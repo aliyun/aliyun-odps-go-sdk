@@ -9,29 +9,32 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 )
 
-type NullBool sql.NullBool
-type NullFloat64 sql.NullFloat64
-type NullInt32 sql.NullInt32
-type NullInt64 sql.NullInt64
-type NullString sql.NullString
-type NullDate sql.NullTime
-type NullDateTime sql.NullTime
-type NullTimeStamp sql.NullTime
-type NullTimeStampNtz sql.NullTime
-type Binary sql.RawBytes
-type Decimal data.Decimal
-type Map data.Map
-type Array data.Array
-type Struct data.Struct
-type Json data.Json
+type (
+	NullBool         sql.NullBool
+	NullFloat64      sql.NullFloat64
+	NullInt32        sql.NullInt32
+	NullInt64        sql.NullInt64
+	NullString       sql.NullString
+	NullDate         sql.NullTime
+	NullDateTime     sql.NullTime
+	NullTimeStamp    sql.NullTime
+	NullTimeStampNtz sql.NullTime
+	Binary           sql.RawBytes
+	Decimal          data.Decimal
+	Map              data.Map
+	Array            data.Array
+	Struct           data.Struct
+	Json             data.Json
+)
 
 type NullInt8 struct {
 	Int8  int8
-	Valid bool //Valid is true if Int16 is not NULL
+	Valid bool // Valid is true if Int16 is not NULL
 }
+
 type NullInt16 struct {
 	Int16 int16
-	Valid bool //Valid is true if Int16 is not NULL
+	Valid bool // Valid is true if Int16 is not NULL
 }
 
 func (n *NullBool) Scan(value interface{}) error {

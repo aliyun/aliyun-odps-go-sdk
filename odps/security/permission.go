@@ -41,8 +41,8 @@ func NewPermission(
 	projectName string,
 	objectType PermissionObjectType,
 	objectName string,
-	actionType PermissionActionType) Permission {
-
+	actionType PermissionActionType,
+) Permission {
 	return Permission{
 		ProjectName: projectName,
 		ObjectType:  objectType,

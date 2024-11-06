@@ -11,7 +11,6 @@ func main() {
 	// Specify the ini file path
 	configPath := "./config.ini"
 	conf, err := odps.NewConfigFromIni(configPath)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -26,7 +25,6 @@ func main() {
 	table := tables.Get("all_types_demo")
 
 	err = table.Delete()
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

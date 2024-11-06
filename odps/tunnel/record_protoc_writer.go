@@ -66,7 +66,6 @@ func newRecordProtocHttpWriter(conn *httpConnection, columns []tableschema.Colum
 
 func (r *RecordProtocWriter) Write(record data.Record) error {
 	err := r.write(record)
-
 	if err != nil {
 		err1 := r.Close()
 

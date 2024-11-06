@@ -57,7 +57,7 @@ type RestClient struct {
 }
 
 func NewOdpsRestClient(a account.Account, endpoint string) RestClient {
-	var client = RestClient{
+	client := RestClient{
 		Account:              a,
 		endpoint:             endpoint,
 		HttpTimeout:          DefaultHttpTimeout * time.Second,
@@ -113,7 +113,7 @@ func (client *RestClient) client() *http.Client {
 		},
 	}
 
-	var transport = http.Transport{
+	transport := http.Transport{
 		Proxy:              http.ProxyFromEnvironment,
 		DialContext:        dialer.DialContext,
 		ForceAttemptHTTP2:  false,
@@ -130,7 +130,7 @@ func (client *RestClient) client() *http.Client {
 }
 
 func (client *RestClient) NewRequest(method, resource string, body io.Reader) (*http.Request, error) {
-	var urlStr = fmt.Sprintf(
+	urlStr := fmt.Sprintf(
 		"%s/%s",
 		strings.TrimRight(client.Endpoint(), "/"),
 		strings.TrimLeft(resource, "/"))
@@ -266,10 +266,9 @@ func (client *RestClient) DoXmlWithParseFunc(
 	queryArgs url.Values,
 	headers map[string]string,
 	bodyModel interface{},
-	parseFunc func(res *http.Response) error) error {
-
+	parseFunc func(res *http.Response) error,
+) error {
 	bodyXml, err := xml.Marshal(bodyModel)
-
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -293,10 +292,9 @@ func (client *RestClient) DoXmlWithParseRes(
 	queryArgs url.Values,
 	headers map[string]string,
 	bodyModel interface{},
-	parseFunc func(res *http.Response) error) error {
-
+	parseFunc func(res *http.Response) error,
+) error {
 	bodyXml, err := xml.Marshal(bodyModel)
-
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -319,8 +317,8 @@ func (client *RestClient) DoXmlWithModel(
 	resource string,
 	queryArgs url.Values,
 	bodyModel interface{},
-	resModel interface{}) error {
-
+	resModel interface{},
+) error {
 	parseFunc := func(res *http.Response) error {
 		decoder := xml.NewDecoder(res.Body)
 

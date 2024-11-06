@@ -58,7 +58,6 @@ func (lv *LogView) LogViewHost() string {
 
 		return nil
 	})
-
 	if err != nil {
 		log.Printf("get logview err, %v", err)
 		return HostDefault

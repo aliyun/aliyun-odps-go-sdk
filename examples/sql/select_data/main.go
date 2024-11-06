@@ -29,7 +29,6 @@ func main() {
 		selectSql,
 		sql.Named("bigint_type", 100000000000),
 	)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

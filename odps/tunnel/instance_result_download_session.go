@@ -235,7 +235,6 @@ func (is *InstanceResultDownloadSession) loadInformation(req *http.Request) erro
 		decoder := json.NewDecoder(res.Body)
 		return errors.WithStack(decoder.Decode(&resModel))
 	})
-
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -291,7 +290,6 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 		nil,
 		queryArgs,
 	)
-
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}

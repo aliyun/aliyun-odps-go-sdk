@@ -31,7 +31,6 @@ import (
 )
 
 func Example_tunnel_upload_arrow() {
-
 	err := odpsIns.Tables().Get("sale_detail").AddPartition(true, "sale_date=202111/region=hangzhou")
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -202,7 +201,6 @@ func Example_tunnel_download_arrow_with_partition() {
 	reader, err := session.OpenRecordArrowReader(
 		0, 1000,
 		[]string{"shop_name", "total_price"})
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

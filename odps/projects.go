@@ -94,7 +94,6 @@ func (p *Projects) Exists(projectName string) (bool, error) {
 
 	if !project.IsLoaded() {
 		err := project.Load()
-
 		if err != nil {
 			return false, errors.WithStack(err)
 		}

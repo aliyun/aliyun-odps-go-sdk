@@ -154,6 +154,5 @@ func (account *StsAccount) SignRequest(req *http.Request, endpoint string) error
 }
 
 func (account *StsAccount) Credential() (*credentials.CredentialModel, error) {
-
 	return account.sp.Credential()
 }

@@ -40,7 +40,6 @@ func main() {
 		tunnel.SessionCfg.WithPartitionKey("p1=20,p2='hangzhou'"),
 		tunnel.SessionCfg.WithDefaultDeflateCompressor(),
 	)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -72,7 +71,6 @@ func main() {
 
 			for i := 0; i < 100; i++ {
 				err = recordWriter.Write(record)
-
 				if err != nil {
 					_ = recordWriter.Close()
 					errChan <- err
@@ -91,7 +89,6 @@ func main() {
 	// Wait for all writers to finish uploading data
 	for i := 0; i < writerNum; i++ {
 		err := <-errChan
-
 		if err != nil {
 			log.Fatalf("%+v", err)
 		}

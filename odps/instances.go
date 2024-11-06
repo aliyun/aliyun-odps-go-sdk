@@ -116,7 +116,6 @@ func (instances *Instances) CreateTaskWithPriority(projectName string, task Task
 		decoder := xml.NewDecoder(res.Body)
 		return errors.WithStack(decoder.Decode(&resModel))
 	})
-
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -211,7 +210,6 @@ func (instances *Instances) ListInstancesQueued(filters ...InsFilterFunc) ([]str
 
 	for {
 		err := client.GetWithModel(resources, queryArgs, &resModel)
-
 		if err != nil {
 			return insList, errors.WithStack(err)
 		}

@@ -31,7 +31,6 @@ func main() {
 		sql.Named("p1", 20),
 		sql.Named("p2", "hangzhou"),
 	)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

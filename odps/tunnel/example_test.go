@@ -28,9 +28,11 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 )
 
-var tunnelIns *tunnel.Tunnel
-var odpsIns *odps.Odps
-var ProjectName = "go_sdk_regression_testing"
+var (
+	tunnelIns   *tunnel.Tunnel
+	odpsIns     *odps.Odps
+	ProjectName = "go_sdk_regression_testing"
+)
 
 func init() {
 	account := account2.AccountFromEnv()

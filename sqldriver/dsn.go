@@ -31,8 +31,10 @@ import (
 // the NewConfig function should be used, which sets default values.
 type Config = odps.Config
 
-var NewConfig = odps.NewConfig
-var NewConfigFromIni = odps.NewConfigFromIni
+var (
+	NewConfig        = odps.NewConfig
+	NewConfigFromIni = odps.NewConfigFromIni
+)
 
 // ParseDSN dsn格式如下
 // http://AccessId:AccessKey@host:port/path?project=<project_name>&stsToken=<sts_token>&tcpConnectionTimeout=30&httpTimeout=60&tunnelQuotaName=<quota_name>

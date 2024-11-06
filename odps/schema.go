@@ -105,7 +105,7 @@ func (s *Schema) Load() error {
 	resource := s.ResourceUrl()
 	s.beLoaded = true
 
-	var GMT, _ = time.LoadLocation("GMT")
+	GMT, _ := time.LoadLocation("GMT")
 	parseFunc := func(res *http.Response) error {
 		decoder := xml.NewDecoder(res.Body)
 		err := decoder.Decode(&s.model)

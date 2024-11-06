@@ -105,19 +105,19 @@ func (rr *rowsReader) Next(dst []driver.Value) error {
 			dst[i] = time.Time(ri.(data.Timestamp))
 		case datatype.TIMESTAMP_NTZ:
 			dst[i] = time.Time(ri.(data.TimestampNtz))
-		//case datatype.DECIMAL:
+		// case datatype.DECIMAL:
 		//	dst[i] = ri
-		//case datatype.MAP:
+		// case datatype.MAP:
 		//	dst[i] = ri
-		//case datatype.ARRAY:
+		// case datatype.ARRAY:
 		//	dst[i] = ri
-		//case datatype.STRUCT:
+		// case datatype.STRUCT:
 		//	dst[i] = ri
-		//case datatype.VOID:
+		// case datatype.VOID:
 		//	dst[i] = ri
-		//case datatype.IntervalDayTime:
+		// case datatype.IntervalDayTime:
 		//	dst[i] = ri
-		//case datatype.IntervalYearMonth:
+		// case datatype.IntervalYearMonth:
 		//	dst[i] = ri
 		default:
 			dst[i] = ri
