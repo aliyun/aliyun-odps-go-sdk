@@ -66,6 +66,7 @@ type TableSchema struct {
 	resources       string
 	SerDeProperties map[string]string
 	Props           string
+	MvProperties    map[string]string // materialized view properties
 	RefreshHistory  string
 
 	// for clustered info
@@ -196,6 +197,7 @@ func (builder *SchemaBuilder) Build() TableSchema {
 		StorageHandler:   builder.storageHandler,
 		Location:         builder.location,
 		ClusterInfo:      builder.clusterInfo,
+		MvProperties:     make(map[string]string),
 	}
 }
 
@@ -249,6 +251,161 @@ func (schema *TableSchema) ToBaseSQLString(projectName string, schemaName string
 
 	data := Data{projectName, schemaName, schema, isExternal, createIfNotExists}
 
+	var out bytes.Buffer
+	err = tpl.Execute(&out, data)
+	if err != nil {
+		panic(err)
+	}
+	return out.String(), nil
+}
+
+func (schema *TableSchema) ToViewSQLString(projectName string, schemaName string, orReplace, createIfNotExists, buildDeferred bool) (string, error) {
+	if schema.TableName == "" {
+		return "", errors.New("view name is not set")
+	}
+
+	if (schema.IsVirtualView || schema.IsMaterializedView) && schema.ViewText == "" {
+		return "", errors.New("view text is not set")
+	}
+
+	if schema.IsVirtualView && len(schema.PartitionColumns) > 0 {
+		return "", errors.New("virtual view can not have partition columns")
+	}
+
+	if schema.IsVirtualView && schema.IsMaterializedView {
+		return "", errors.New("virtual view and materialized view can not be both set")
+	}
+
+	if !schema.IsVirtualView && !schema.IsMaterializedView {
+		return "", errors.New("either virtual view or materialized should be set")
+	}
+
+	var fns = template.FuncMap{
+		"notLast": func(i, length int) bool {
+			return i < length-1
+		},
+	}
+
+	tplStr := "{{$columnNum := len .Schema.Columns}}" +
+		"{{$partitionNum := len .Schema.PartitionColumns}}" +
+		"{{$mvPropertiesNum:= len .Schema.MvProperties}}" +
+		"{{$clusterColsNum:= len .Schema.ClusterInfo.ClusterCols}}" +
+		"{{$clusterSortColsNum:= len .Schema.ClusterInfo.SortCols}}" +
+		"create " +
+		"{{if and .Schema.IsVirtualView .OrReplace -}}" +
+		"or replace  " +
+		"{{end}}" +
+		"{{if .Schema.IsMaterializedView -}}" +
+		"materialized  " +
+		"{{ end -}}" +
+		"view " +
+		"{{ if .CreateIfNotExists }}" +
+		"if not exists" +
+		"{{ end }} " +
+		"{{if ne .SchemaName \"\"}}" +
+		"{{.ProjectName}}." +
+		"{{end}}" +
+		"{{if ne .SchemaName \"\"}}" +
+		"`{{.SchemaName}}`." +
+		"{{end}}" +
+		"`{{.Schema.TableName}}`" +
+		"{{ if .Schema.IsMaterializedView }}" +
+		"{{ if gt .Schema.Lifecycle 0 }}" +
+		"\nlifecycle {{.Schema.Lifecycle}}" +
+		" {{end -}}" +
+		"{{ if .BuildDeferred }}" +
+		"\nbuild deferred" +
+		" {{end -}}" +
+		"{{end -}}" +
+		"{{ if gt $columnNum 0 }}" +
+		"(\n {{ range $i, $column := .Schema.Columns  }}" +
+		"    `{{.Name}}` {{ if ne .Comment \"\" }}comment '{{.Comment}}'{{ end }}{{ if notLast $i $columnNum  }},{{ end }}\n" +
+		"{{ end }}" +
+		")" +
+		"{{ end }}" +
+		"{{ if .Schema.IsMaterializedView }}" +
+		"{{ if not .Schema.IsMaterializedViewRewriteEnabled}}" +
+		" disable rewrite " +
+		"{{end -}}" +
+		"{{end -}}" +
+		"{{ if ne .Schema.Comment \"\"  }}" +
+		"\ncomment '{{.Schema.Comment}}'" +
+		"{{ end }}" +
+		"{{ if .Schema.IsMaterializedView }}" +
+		"{{ if gt $partitionNum 0 }}" +
+		"\npartitioned by (" +
+		"{{ range $i, $partition := .Schema.PartitionColumns }}" +
+		"\n`{{.Name}}`" +
+		" {{- if notLast $i $partitionNum  }}" +
+		"," +
+		" {{ end }}" +
+		"{{ end -}}" +
+		")" +
+		"{{ end }}" +
+		"{{ if gt $clusterColsNum 0 }}" +
+		"{{ if eq .Schema.ClusterInfo.ClusterType \"hash\" }}" +
+		" \nclustered by (" +
+		"{{ range $i, $clusterCol := .Schema.ClusterInfo.ClusterCols }}" +
+		"`{{.}}`" +
+		"{{ if notLast $i $clusterColsNum  }},{{ end }}" +
+		"{{end -}}" +
+		")" +
+		"{{else if eq .Schema.ClusterInfo.ClusterType \"range\"}}" +
+		"\nrange clustered by (" +
+		"{{ range $i, $clusterCol := .Schema.ClusterInfo.ClusterCols }}" +
+		"`{{.}}`" +
+		"{{ if notLast $i $clusterColsNum  }},{{ end }}" +
+		"{{end -}}" +
+		")" +
+		"{{end -}}" +
+		"{{ if gt $clusterSortColsNum 0 }}" +
+		"\nsorted by (" +
+		"{{ range $i, $clusterSortCol := .Schema.ClusterInfo.SortCols }}" +
+		"`{{.Name}}` {{.Order}}" +
+		"{{ if notLast $i $clusterSortColsNum  }},{{ end }}" +
+		"{{end -}}" +
+		")" +
+		"{{end -}}" +
+		"{{ if .Schema.ClusterInfo.BucketNum }}" +
+		" into {{.Schema.ClusterInfo.BucketNum}} buckets" +
+		"{{end -}}" +
+		"{{end -}}" +
+		"{{ if .MvProperties }} " +
+		"\nTBLPROPERTIES (" +
+		"{{ range $i, $kv := .MvProperties }}" +
+		"\"{{$kv.Key}}\"=\"{{$kv.Value}}\"" +
+		"{{ if notLast $i $mvPropertiesNum  }},{{ end }}" +
+		"{{end -}}" +
+		")" +
+		"{{end}}" +
+		"{{end}}" +
+		"\nas {{.Schema.ViewText}};"
+
+	tpl, err := template.New("DDL_CREATE_VIEW").Funcs(fns).Parse(tplStr)
+	if err != nil {
+		panic(err)
+	}
+
+	type kvPair struct {
+		Key   string
+		Value string
+	}
+
+	type Data struct {
+		ProjectName       string
+		SchemaName        string
+		Schema            *TableSchema
+		MvProperties      []kvPair
+		OrReplace         bool
+		CreateIfNotExists bool
+		BuildDeferred     bool
+	}
+
+	data := Data{ProjectName: projectName, SchemaName: schemaName, Schema: schema, OrReplace: orReplace, CreateIfNotExists: createIfNotExists, BuildDeferred: buildDeferred}
+
+	for k, v := range schema.MvProperties {
+		data.MvProperties = append(data.MvProperties, kvPair{k, v})
+	}
 	var out bytes.Buffer
 	err = tpl.Execute(&out, data)
 	if err != nil {
