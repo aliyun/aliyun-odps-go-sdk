@@ -80,7 +80,7 @@ func main() {
 					builder := fieldBuilder.(*array.TimestampBuilder)
 					l, _ := time.LoadLocation("Local")
 					t, _ := time.ParseInLocation(odpsdata.DateTimeFormat, d[i].(string), l)
-					builder.Append(arrow.Timestamp(t.UnixMilli()))
+					builder.Append(arrow.Timestamp(t.UnixNano() / 1000))
 				case "extra":
 					builder := fieldBuilder.(*array.StructBuilder)
 					fb1 := builder.FieldBuilder(0).(*array.ListBuilder)
