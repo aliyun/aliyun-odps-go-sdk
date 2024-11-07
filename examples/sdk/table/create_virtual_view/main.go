@@ -52,16 +52,17 @@ func main() {
 		Columns(c1, c2, c3). // columns
 		Comment("create Virtual view").
 		Lifecycle(10).
+		IsVirtualView(true).
+		ViewText("select string_type,date_type,int_type from all_types_demo").
 		Build()
-	schema.IsVirtualView = true
-	schema.ViewText = "select string_type,date_type,int_type from all_types_demo;"
+
 
 	tablesIns := odpsIns.Tables()
 
-	sql, err := schema.ToViewSQLString(odpsIns.DefaultProjectName(), odpsIns.CurrentSchemaName(), true, true, true)
+	sql, _ := schema.ToViewSQLString(odpsIns.DefaultProjectName(), odpsIns.CurrentSchemaName(), true, true, false)
 	fmt.Println(sql)
 
-	err = tablesIns.CreateView(schema, true, true, true)
+	err = tablesIns.CreateView(schema, true, true, false)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

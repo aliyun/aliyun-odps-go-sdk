@@ -22,7 +22,7 @@ func main() {
 
 	project := odpsIns.Project(conf.ProjectName)
 	tables := project.Tables()
-	table := tables.Get("testcreatematerializedview")
+	table := tables.Get("testcreatevirtualview")
 
 	ok, err := table.Exists()
 

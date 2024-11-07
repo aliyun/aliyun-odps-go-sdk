@@ -8,24 +8,25 @@ import (
 )
 
 func TestToViewSQLString(t *testing.T) {
-	schema := TableSchema{
-		TableName: "test",
-		Columns: []Column{
-			{
-				Name:    "test1",
-				Type:    datatype2.IntType,
-				Comment: "test1",
-			},
-			{
-				Name:    "test2",
-				Type:    datatype2.BooleanType,
-				Comment: "test2",
-			},
+	sb := NewSchemaBuilder()
+	columns := []Column{
+		{
+			Name: "test1",
+			Type: datatype2.IntType,
 		},
-		ViewText:      "select * from test",
-		Comment:       "view create test",
-		IsVirtualView: true,
+		{
+			Name: "test2",
+			Type: datatype2.BooleanType,
+		},
 	}
+
+	schema := sb.Name("test").
+		Columns(columns...).
+		ViewText("select * from test").
+		Comment("view create test").
+		IsVirtualView(true).
+		Build()
+
 	viewSQL, err := schema.ToViewSQLString("test", "", true, false, true)
 	if err != nil {
 		t.Fatalf("%+v", err)
@@ -34,26 +35,28 @@ func TestToViewSQLString(t *testing.T) {
 }
 
 func TestVirtualViewTemplateParse(t *testing.T) {
-	schema := TableSchema{
-		TableName: "sale_detail_view",
-		Columns: []Column{
-			{
-				Name:    "shop_name",
-				Type:    datatype2.StringType,
-				Comment: "shop_name",
-			},
-			{
-				Name:    "customer_id",
-				Type:    datatype2.StringType,
-				Comment: "",
-			},
+	columns := []Column{
+		{
+			Name:    "shop_name",
+			Type:    datatype2.StringType,
+			Comment: "shop_name",
 		},
-		ViewText:                         "select shop_name,customer_id from sale_detail",
-		Comment:                          "virtual view create test",
-		IsVirtualView:                    true,
-		IsMaterializedViewRewriteEnabled: true,
+		{
+			Name:    "customer_id",
+			Type:    datatype2.StringType,
+			Comment: "",
+		},
 	}
-	viewSQL, err := schema.ToViewSQLString("", "", true, true, true)
+	sb := NewSchemaBuilder()
+
+	schema := sb.Name("sale_detail_view").
+		Columns(columns...).
+		ViewText("select shop_name,customer_id from sale_detail").
+		Comment("virtual view create test").
+		IsVirtualView(true).
+		Build()
+
+	viewSQL, err := schema.ToViewSQLString("", "", true, true, false)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -62,59 +65,52 @@ func TestVirtualViewTemplateParse(t *testing.T) {
 }
 
 func TestMaterializedViewTemplateParse(t *testing.T) {
-	schema := TableSchema{
-		TableName: "mf_mv_blank_pts",
-		Columns: []Column{
-			{
-				Name:    "key",
-				Type:    datatype2.BigIntType,
-				Comment: "unique id",
-			},
-			{
-				Name:    "value",
-				Type:    datatype2.BigIntType,
-				Comment: "input value",
-			},
-			{
-				Name:    "ds",
-				Type:    datatype2.StringType,
-				Comment: "partition",
-			},
+	columns := []Column{
+		{
+			Name:    "key",
+			Type:    datatype2.BigIntType,
+			Comment: "unique id",
 		},
-		PartitionColumns: []Column{
-			{
-				Name:    "ds",
-				Comment: "partitiion",
-			},
+		{
+			Name:    "value",
+			Type:    datatype2.BigIntType,
+			Comment: "input value",
 		},
-		IsMaterializedView:               true,
-		IsMaterializedViewRewriteEnabled: true,
-		ViewText:                         "select key,value,ds from mf_blank_pts",
-		Lifecycle:                        7,
+		{
+			Name:    "ds",
+			Type:    datatype2.StringType,
+			Comment: "partition",
+		},
+	}
+	partitionColumns := []Column{
+		{
+			Name:    "ds",
+			Type:    datatype2.StringType,
+			Comment: "partition",
+		},
 	}
 
-	schema.MvProperties = map[string]string{
+	mvProperties := map[string]string{
 		"enable_auto_substitute":   "true",
 		"enable_auto_refresh":      "true",
 		"refresh_interval_minutes": "120",
 	}
 
-	schema.ClusterInfo = ClusterInfo{
-		ClusterType: CLUSTER_TYPE.Hash,
-		// ClusterCols: []string{"key"},
-		SortCols: []SortColumn{
-			{
-				Name:  "value",
-				Order: "asc",
-			},
+	sb := NewSchemaBuilder()
 
-			// {
-			// 	Name: "job",
-			// 	Order: "desc",
-			// },
-		},
-		BucketNum: 1024,
-	}
+	schema := sb.Name("mf_mv_blank_pts").
+		Columns(columns...).
+		IsMaterializedView(true).
+		ViewText("select key,value,ds from mf_blank_pts").
+		PartitionColumns(partitionColumns...).
+		MvProperties(mvProperties).
+		ClusterType(CLUSTER_TYPE.Hash).
+		ClusterColumns([]string{"value"}).
+		ClusterSortColumns([]SortColumn{{Name: "value", Order: "asc"}}).
+		ClusterBucketNum(1024).
+		Lifecycle(7).
+		Build()
+
 	viewSQL, err := schema.ToViewSQLString("", "", false, true, false)
 	if err != nil {
 		t.Fatalf("%+v", err)

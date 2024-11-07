@@ -107,14 +107,19 @@ type SortColumn struct {
 }
 
 type SchemaBuilder struct {
-	name             string
-	comment          string
-	columns          []Column
-	partitionColumns []Column
-	storageHandler   string
-	location         string
-	lifecycle        int
-	clusterInfo      ClusterInfo
+	name                             string
+	comment                          string
+	columns                          []Column
+	partitionColumns                 []Column
+	storageHandler                   string
+	location                         string
+	viewText                         string
+	lifecycle                        int
+	clusterInfo                      ClusterInfo
+	isVirtualView                    bool
+	isMaterializedView               bool
+	isMaterializedViewRewriteEnabled bool
+	mvProperties                     map[string]string
 }
 
 func NewSchemaBuilder() *SchemaBuilder {
@@ -187,6 +192,39 @@ func (builder *SchemaBuilder) ClusterBucketNum(bucketNum int) *SchemaBuilder {
 	return builder
 }
 
+func (builder *SchemaBuilder) IsMaterializedView(isMaterializedView bool) *SchemaBuilder {
+	builder.isMaterializedView = isMaterializedView
+	return builder
+}
+
+func (builder *SchemaBuilder) IsMaterializedViewRewriteEnabled(isMaterializedViewRewriteEnabled bool) *SchemaBuilder {
+	builder.isMaterializedViewRewriteEnabled = isMaterializedViewRewriteEnabled
+	return builder
+}
+
+func (builder *SchemaBuilder) IsVirtualView(isVirtualView bool) *SchemaBuilder {
+	builder.isVirtualView = isVirtualView
+	return builder
+}
+
+func (builder *SchemaBuilder) ViewText(viewText string) *SchemaBuilder {
+	builder.viewText = viewText
+	return builder
+}
+
+func (builder *SchemaBuilder) MvProperty(key, value string) *SchemaBuilder {
+	if builder.mvProperties == nil {
+		builder.mvProperties = make(map[string]string)
+	}
+	builder.mvProperties[key] = value
+	return builder
+}
+
+func (builder *SchemaBuilder) MvProperties(properties map[string]string) *SchemaBuilder {
+	builder.mvProperties = properties
+	return builder
+}
+
 func (builder *SchemaBuilder) Build() TableSchema {
 	return TableSchema{
 		TableName:        builder.name,
@@ -197,7 +235,12 @@ func (builder *SchemaBuilder) Build() TableSchema {
 		StorageHandler:   builder.storageHandler,
 		Location:         builder.location,
 		ClusterInfo:      builder.clusterInfo,
-		MvProperties:     make(map[string]string),
+
+		IsVirtualView:                    builder.isVirtualView,
+		IsMaterializedView:               builder.isMaterializedView,
+		IsMaterializedViewRewriteEnabled: builder.isMaterializedViewRewriteEnabled,
+		ViewText:                         builder.viewText,
+		MvProperties:                     builder.mvProperties,
 	}
 }
 

@@ -60,27 +60,20 @@ func main() {
 		Comment("create Materialized view").
 		Lifecycle(10).
 		PartitionColumns(pc...).
+		IsMaterializedView(true).
+		ViewText("select string_type,date_type,int_type,p1,p2 from all_types_demo where p1=20").
+		MvProperty("enable_auto_refresh","true").
+		MvProperty("refresh_interval_minutes","120").
+		ClusterType(tableschema.CLUSTER_TYPE.Hash).
+		ClusterColumns([]string{"string_type"}).
+		ClusterSortColumns([]tableschema.SortColumn{{Name: "date_type", Order: "asc"}}).
+		ClusterBucketNum(1024).
 		Build()
-	schema.IsMaterializedView = true
-	schema.ClusterInfo   =tableschema.ClusterInfo{
-		ClusterType: tableschema.CLUSTER_TYPE.Hash,
-		ClusterCols: []string{"string_type"},
-		SortCols: []tableschema.SortColumn{
-			{
-				Name: "date_type",
-				Order: "asc",
-			},
-		},
-		BucketNum: 1024,
-	}
-	schema.ViewText = "select string_type,date_type,int_type,p1,p2 from all_types_demo where p1=20"
-	schema.MvProperties["enable_auto_refresh"]="true"
-	schema.MvProperties["refresh_interval_minutes"]="120"
 
 
 	tablesIns := odpsIns.Tables()
 
-	sql, err := schema.ToViewSQLString(odpsIns.DefaultProjectName(), odpsIns.CurrentSchemaName(), true, true, false)
+	sql, _ := schema.ToViewSQLString(odpsIns.DefaultProjectName(), odpsIns.CurrentSchemaName(), true, true, false)
 	fmt.Println(sql)
 
 	err = tablesIns.CreateView(schema, true, true, false)
