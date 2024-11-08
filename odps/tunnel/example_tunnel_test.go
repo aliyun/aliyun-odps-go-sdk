@@ -18,6 +18,8 @@ package tunnel_test
 
 import (
 	"fmt"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"log"
 	"time"
 
@@ -223,5 +225,75 @@ func Example_tunnel_download_arrow_with_partition() {
 		log.Fatalf("%+v", err)
 	}
 
+	// Output:
+}
+
+func ExampleTunnel_Preview() {
+	tableName := "ExampleTunnel_Preview"
+	exists, err := odpsIns.Tables().Get(tableName).Exists()
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+	if !exists {
+		c1 := tableschema.Column{
+			Name: "c1",
+			Type: datatype.StringType,
+		}
+		c2 := tableschema.Column{
+			Name: "c2",
+			Type: datatype.BigIntType,
+		}
+		p1 := tableschema.Column{
+			Name: "p1",
+			Type: datatype.StringType,
+		}
+		p2 := tableschema.Column{
+			Name: "p2",
+			Type: datatype.StringType,
+		}
+
+		tableSchema := tableschema.NewSchemaBuilder().
+			Name(tableName).
+			Columns(c1, c2).
+			PartitionColumns(p1, p2).
+			Build()
+
+		err := odpsIns.Tables().Create(tableSchema, true, nil, nil)
+		if err != nil {
+			log.Fatalf("%+v", err)
+		}
+		ins, err := odpsIns.ExecSQl("insert into" + tableName + " partition(p1='a',p2='b') values('c1',2);")
+		if err != nil {
+			log.Fatalf("%+v", err)
+		}
+		err = ins.WaitForSuccess()
+		if err != nil {
+			log.Fatalf("%+v", err)
+		}
+	}
+
+	ts := odpsIns.Table(tableName)
+	err = ts.Load()
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	records, err := tunnelIns.Preview(ts, "", 10)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	for _, record := range records {
+		println(record.String())
+	}
+
+	records, err = tunnelIns.Preview(ts, "p1='a'/p2='b'", 10)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	for _, record := range records {
+		println(record.String())
+	}
 	// Output:
 }

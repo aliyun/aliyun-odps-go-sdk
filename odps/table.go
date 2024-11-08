@@ -20,14 +20,16 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"github.com/pkg/errors"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
+	"github.com/pkg/errors"
 )
 
 type TableType int
@@ -262,7 +264,7 @@ func (t *Table) MaxLabel() string {
 }
 
 func calculateMaxLabel(labels []string) string {
-	var maxLevel = 0
+	maxLevel := 0
 	var category string
 
 	for _, label := range labels {
@@ -272,7 +274,6 @@ func calculateMaxLabel(labels []string) string {
 
 		curCategory := label[0 : len(label)-1]
 		num, err := strconv.Atoi(string(label[len(label)-1]))
-
 		if err != nil {
 			continue
 		}
@@ -305,6 +306,7 @@ func calculateMaxLabel(labels []string) string {
 
 	return fmt.Sprintf("%s%d", category, maxLevel)
 }
+
 func (t *Table) Exists() (bool, error) {
 	err := t.Load()
 
@@ -665,68 +667,159 @@ func (t *Table) getPartitions(partitionSpec string) ([]Partition, error) {
 	return partitions, nil
 }
 
-// Read can get at most 1W records or 10M bytes of records. partition is a string like "region='10026, name='abc'"
-// columns are the columns wanted. limit is the most records to get. timezone is the timezone of datetime type data,
-// it can be ""
-//func (t *Table) Read(partition string, columns []string, limit int, timezone string) (*csv.Reader, error) {
-//	queryArgs := make(url.Values, 4)
-//
-//	queryArgs.Set("data", "")
-//	if partition != "" {
-//		queryArgs.Set("partition", partition)
-//	}
-//
-//	if len(columns) > 0 {
-//		queryArgs.Set("cols", strings.Join(columns, ","))
-//	}
-//
-//	if limit > 0 {
-//		queryArgs.Set("linenum", strconv.Itoa(limit))
-//	}
-//
-//	client := t.odpsIns.restClient
-//	resource := t.ResourceUrl()
-//
-//	req, err := client.NewRequestWithUrlQuery(common.HttpMethod.GetMethod, resource, nil, queryArgs)
-//	if err != nil {
-//		return nil, errors.WithStack(err)
-//	}
-//
-//	if timezone != "" {
-//		req.Header.Set(common.HttpHeaderSqlTimezone, timezone)
-//	}
-//
-//	res, err := client.Do(req)
-//	if err != nil {
-//		return nil, errors.WithStack(err)
-//	}
-//
-//	return csv.NewReader(res.Body), nil
-//}
-
 func (t *Table) CreateShards(shardCount int) error {
+	sql := fmt.Sprintf("alter table %s into %d shards;", t.getFullName(), shardCount)
+	return t.executeSql(sql)
+}
+
+// Update Table
+
+// ChangeOwner Only the Project Owner or users with the Super_Administrator role can execute commands that modify the table Owner.
+func (t *Table) ChangeOwner(newOwner string) error {
+	return t.executeSql(t.generateChangeOwnerSQL(newOwner))
+}
+
+func (t *Table) generateChangeOwnerSQL(newOwner string) string {
+	return fmt.Sprintf("alter table %s set changeowner to %s;", t.getFullName(), common.QuoteString(newOwner))
+}
+
+// ChangeComment Modify the comment content of the table.
+func (t *Table) ChangeComment(newComment string) error {
+	return t.executeSql(t.generateChangeCommentSQL(newComment))
+}
+
+func (t *Table) generateChangeCommentSQL(newComment string) string {
+	return fmt.Sprintf("alter table %s set comment %s;", t.getFullName(), common.QuoteString(newComment))
+}
+
+// Touch can modify the LastModifiedTime of the table, make LastModifiedTime change to the current time
+func (t *Table) Touch() error {
+	return t.executeSql(t.generateTouchTableSQL())
+}
+
+func (t *Table) generateTouchTableSQL() string {
+	return fmt.Sprintf("alter table %s touch;", t.getFullName())
+}
+
+func (t *Table) ChangeClusterInfo(clusterInfo tableschema.ClusterInfo) error {
+	return t.executeSql(t.generateChangeClusterInfoSQL(clusterInfo))
+}
+
+func (t *Table) generateChangeClusterInfoSQL(clusterInfo tableschema.ClusterInfo) string {
 	var sb strings.Builder
-	sb.WriteString("alter table ")
+	sb.WriteString("alter table " + t.getFullName())
+
+	if len(clusterInfo.ClusterCols) > 0 {
+		if clusterInfo.ClusterType == tableschema.CLUSTER_TYPE.Range {
+			sb.WriteString(" range")
+		}
+		sb.WriteString(fmt.Sprintf(" clustered by (%s)", strings.Join(clusterInfo.ClusterCols, ",")))
+	}
+	if len(clusterInfo.SortCols) > 0 {
+		sb.WriteString(" sorted by (")
+		for index, sortCol := range clusterInfo.SortCols {
+			sb.WriteString(fmt.Sprintf("%s %s", sortCol.Name, string(sortCol.Order)))
+			if index < len(clusterInfo.SortCols)-1 {
+				sb.WriteString(", ")
+			}
+		}
+		sb.WriteString(")")
+	}
+	if clusterInfo.BucketNum > 0 {
+		sb.WriteString(fmt.Sprintf(" into %d buckets", clusterInfo.BucketNum))
+	}
+	sb.WriteString(";")
+	return sb.String()
+}
+
+func (t *Table) Rename(newName string) error {
+	return t.executeSql(t.generateRenameTableSQL(newName))
+}
+
+func (t *Table) generateRenameTableSQL(newName string) string {
+	return fmt.Sprintf("alter table %s rename to %s;", t.getFullName(), common.QuoteString(newName))
+}
+
+func (t *Table) Truncate() error {
+	return t.executeSql(t.generateTruncateTableSQL())
+}
+
+func (t *Table) generateTruncateTableSQL() string {
+	return fmt.Sprintf("truncate table %s;", t.getFullName())
+}
+
+func (t *Table) AddColumns(columns []tableschema.Column, ifNotExists bool) error {
+	return t.executeSql(t.generateAddColumnsSQL(columns, ifNotExists))
+}
+
+func (t *Table) generateAddColumnsSQL(columns []tableschema.Column, ifNotExists bool) string {
+	var sb strings.Builder
+	sb.WriteString("alter table " + t.getFullName() + " add columns ")
+	if ifNotExists {
+		sb.WriteString("if not exists ")
+	}
+	sb.WriteString("(")
+	for index, column := range columns {
+		sb.WriteString(fmt.Sprintf("%s %s", column.Name, column.Type))
+		if column.Comment != "" {
+			sb.WriteString(fmt.Sprintf(" comment %s", common.QuoteString(column.Comment)))
+		}
+		if index < len(columns)-1 {
+			sb.WriteString(", ")
+		}
+	}
+	sb.WriteString(");")
+	return sb.String()
+}
+
+func (t *Table) DropColumns(columnNames []string) error {
+	return t.executeSql(t.generateDropColumnsSQL(columnNames))
+}
+
+func (t *Table) generateDropColumnsSQL(columnNames []string) string {
+	return fmt.Sprintf("alter table %s drop columns %s;", t.getFullName(), strings.Join(columnNames, ", "))
+}
+
+func (t *Table) AlterColumnType(columnName string, columnType datatype.DataType) error {
+	return t.executeSql(t.generateAlterColumnTypeSQL(columnName, columnType))
+}
+
+func (t *Table) generateAlterColumnTypeSQL(columnName string, columnType datatype.DataType) string {
+	return fmt.Sprintf("alter table %s change column %s %s %s;", t.getFullName(), columnName, columnName, columnType)
+}
+
+func (t *Table) ChangeColumnName(oldColumnName string, newColumnName string) error {
+	return t.executeSql(t.generateChangeColumnNameSQL(oldColumnName, newColumnName))
+}
+
+func (t *Table) generateChangeColumnNameSQL(oldColumnName string, newColumnName string) string {
+	return fmt.Sprintf("alter table %s change column %s rename to %s;", t.getFullName(), oldColumnName, newColumnName)
+}
+
+func (t *Table) executeSql(sql string) error {
 	hints := make(map[string]string)
 	if t.SchemaName() == "" {
-		sb.WriteString(fmt.Sprintf("%s.%s", t.ProjectName(), t.Name()))
 		hints["odps.namespace.schema"] = "false"
 	} else {
-		sb.WriteString(fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name()))
 		hints["odps.namespace.schema"] = "true"
 	}
-	sb.WriteString(fmt.Sprintf("\ninto %d shards;", shardCount))
-	ins, err := t.ExecSqlWithHints("SQLCreateShardsTask", sb.String(), hints)
+	ins, err := t.ExecSqlWithHints("AnonymousSQLTask", sql, hints)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
 	err = ins.WaitForSuccess()
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
 	return nil
+}
+
+func (t *Table) getFullName() string {
+	if t.SchemaName() == "" {
+		return fmt.Sprintf("%s.%s", t.ProjectName(), t.Name())
+	} else {
+		return fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name())
+	}
 }
 
 func TableTypeFromStr(s string) TableType {
