@@ -680,7 +680,7 @@ func (t *Table) ChangeOwner(newOwner string) error {
 }
 
 func (t *Table) generateChangeOwnerSQL(newOwner string) string {
-	return fmt.Sprintf("alter table %s set changeowner to %s;", t.getFullName(), common.QuoteString(newOwner))
+	return fmt.Sprintf("alter table %s changeowner to %s;", t.getFullName(), common.QuoteString(newOwner))
 }
 
 // ChangeComment Modify the comment content of the table.
@@ -737,7 +737,7 @@ func (t *Table) Rename(newName string) error {
 }
 
 func (t *Table) generateRenameTableSQL(newName string) string {
-	return fmt.Sprintf("alter table %s rename to %s;", t.getFullName(), common.QuoteString(newName))
+	return fmt.Sprintf("alter table %s rename to %s;", t.getFullName(), common.QuoteRef(newName))
 }
 
 func (t *Table) Truncate() error {
