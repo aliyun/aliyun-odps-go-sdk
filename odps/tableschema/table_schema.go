@@ -346,7 +346,7 @@ func (schema *TableSchema) ToViewSQLString(projectName string, schemaName string
 		"{{ if .CreateIfNotExists }}" +
 		"if not exists" +
 		"{{ end }} " +
-		"{{if ne .SchemaName \"\"}}" +
+		"{{if ne .ProjectName \"\"}}" +
 		"{{.ProjectName}}." +
 		"{{end}}" +
 		"{{if ne .SchemaName \"\"}}" +
