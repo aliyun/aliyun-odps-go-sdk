@@ -149,9 +149,11 @@ func (t *Table) LoadExtendedInfo() error {
 	}
 
 	// Reserved信息中提取出Cluster信息
-	err = json.Unmarshal([]byte(t.tableSchema.Reserved), &t.tableSchema.ClusterInfo)
-	if err != nil {
-		return errors.WithStack(err)
+	if t.tableSchema.Reserved != "" {
+		err = json.Unmarshal([]byte(t.tableSchema.Reserved), &t.tableSchema.ClusterInfo)
+		if err != nil {
+			return errors.WithStack(err)
+		}
 	}
 	t.beLoadedExtended = true
 	return nil
@@ -680,7 +682,11 @@ func (t *Table) ChangeOwner(newOwner string) error {
 }
 
 func (t *Table) generateChangeOwnerSQL(newOwner string) string {
-	return fmt.Sprintf("alter table %s set changeowner to %s;", t.getFullName(), common.QuoteString(newOwner))
+	target := "table"
+	if t.tableSchema.IsVirtualView {
+		target = "view"
+	}
+	return fmt.Sprintf("alter %s %s  changeowner to %s;", target, t.getFullName(), common.QuoteString(newOwner))
 }
 
 // ChangeComment Modify the comment content of the table.
@@ -737,7 +743,12 @@ func (t *Table) Rename(newName string) error {
 }
 
 func (t *Table) generateRenameTableSQL(newName string) string {
-	return fmt.Sprintf("alter table %s rename to %s;", t.getFullName(), common.QuoteString(newName))
+	target := "table"
+	if t.isVirtualView() {
+		target = "view"
+	}
+	return fmt.Sprintf("alter %s %s rename to %s;", target, t.getFullName(), common.QuoteRef(newName))
+
 }
 
 func (t *Table) Truncate() error {
