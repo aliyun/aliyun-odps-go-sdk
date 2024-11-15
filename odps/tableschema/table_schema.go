@@ -18,6 +18,7 @@ package tableschema
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -65,9 +66,9 @@ type TableSchema struct {
 	StorageHandler  string
 	Location        string
 	resources       string
-	SerDeProperties map[string]string
+	SerDeProperties map[string]string `json:"-"`
 	Props           string
-	MvProperties    map[string]string // materialized view properties
+	MvProperties    map[string]string `json:"-"` // materialized view properties
 	RefreshHistory  string
 
 	// for clustered info
@@ -243,6 +244,33 @@ func (builder *SchemaBuilder) Build() TableSchema {
 		ViewText:                         builder.viewText,
 		MvProperties:                     builder.mvProperties,
 	}
+}
+
+func (schema *TableSchema) UnmarshalJSON(data []byte) error {
+	type Alias TableSchema
+	tempSchema := &struct {
+		SerDePropertiesString *string `json:"serDeProperties,omitempty"`
+		MvPropertiesString    *string `json:"mvProperties,omitempty"`
+		*Alias
+	}{
+		Alias: (*Alias)(schema),
+	}
+	if err := json.Unmarshal(data, &tempSchema); err != nil {
+		return err
+	}
+	if tempSchema.SerDePropertiesString != nil {
+		err := json.Unmarshal([]byte(*tempSchema.SerDePropertiesString), &schema.SerDeProperties)
+		if err != nil {
+			return err
+		}
+	}
+	if tempSchema.MvPropertiesString != nil {
+		err := json.Unmarshal([]byte(*tempSchema.MvPropertiesString), &schema.MvProperties)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (schema *TableSchema) ToBaseSQLString(projectName string, schemaName string, createIfNotExists, isExternal bool) (string, error) {
