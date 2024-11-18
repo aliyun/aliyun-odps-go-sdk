@@ -387,11 +387,10 @@ func (t *Table) Delete() error {
 	hints := make(map[string]string)
 	if t.SchemaName() == "" {
 		hints["odps.namespace.schema"] = "false"
-		sqlBuilder.WriteString(fmt.Sprintf("%s.%s", t.ProjectName(), t.Name()))
 	} else {
 		hints["odps.namespace.schema"] = "true"
-		sqlBuilder.WriteString(fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name()))
 	}
+	sqlBuilder.WriteString(t.getFullName())
 	sqlBuilder.WriteString(";")
 
 	sqlTask := NewSqlTask("SQLDropTableTask", sqlBuilder.String(), hints)
@@ -438,12 +437,11 @@ func (t *Table) AddPartitions(ifNotExists bool, partitionValues []string) error 
 	sb.WriteString("alter table ")
 	hints := make(map[string]string)
 	if t.SchemaName() == "" {
-		sb.WriteString(fmt.Sprintf("%s.%s", t.ProjectName(), t.Name()))
 		hints["odps.namespace.schema"] = "false"
 	} else {
-		sb.WriteString(fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name()))
 		hints["odps.namespace.schema"] = "true"
 	}
+	sb.WriteString(t.getFullName())
 	sb.WriteString(" add")
 	if ifNotExists {
 		sb.WriteString(" if not exists\n")
@@ -478,11 +476,10 @@ func (t *Table) DeletePartitions(ifExists bool, partitionValues []string) error 
 	hints := make(map[string]string)
 	if t.SchemaName() == "" {
 		hints["odps.namespace.schema"] = "false"
-		sb.WriteString(fmt.Sprintf("%s.%s", t.ProjectName(), t.Name()))
 	} else {
 		hints["odps.namespace.schema"] = "true"
-		sb.WriteString(fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name()))
 	}
+	sb.WriteString(t.getFullName())
 	sb.WriteString(" drop")
 	if ifExists {
 		sb.WriteString(" if exists")
@@ -687,7 +684,7 @@ func (t *Table) generateChangeOwnerSQL(newOwner string) string {
 	if t.tableSchema.IsVirtualView {
 		target = "view"
 	}
-	return fmt.Sprintf("alter %s %s  changeowner to %s;", target, t.getFullName(), common.QuoteString(newOwner))
+	return fmt.Sprintf("alter %s %s changeowner to %s;", target, t.getFullName(), common.QuoteString(newOwner))
 }
 
 // ChangeComment Modify the comment content of the table.
@@ -720,12 +717,19 @@ func (t *Table) generateChangeClusterInfoSQL(clusterInfo tableschema.ClusterInfo
 		if clusterInfo.ClusterType == tableschema.CLUSTER_TYPE.Range {
 			sb.WriteString(" range")
 		}
-		sb.WriteString(fmt.Sprintf(" clustered by (%s)", strings.Join(clusterInfo.ClusterCols, ",")))
+		sb.WriteString(" clustered by (")
+		for index, clusterCol := range clusterInfo.ClusterCols {
+			sb.WriteString(common.QuoteRef(clusterCol))
+			if index < len(clusterInfo.ClusterCols)-1 {
+				sb.WriteString(", ")
+			}
+		}
+		sb.WriteString(")")
 	}
 	if len(clusterInfo.SortCols) > 0 {
 		sb.WriteString(" sorted by (")
 		for index, sortCol := range clusterInfo.SortCols {
-			sb.WriteString(fmt.Sprintf("%s %s", sortCol.Name, string(sortCol.Order)))
+			sb.WriteString(fmt.Sprintf("%s %s", common.QuoteRef(sortCol.Name), string(sortCol.Order)))
 			if index < len(clusterInfo.SortCols)-1 {
 				sb.WriteString(", ")
 			}
@@ -749,7 +753,6 @@ func (t *Table) generateRenameTableSQL(newName string) string {
 		target = "view"
 	}
 	return fmt.Sprintf("alter %s %s rename to %s;", target, t.getFullName(), common.QuoteRef(newName))
-
 }
 
 func (t *Table) Truncate() error {
@@ -772,7 +775,7 @@ func (t *Table) generateAddColumnsSQL(columns []tableschema.Column, ifNotExists 
 	}
 	sb.WriteString("(")
 	for index, column := range columns {
-		sb.WriteString(fmt.Sprintf("%s %s", column.Name, column.Type))
+		sb.WriteString(fmt.Sprintf("%s %s", common.QuoteRef(column.Name), column.Type))
 		if column.Comment != "" {
 			sb.WriteString(fmt.Sprintf(" comment %s", common.QuoteString(column.Comment)))
 		}
@@ -789,7 +792,11 @@ func (t *Table) DropColumns(columnNames []string) error {
 }
 
 func (t *Table) generateDropColumnsSQL(columnNames []string) string {
-	return fmt.Sprintf("alter table %s drop columns %s;", t.getFullName(), strings.Join(columnNames, ", "))
+	quotedColumns := make([]string, len(columnNames))
+	for i, columnName := range columnNames {
+		quotedColumns[i] = common.QuoteRef(columnName)
+	}
+	return fmt.Sprintf("alter table %s drop columns %s;", t.getFullName(), strings.Join(quotedColumns, ", ")) // 生成 SQL 语句
 }
 
 func (t *Table) AlterColumnType(columnName string, columnType datatype.DataType) error {
@@ -828,9 +835,9 @@ func (t *Table) executeSql(sql string) error {
 
 func (t *Table) getFullName() string {
 	if t.SchemaName() == "" {
-		return fmt.Sprintf("%s.%s", t.ProjectName(), t.Name())
+		return fmt.Sprintf("%s.`%s`", t.ProjectName(), t.Name())
 	} else {
-		return fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name())
+		return fmt.Sprintf("%s.`%s`.`%s`", t.ProjectName(), t.SchemaName(), t.Name())
 	}
 }
 

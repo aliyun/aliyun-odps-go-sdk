@@ -23,6 +23,8 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
 type TypeID int
@@ -325,7 +327,7 @@ func (s StructType) Name() string {
 	sb.WriteString("<")
 
 	for i, field := range s.Fields {
-		sb.WriteString(field.Name)
+		sb.WriteString(common.QuoteRef(field.Name))
 		sb.WriteString(":")
 		sb.WriteString(field.Type.Name())
 

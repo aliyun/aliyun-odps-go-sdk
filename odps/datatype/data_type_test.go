@@ -247,7 +247,7 @@ func TestDataTyeName(t *testing.T) {
 
 	names := []string{
 		"MAP<CHAR(10),INT>",
-		"STRUCT<x:INT,y:VARCHAR(256),z:STRUCT<a:TINYINT,b:DATE>>",
+		"STRUCT<`x`:INT,`y`:VARCHAR(256),`z`:STRUCT<`a`:TINYINT,`b`:DATE>>",
 		"CHAR(10)",
 		"VARCHAR(10)",
 		"DECIMAL(20,3)",

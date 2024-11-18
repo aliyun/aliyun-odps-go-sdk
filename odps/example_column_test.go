@@ -69,5 +69,5 @@ func ExampleColumn() {
 	// Output:
 	// name: STRING
 	// age: BIGINT
-	// property: MAP<VARCHAR(100),STRUCT<a:INT,b:INT>>
+	// property: MAP<VARCHAR(100),STRUCT<`a`:INT,`b`:INT>>
 }
