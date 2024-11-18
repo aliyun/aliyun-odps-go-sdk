@@ -1,9 +1,10 @@
 package odps
 
 import (
+	"testing"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"testing"
 )
 
 func TestTable_AddColumns(t *testing.T) {

@@ -18,10 +18,11 @@ package tunnel_test
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"log"
 	"time"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 
 	"github.com/pkg/errors"
 

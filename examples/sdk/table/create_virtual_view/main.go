@@ -49,13 +49,12 @@ func main() {
 	sb := tableschema.NewSchemaBuilder()
 
 	schema := sb.Name(viewName). // table name
-		Columns(c1, c2, c3). // columns
-		Comment("create Virtual view").
-		Lifecycle(10).
-		IsVirtualView(true).
-		ViewText("select string_type,date_type,int_type from all_types_demo").
-		Build()
-
+					Columns(c1, c2, c3). // columns
+					Comment("create Virtual view").
+					Lifecycle(10).
+					IsVirtualView(true).
+					ViewText("select string_type,date_type,int_type from all_types_demo").
+					Build()
 
 	tablesIns := odpsIns.Tables()
 
