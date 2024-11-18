@@ -1,6 +1,12 @@
 package main
 
 import (
+	"log"
+	"os"
+	"time"
+
+	"github.com/pkg/errors"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/memory"
@@ -8,10 +14,6 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	odpsdata "github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
-	"github.com/pkg/errors"
-	"log"
-	"os"
-	"time"
 )
 
 func main() {
@@ -42,7 +44,6 @@ func main() {
 		tunnel.SessionCfg.WithPartitionKey("age=20,hometown='hangzhou'"),
 		tunnel.SessionCfg.WithDefaultDeflateCompressor(),
 	)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -79,7 +80,7 @@ func main() {
 					builder := fieldBuilder.(*array.TimestampBuilder)
 					l, _ := time.LoadLocation("Local")
 					t, _ := time.ParseInLocation(odpsdata.DateTimeFormat, d[i].(string), l)
-					builder.Append(arrow.Timestamp(t.UnixMilli()))
+					builder.Append(arrow.Timestamp(t.UnixNano() / 1000))
 				case "extra":
 					builder := fieldBuilder.(*array.StructBuilder)
 					fb1 := builder.FieldBuilder(0).(*array.ListBuilder)
@@ -138,7 +139,6 @@ func main() {
 	}
 
 	err = session.Commit([]int{1, 2})
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

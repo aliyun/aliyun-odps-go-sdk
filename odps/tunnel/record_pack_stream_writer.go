@@ -18,10 +18,12 @@ package tunnel
 
 import (
 	"bytes"
+	"time"
+
+	"github.com/pkg/errors"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"github.com/pkg/errors"
-	"time"
 )
 
 type RecordPackStreamWriter struct {

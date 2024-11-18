@@ -16,9 +16,11 @@
 
 package security
 
-type PermissionObjectType int
-type PermissionActionType int
-type PermissionEffect int
+type (
+	PermissionObjectType int
+	PermissionActionType int
+	PermissionEffect     int
+)
 
 const (
 	_ PermissionObjectType = iota

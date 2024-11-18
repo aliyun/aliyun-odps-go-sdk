@@ -32,7 +32,6 @@ func main() {
 		"user_test",
 		tunnel.SessionCfg.WithPartitionKey("age=20,hometown='hangzhou'"),
 	)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -41,7 +40,6 @@ func main() {
 	fmt.Printf("record count is %d", recordCount)
 
 	reader, err := session.OpenRecordArrowReader(0, recordCount, nil)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -64,5 +62,4 @@ func main() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-
 }

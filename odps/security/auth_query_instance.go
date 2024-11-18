@@ -2,8 +2,9 @@ package security
 
 import (
 	"encoding/xml"
-	"github.com/pkg/errors"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -51,7 +52,6 @@ func (ai *AuthQueryInstance) WaitForSuccess() (string, error) {
 
 	for {
 		err := client.GetWithModel(authResource, nil, &resModel)
-
 		if err != nil {
 			return "", err
 		}

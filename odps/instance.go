@@ -19,13 +19,15 @@ package odps
 import (
 	"encoding/json"
 	"encoding/xml"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
 type InstanceStatus int
@@ -124,7 +126,7 @@ func (instance *Instance) Terminate() error {
 		XMLName xml.Name `xml:"Instance"`
 		Status  InstanceStatus
 	}
-	var bodyModel = BodyModel{
+	bodyModel := BodyModel{
 		Status: InstanceTerminated,
 	}
 
@@ -211,7 +213,6 @@ func (instance *Instance) GetTaskSummary(taskName string) (*TaskSummary, error) 
 		decoder := json.NewDecoder(res.Body)
 		return errors.WithStack(decoder.Decode(&resModel))
 	})
-
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -237,7 +238,6 @@ func (instance *Instance) GetTaskQuotaJson(taskName string) (string, error) {
 		body, err = ioutil.ReadAll(res.Body)
 		return errors.WithStack(err)
 	})
-
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
@@ -258,7 +258,6 @@ func (instance *Instance) GetCachedInfo() (string, error) {
 		body, err = ioutil.ReadAll(res.Body)
 		return errors.WithStack(err)
 	})
-
 	if err != nil {
 		return "", errors.WithStack(err)
 	}

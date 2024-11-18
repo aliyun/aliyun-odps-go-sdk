@@ -24,9 +24,10 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/pkg/errors"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/pkg/errors"
 )
 
 type TableSchema struct {
@@ -282,31 +283,30 @@ func (schema *TableSchema) ToBaseSQLString(projectName string, schemaName string
 		return "", errors.New("table columns is not set")
 	}
 
-	var fns = template.FuncMap{
+	fns := template.FuncMap{
 		"notLast": func(i, length int) bool {
 			return i < length-1
 		},
 	}
 
-	tplStr :=
-		"{{$columnNum := len .Schema.Columns}}" +
-			"{{$partitionNum := len .Schema.PartitionColumns}}" +
-			"create {{if .IsExternal -}} external {{ end -}} table {{ if .CreateIfNotExists }}if not exists{{ end }} " +
-			"{{.ProjectName}}.{{if ne .SchemaName \"\"}}`{{.SchemaName}}`.{{end}}`{{.Schema.TableName}}` (\n" +
-			"{{ range $i, $column := .Schema.Columns  }}" +
-			"    `{{.Name}}` {{.Type.Name | print}} {{ if ne .Comment \"\" }}comment '{{.Comment}}'{{ end }}{{ if notLast $i $columnNum  }},{{ end }}\n" +
-			"{{ end }}" +
-			")" +
-			"{{ if ne .Schema.Comment \"\"  }}" +
-			"\ncomment '{{.Schema.Comment}}'" +
-			"{{ end }}" +
-			"{{ if gt $partitionNum 0 }}" +
-			"\npartitioned by (" +
-			"{{ range $i, $partition := .Schema.PartitionColumns }}" +
-			"`{{.Name}}` {{.Type | print}} {{- if ne .Comment \"\" }} comment '{{.Comment}}' {{- end -}} {{- if notLast $i $partitionNum  }}, {{ end }}" +
-			"{{ end -}}" +
-			")" +
-			"{{ end }}"
+	tplStr := "{{$columnNum := len .Schema.Columns}}" +
+		"{{$partitionNum := len .Schema.PartitionColumns}}" +
+		"create {{if .IsExternal -}} external {{ end -}} table {{ if .CreateIfNotExists }}if not exists{{ end }} " +
+		"{{.ProjectName}}.{{if ne .SchemaName \"\"}}`{{.SchemaName}}`.{{end}}`{{.Schema.TableName}}` (\n" +
+		"{{ range $i, $column := .Schema.Columns  }}" +
+		"    `{{.Name}}` {{.Type.Name | print}} {{ if ne .Comment \"\" }}comment '{{.Comment}}'{{ end }}{{ if notLast $i $columnNum  }},{{ end }}\n" +
+		"{{ end }}" +
+		")" +
+		"{{ if ne .Schema.Comment \"\"  }}" +
+		"\ncomment '{{.Schema.Comment}}'" +
+		"{{ end }}" +
+		"{{ if gt $partitionNum 0 }}" +
+		"\npartitioned by (" +
+		"{{ range $i, $partition := .Schema.PartitionColumns }}" +
+		"`{{.Name}}` {{.Type | print}} {{- if ne .Comment \"\" }} comment '{{.Comment}}' {{- end -}} {{- if notLast $i $partitionNum  }}, {{ end }}" +
+		"{{ end -}}" +
+		")" +
+		"{{ end }}"
 
 	tpl, err := template.New("DDL_CREATE_TABLE").Funcs(fns).Parse(tplStr)
 	if err != nil {
@@ -352,7 +352,7 @@ func (schema *TableSchema) ToViewSQLString(projectName string, schemaName string
 		return "", errors.New("either virtual view or materialized should be set")
 	}
 
-	var fns = template.FuncMap{
+	fns := template.FuncMap{
 		"notLast": func(i, length int) bool {
 			return i < length-1
 		},
@@ -538,8 +538,8 @@ func (schema *TableSchema) ToExternalSQLString(
 	schemaName string,
 	createIfNotExists bool,
 	serdeProperties map[string]string,
-	jars []string) (string, error) {
-
+	jars []string,
+) (string, error) {
 	if schema.StorageHandler == "" {
 		return "", errors.New("TableSchema.StorageHandler is not set")
 	}
@@ -549,7 +549,6 @@ func (schema *TableSchema) ToExternalSQLString(
 	}
 
 	baseSql, err := schema.ToBaseSQLString(projectName, schemaName, createIfNotExists, true)
-
 	if err != nil {
 		return "", errors.WithStack(err)
 	}

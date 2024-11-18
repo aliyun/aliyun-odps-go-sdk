@@ -18,19 +18,20 @@ package tunnel_test
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"log"
 	"time"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
+
+	"github.com/pkg/errors"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/memory"
 	tunnel2 "github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
-	"github.com/pkg/errors"
 )
 
 func Example_tunnel_upload_arrow() {
-
 	err := odpsIns.Tables().Get("sale_detail").AddPartition(true, "sale_date=202111/region=hangzhou")
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -201,7 +202,6 @@ func Example_tunnel_download_arrow_with_partition() {
 	reader, err := session.OpenRecordArrowReader(
 		0, 1000,
 		[]string{"shop_name", "total_price"})
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

@@ -19,8 +19,9 @@ package common
 import (
 	"encoding/json"
 	"encoding/xml"
-	"github.com/pkg/errors"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 type GMTTime time.Time

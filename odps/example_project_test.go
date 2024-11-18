@@ -18,15 +18,15 @@ package odps_test
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"log"
 	"time"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 )
 
 func ExampleProjects_List() {
 	projectsIns := odpsIns.Projects()
 	projects, err := projectsIns.List(odps.ProjectFilter.NamePrefix("p"))
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

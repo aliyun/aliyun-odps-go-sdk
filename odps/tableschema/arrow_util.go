@@ -22,11 +22,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
-	"github.com/pkg/errors"
 )
 
 type arrowOptions struct {
@@ -136,12 +137,12 @@ func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error) {
 		return arrow.FixedWidthTypes.Date32, nil
 	case datatype.DATETIME:
 		return arrow.FixedWidthTypes.Timestamp_ns, nil
-		//return &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "UTC"}, nil
+		// return &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "UTC"}, nil
 	case datatype.TIMESTAMP:
 		return arrow.FixedWidthTypes.Timestamp_ns, nil
 	case datatype.TIMESTAMP_NTZ:
 		return arrow.FixedWidthTypes.Timestamp_ns, nil
-		//return &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "UTC"}, nil
+		// return &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "UTC"}, nil
 	case datatype.IntervalDayTime:
 		return arrow.FixedWidthTypes.DayTimeInterval, nil
 	case datatype.IntervalYearMonth:
@@ -175,7 +176,7 @@ func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error) {
 		}
 
 		return arrow.ListOf(itemType), nil
-		//case datatype.MAP:
+		// case datatype.MAP:
 		//	mapType, _ := odpsType.(datatype.MapType)
 		//	keyType, err := TypeToArrowType(mapType.KeyType)
 		//	if err != nil {

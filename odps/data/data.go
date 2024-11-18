@@ -18,8 +18,9 @@ package data
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"reflect"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 )
 
 type Data interface {

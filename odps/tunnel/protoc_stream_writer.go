@@ -18,9 +18,10 @@ package tunnel
 
 import (
 	"bytes"
-	"google.golang.org/protobuf/encoding/protowire"
 	"io"
 	"math"
+
+	"google.golang.org/protobuf/encoding/protowire"
 )
 
 type ProtocStreamWriter struct {
@@ -60,7 +61,6 @@ func (r *ProtocStreamWriter) WriteFixed64(val uint64) error {
 
 func (r *ProtocStreamWriter) WriteBytes(b []byte) error {
 	err := r.WriteVarint(uint64(len(b)))
-
 	if err != nil {
 		return err
 	}

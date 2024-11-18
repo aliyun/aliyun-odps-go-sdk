@@ -313,7 +313,7 @@ LOOP:
 
 		switch nextToken {
 		case ",":
-			var _ = parser.consumeToken()
+			_ = parser.consumeToken()
 		case ">":
 			break LOOP
 		default:

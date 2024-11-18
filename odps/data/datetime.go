@@ -20,8 +20,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 )
 
 const (
@@ -36,10 +37,12 @@ const (
 	SecondsPerDay    = 24 * SecondsPerHour
 )
 
-type Date time.Time
-type DateTime time.Time
-type Timestamp time.Time
-type TimestampNtz time.Time
+type (
+	Date         time.Time
+	DateTime     time.Time
+	Timestamp    time.Time
+	TimestampNtz time.Time
+)
 
 func NewDate(s string) (Date, error) {
 	t, err := time.ParseInLocation(DateFormat, s, time.UTC)

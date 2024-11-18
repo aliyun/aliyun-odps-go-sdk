@@ -18,8 +18,10 @@ package common
 
 import "time"
 
-const UserAgentValue = "odps-go-sdk/0.0.1 Go/1.17.2"
-const HttpHeaderOdpsPrefix = "x-odps-"
+const (
+	UserAgentValue       = "odps-go-sdk/0.0.1 Go/1.17.2"
+	HttpHeaderOdpsPrefix = "x-odps-"
+)
 
 var HttpMethod = struct {
 	GetMethod    string

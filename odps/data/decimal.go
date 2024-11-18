@@ -18,11 +18,13 @@ package data
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
-	"github.com/pkg/errors"
 	"math/big"
 	"strconv"
 	"strings"
+
+	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 )
 
 var InvalidDecimalErr = errors.New("invalid decimal")

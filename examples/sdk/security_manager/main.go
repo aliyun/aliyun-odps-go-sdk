@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
+	"log"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/security"
-	"log"
 )
 
 func main() {
@@ -21,11 +22,10 @@ func main() {
 	// Set the Default Maxcompute project used By Odps instance
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
 
-	var restClient = odpsIns.RestClient()
+	restClient := odpsIns.RestClient()
 
 	sm := security.NewSecurityManager(restClient, conf.ProjectName)
 	result, err := sm.RunQuery("desc role role_project_admin;", true, "")
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

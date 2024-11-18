@@ -23,13 +23,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/ipc"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"github.com/pkg/errors"
 )
 
 // Tunnel is used to upload or download data in odps, it can also be used to download the result
@@ -133,7 +134,8 @@ func (t *Tunnel) CreateStreamUploadSession(projectName, tableName string, opts .
 
 func (t *Tunnel) AttachToExistedUploadSession(
 	projectName, tableName, sessionId string,
-	opts ...Option) (*UploadSession, error) {
+	opts ...Option,
+) (*UploadSession, error) {
 	client, err := t.getRestClient(projectName)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -153,7 +155,8 @@ func (t *Tunnel) CreateDownloadSession(projectName, tableName string, opts ...Op
 
 func (t *Tunnel) AttachToExistedDownloadSession(
 	projectName, tableName, sessionId string,
-	opts ...Option) (*DownloadSession, error) {
+	opts ...Option,
+) (*DownloadSession, error) {
 	client, err := t.getRestClient(projectName)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -268,7 +271,6 @@ func (t *Tunnel) Preview(table *odps.Table, partitionValue string, limit int64) 
 	}
 
 	reader, err := ipc.NewReader(res.Body)
-
 	if err != nil {
 		return nil, err
 	}

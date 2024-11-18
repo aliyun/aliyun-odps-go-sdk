@@ -23,10 +23,11 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/pkg/errors"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"github.com/pkg/errors"
 )
 
 type InstanceResultDownloadSession struct {
@@ -234,7 +235,6 @@ func (is *InstanceResultDownloadSession) loadInformation(req *http.Request) erro
 		decoder := json.NewDecoder(res.Body)
 		return errors.WithStack(decoder.Decode(&resModel))
 	})
-
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -290,7 +290,6 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 		nil,
 		queryArgs,
 	)
-
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}

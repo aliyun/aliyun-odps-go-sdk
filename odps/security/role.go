@@ -18,9 +18,11 @@ package security
 
 import (
 	"encoding/xml"
+
+	"github.com/pkg/errors"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
-	"github.com/pkg/errors"
 )
 
 type Role struct {

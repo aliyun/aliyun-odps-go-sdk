@@ -2,15 +2,16 @@ package tunnel_test
 
 import (
 	"errors"
+	"log"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
-	"log"
-	"sync"
-	"testing"
-	"time"
 )
 
 func TestStreamUploadSessionTest_SchemaEvolution(t *testing.T) {

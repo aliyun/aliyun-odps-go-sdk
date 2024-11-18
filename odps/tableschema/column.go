@@ -18,8 +18,10 @@ package tableschema
 
 import (
 	"encoding/json"
-	datatype2 "github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+
 	"github.com/pkg/errors"
+
+	datatype2 "github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 )
 
 type Column struct {

@@ -319,7 +319,7 @@ func (s StructType) ID() TypeID {
 
 func (s StructType) Name() string {
 	var sb strings.Builder
-	var n = len(s.Fields) - 1
+	n := len(s.Fields) - 1
 
 	sb.WriteString(STRUCT.String())
 	sb.WriteString("<")
@@ -378,8 +378,7 @@ func (s StructFields) Less(i, j int) bool {
 	return strings.Compare(s[i].Name, s[j].Name) < 0
 }
 
-type JsonType struct {
-}
+type JsonType struct{}
 
 func NewJsonType() JsonType {
 	return JsonType{}
@@ -458,22 +457,24 @@ func IsTypeEqual(t1, t2 DataType) bool {
 	return true
 }
 
-var TinyIntType = PrimitiveType{TINYINT}
-var SmallIntType = PrimitiveType{SMALLINT}
-var IntType = PrimitiveType{INT}
-var BigIntType = PrimitiveType{BIGINT}
-var DoubleType = PrimitiveType{DOUBLE}
-var BooleanType = PrimitiveType{BOOLEAN}
-var DateType = PrimitiveType{DATE}
-var DateTimeType = PrimitiveType{DATETIME}
-var TimestampType = PrimitiveType{TIMESTAMP}
-var TimestampNtzType = PrimitiveType{TIMESTAMP_NTZ}
-var StringType = PrimitiveType{STRING}
-var FloatType = PrimitiveType{FLOAT}
-var BinaryType = PrimitiveType{BINARY}
-var IntervalDayTimeType = PrimitiveType{IntervalDayTime}
-var IntervalYearMonthType = PrimitiveType{IntervalYearMonth}
-var NullType = PrimitiveType{NULL}
+var (
+	TinyIntType           = PrimitiveType{TINYINT}
+	SmallIntType          = PrimitiveType{SMALLINT}
+	IntType               = PrimitiveType{INT}
+	BigIntType            = PrimitiveType{BIGINT}
+	DoubleType            = PrimitiveType{DOUBLE}
+	BooleanType           = PrimitiveType{BOOLEAN}
+	DateType              = PrimitiveType{DATE}
+	DateTimeType          = PrimitiveType{DATETIME}
+	TimestampType         = PrimitiveType{TIMESTAMP}
+	TimestampNtzType      = PrimitiveType{TIMESTAMP_NTZ}
+	StringType            = PrimitiveType{STRING}
+	FloatType             = PrimitiveType{FLOAT}
+	BinaryType            = PrimitiveType{BINARY}
+	IntervalDayTimeType   = PrimitiveType{IntervalDayTime}
+	IntervalYearMonthType = PrimitiveType{IntervalYearMonth}
+	NullType              = PrimitiveType{NULL}
+)
 
 func IsNullType(t DataType) bool {
 	return t.ID() == NULL

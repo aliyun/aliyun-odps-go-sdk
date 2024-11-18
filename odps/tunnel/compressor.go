@@ -19,10 +19,11 @@ package tunnel
 import (
 	"compress/flate"
 	"compress/zlib"
-	"github.com/golang/snappy"
-	"github.com/pkg/errors"
 	"io"
 	"strings"
+
+	"github.com/golang/snappy"
+	"github.com/pkg/errors"
 )
 
 type Compressor interface {
@@ -56,7 +57,6 @@ func (s snappyWrapper) Close() error {
 }
 
 func (s SnappyFramed) NewReader(rc io.ReadCloser) io.ReadCloser {
-
 	return readCloser{
 		readCloser: snappyWrapper{snappy.NewReader(rc)},
 		closer:     rc,

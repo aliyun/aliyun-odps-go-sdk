@@ -17,10 +17,11 @@
 package tunnel
 
 import (
-	"github.com/pkg/errors"
-	"google.golang.org/protobuf/encoding/protowire"
 	"io"
 	"math"
+
+	"github.com/pkg/errors"
+	"google.golang.org/protobuf/encoding/protowire"
 )
 
 type ProtocStreamReader struct {

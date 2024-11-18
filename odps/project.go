@@ -26,10 +26,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/security"
-	"github.com/pkg/errors"
 )
 
 // TODO 将status转换为enum
@@ -120,7 +121,7 @@ func (p *Project) _loadFromOdps(params optionalParams) (*projectModel, error) {
 	resource := p.rb.Project()
 	client := p.RestClient()
 
-	var urlQuery = make(url.Values)
+	urlQuery := make(url.Values)
 
 	if params.usedByGroupApi {
 		urlQuery.Set("isGroupApi", "true")
@@ -320,7 +321,7 @@ func (p *Project) GetTunnelEndpoint(quotaNames ...string) (string, error) {
 	resource := p.rb.Tunnel()
 	queryArgs := make(url.Values, 1)
 	queryArgs.Set("service", "")
-	//queryArgs.Set("current_project", p.Name())
+	// queryArgs.Set("current_project", p.Name())
 
 	if len(quotaNames) > 0 {
 		quotaName := quotaNames[0]
@@ -363,7 +364,7 @@ func (p *Project) Update(properties map[string]string) error {
 		_properties = append(_properties, common.Property{Name: key, Value: value})
 	}
 
-	var bodyModel = BodyModel{
+	bodyModel := BodyModel{
 		Name:       p.Name(),
 		Properties: _properties,
 	}

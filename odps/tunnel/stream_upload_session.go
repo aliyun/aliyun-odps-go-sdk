@@ -18,16 +18,18 @@ package tunnel
 
 import (
 	"encoding/json"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"github.com/pkg/errors"
 	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 )
 
 type StreamUploadSession struct {
@@ -201,7 +203,6 @@ func (su *StreamUploadSession) loadInformation(req *http.Request, inited bool) e
 		decoder := json.NewDecoder(res.Body)
 		return errors.WithStack(decoder.Decode(&resModel))
 	})
-
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -228,7 +229,6 @@ func (su *StreamUploadSession) loadInformation(req *http.Request, inited bool) e
 	slots := make([]slot, len(resModel.Slots))
 	for i, rawSlot := range resModel.Slots {
 		slots[i], err = newSlot(strconv.Itoa(int(rawSlot[0].(float64))), rawSlot[1].(string))
-
 		if err != nil {
 			return errors.WithStack(err)
 		}

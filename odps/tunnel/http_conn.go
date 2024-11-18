@@ -17,10 +17,12 @@
 package tunnel
 
 import (
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
-	"github.com/pkg/errors"
 	"io"
 	"net/http"
+
+	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 )
 
 type httpConnection struct {

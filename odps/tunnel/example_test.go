@@ -17,19 +17,22 @@
 package tunnel_test
 
 import (
+	"log"
+	"os"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
-	"log"
-	"os"
 )
 
-var tunnelIns *tunnel.Tunnel
-var odpsIns *odps.Odps
-var ProjectName = "go_sdk_regression_testing"
+var (
+	tunnelIns   *tunnel.Tunnel
+	odpsIns     *odps.Odps
+	ProjectName = "go_sdk_regression_testing"
+)
 
 func init() {
 	account := account2.AccountFromEnv()

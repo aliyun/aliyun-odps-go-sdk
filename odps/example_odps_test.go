@@ -18,14 +18,14 @@ package odps_test
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"log"
 	"time"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 )
 
 func ExampleOdps_RunSQL() {
-
 	column := tableschema.Column{
 		Name: "id",
 		Type: datatype.DateType,
