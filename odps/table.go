@@ -387,11 +387,10 @@ func (t *Table) Delete() error {
 	hints := make(map[string]string)
 	if t.SchemaName() == "" {
 		hints["odps.namespace.schema"] = "false"
-		sqlBuilder.WriteString(fmt.Sprintf("%s.%s", t.ProjectName(), t.Name()))
 	} else {
 		hints["odps.namespace.schema"] = "true"
-		sqlBuilder.WriteString(fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name()))
 	}
+	sqlBuilder.WriteString(t.getFullName())
 	sqlBuilder.WriteString(";")
 
 	sqlTask := NewSqlTask("SQLDropTableTask", sqlBuilder.String(), hints)
@@ -438,12 +437,11 @@ func (t *Table) AddPartitions(ifNotExists bool, partitionValues []string) error 
 	sb.WriteString("alter table ")
 	hints := make(map[string]string)
 	if t.SchemaName() == "" {
-		sb.WriteString(fmt.Sprintf("%s.%s", t.ProjectName(), t.Name()))
 		hints["odps.namespace.schema"] = "false"
 	} else {
-		sb.WriteString(fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name()))
 		hints["odps.namespace.schema"] = "true"
 	}
+	sb.WriteString(t.getFullName())
 	sb.WriteString(" add")
 	if ifNotExists {
 		sb.WriteString(" if not exists\n")
@@ -478,11 +476,10 @@ func (t *Table) DeletePartitions(ifExists bool, partitionValues []string) error 
 	hints := make(map[string]string)
 	if t.SchemaName() == "" {
 		hints["odps.namespace.schema"] = "false"
-		sb.WriteString(fmt.Sprintf("%s.%s", t.ProjectName(), t.Name()))
 	} else {
 		hints["odps.namespace.schema"] = "true"
-		sb.WriteString(fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name()))
 	}
+	sb.WriteString(t.getFullName())
 	sb.WriteString(" drop")
 	if ifExists {
 		sb.WriteString(" if exists")
@@ -749,7 +746,6 @@ func (t *Table) generateRenameTableSQL(newName string) string {
 		target = "view"
 	}
 	return fmt.Sprintf("alter %s %s rename to %s;", target, t.getFullName(), common.QuoteRef(newName))
-
 }
 
 func (t *Table) Truncate() error {
@@ -828,9 +824,9 @@ func (t *Table) executeSql(sql string) error {
 
 func (t *Table) getFullName() string {
 	if t.SchemaName() == "" {
-		return fmt.Sprintf("%s.%s", t.ProjectName(), t.Name())
+		return fmt.Sprintf("%s.`%s`", t.ProjectName(), t.Name())
 	} else {
-		return fmt.Sprintf("%s.%s.%s", t.ProjectName(), t.SchemaName(), t.Name())
+		return fmt.Sprintf("%s.`%s`.`%s`", t.ProjectName(), t.SchemaName(), t.Name())
 	}
 }
 

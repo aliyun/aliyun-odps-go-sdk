@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/pkg/errors"
 )
 
@@ -325,7 +326,7 @@ func (s StructType) Name() string {
 	sb.WriteString("<")
 
 	for i, field := range s.Fields {
-		sb.WriteString(field.Name)
+		sb.WriteString(common.QuoteRef(field.Name))
 		sb.WriteString(":")
 		sb.WriteString(field.Type.Name())
 
