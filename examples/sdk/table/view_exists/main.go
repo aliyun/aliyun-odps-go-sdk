@@ -11,7 +11,6 @@ func main() {
 	// Specify the ini file path
 	configPath := "./config.ini"
 	conf, err := odps.NewConfigFromIni(configPath)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -26,7 +25,6 @@ func main() {
 	table := tables.Get("testcreatevirtualview")
 
 	ok, err := table.Exists()
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

@@ -61,7 +61,6 @@ func TestVirtualViewTemplateParse(t *testing.T) {
 		t.Fatalf("%+v", err)
 	}
 	fmt.Println(viewSQL)
-
 }
 
 func TestMaterializedViewTemplateParse(t *testing.T) {

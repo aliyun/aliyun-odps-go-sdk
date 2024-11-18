@@ -238,7 +238,8 @@ func (ts *Tables) CreateExternal(
 func (ts *Tables) CreateView(schema tableschema.TableSchema,
 	orReplace,
 	createIfNotExists,
-	buildDeferred bool) error {
+	buildDeferred bool,
+) error {
 	sql, err := schema.ToViewSQLString(ts.projectName, ts.schemaName, orReplace, createIfNotExists, buildDeferred)
 	if err != nil {
 		return errors.WithStack(err)

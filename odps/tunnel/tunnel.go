@@ -271,7 +271,6 @@ func (t *Tunnel) Preview(table *odps.Table, partitionValue string, limit int64) 
 	}
 
 	reader, err := ipc.NewReader(res.Body)
-
 	if err != nil {
 		return nil, err
 	}

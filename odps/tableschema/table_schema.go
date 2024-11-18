@@ -324,7 +324,7 @@ func (schema *TableSchema) ToViewSQLString(projectName string, schemaName string
 		return "", errors.New("either virtual view or materialized should be set")
 	}
 
-	var fns = template.FuncMap{
+	fns := template.FuncMap{
 		"notLast": func(i, length int) bool {
 			return i < length-1
 		},
