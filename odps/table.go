@@ -717,9 +717,9 @@ func (t *Table) generateChangeClusterInfoSQL(clusterInfo tableschema.ClusterInfo
 		if clusterInfo.ClusterType == tableschema.CLUSTER_TYPE.Range {
 			sb.WriteString(" range")
 		}
-		sb.WriteString(fmt.Sprintf(" clustered by ("))
+		sb.WriteString(" clustered by (")
 		for index, clusterCol := range clusterInfo.ClusterCols {
-			sb.WriteString(fmt.Sprintf("%s", common.QuoteRef(clusterCol)))
+			sb.WriteString(common.QuoteRef(clusterCol))
 			if index < len(clusterInfo.ClusterCols)-1 {
 				sb.WriteString(", ")
 			}
