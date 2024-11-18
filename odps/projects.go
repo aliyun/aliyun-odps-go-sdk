@@ -18,8 +18,9 @@ package odps
 
 import (
 	"encoding/xml"
-	"github.com/pkg/errors"
 	"net/url"
+
+	"github.com/pkg/errors"
 )
 
 type Projects struct {
@@ -93,7 +94,6 @@ func (p *Projects) Exists(projectName string) (bool, error) {
 
 	if !project.IsLoaded() {
 		err := project.Load()
-
 		if err != nil {
 			return false, errors.WithStack(err)
 		}

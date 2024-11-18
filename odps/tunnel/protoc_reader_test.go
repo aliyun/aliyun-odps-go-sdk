@@ -246,7 +246,6 @@ func TestProtocReadSimpleType(t *testing.T) {
 					"%dth column's type should be %s, but get %s",
 					i+1, expected[i].typ, got.Type(),
 				)
-
 			}
 		}
 	}

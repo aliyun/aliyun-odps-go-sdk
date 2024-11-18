@@ -2,16 +2,17 @@ package main
 
 import (
 	"fmt"
+
+	"github.com/aliyun/credentials-go/credentials"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
-	"github.com/aliyun/credentials-go/credentials"
 )
 
 func main() {
 	// Read ak from environment variables: "ALIBABA_CLOUD_ACCESS_KEY_ID",
 	// "ALIBABA_CLOUD_ACCESS_KEY_SECRET", "ALIBABA_CLOUD_SECURITY_TOKEN"
 	credential, err := credentials.NewCredential(nil)
-
 	if err != nil {
 		return
 	}

@@ -24,11 +24,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pkg/errors"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"github.com/pkg/errors"
 )
 
 type UploadStatus int
@@ -154,8 +155,8 @@ func CreateUploadSession(
 func AttachToExistedUploadSession(
 	sessionId, projectName, tableName string,
 	restClient restclient.RestClient,
-	opts ...Option) (*UploadSession, error) {
-
+	opts ...Option,
+) (*UploadSession, error) {
 	cfg := newSessionConfig(opts...)
 
 	session := UploadSession{
@@ -309,7 +310,6 @@ func (u *UploadSession) loadInformation(req *http.Request) error {
 		decoder := json.NewDecoder(res.Body)
 		return errors.WithStack(decoder.Decode(&resModel))
 	})
-
 	if err != nil {
 		return errors.WithStack(err)
 	}

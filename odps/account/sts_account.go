@@ -17,9 +17,11 @@
 package account
 
 import (
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/aliyun/credentials-go/credentials"
 	"net/http"
+
+	"github.com/aliyun/credentials-go/credentials"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
 type StsAccount struct {
@@ -152,6 +154,5 @@ func (account *StsAccount) SignRequest(req *http.Request, endpoint string) error
 }
 
 func (account *StsAccount) Credential() (*credentials.CredentialModel, error) {
-
 	return account.sp.Credential()
 }

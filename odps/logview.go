@@ -18,12 +18,14 @@ package odps
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/security"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
+
+	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/security"
 )
 
 const (
@@ -56,7 +58,6 @@ func (lv *LogView) LogViewHost() string {
 
 		return nil
 	})
-
 	if err != nil {
 		log.Printf("get logview err, %v", err)
 		return HostDefault

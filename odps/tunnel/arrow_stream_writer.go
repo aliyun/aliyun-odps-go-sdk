@@ -17,8 +17,9 @@
 package tunnel
 
 import (
-	"github.com/pkg/errors"
 	"io"
+
+	"github.com/pkg/errors"
 )
 
 const DefaultChunkSize = 65536
@@ -107,7 +108,7 @@ func (aw *ArrowStreamWriter) leftChunkLength() int {
 
 func (aw *ArrowStreamWriter) writeUint32(crcValue uint32) error {
 	b := uint32ToBytes(crcValue)
-	var _, err = aw.writeAll(b)
+	_, err := aw.writeAll(b)
 
 	return errors.WithStack(err)
 }

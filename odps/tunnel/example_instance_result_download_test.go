@@ -27,15 +27,14 @@ import (
 )
 
 func Example_tunnel_download_instance_result() {
-	var account = account2.AccountFromEnv()
-	var endpoint = restclient.LoadEndpointFromEnv()
-	var odpsIns = odps.NewOdps(account, endpoint)
+	account := account2.AccountFromEnv()
+	endpoint := restclient.LoadEndpointFromEnv()
+	odpsIns := odps.NewOdps(account, endpoint)
 
 	projectName := "go_sdk_regression_testing"
 	odpsIns.SetDefaultProjectName(projectName)
 	project := odpsIns.DefaultProject()
 	tunnelIns, err := tunnel.NewTunnelFromProject(project)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -87,7 +86,6 @@ func Example_tunnel_download_instance_result() {
 			println(f.String())
 		}
 	})
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

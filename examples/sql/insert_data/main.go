@@ -2,10 +2,11 @@ package main
 
 import (
 	"database/sql"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
-	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 	"log"
 	"os"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
+	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 )
 
 func main() {
@@ -39,7 +40,6 @@ func main() {
 		sql.Named("birthday", birthday.Sql()), // datetime'2010-11-11 15:20:00'
 		sql.Named("extra", extra.Sql()),       // named_struct('address', array('apsaras', 'efc'), 'hobby', 'swimming')
 	)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

@@ -17,11 +17,13 @@
 package odps
 
 import (
+	"time"
+
+	"github.com/pkg/errors"
+
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
-	"github.com/pkg/errors"
-	"time"
 )
 
 type Odps struct {

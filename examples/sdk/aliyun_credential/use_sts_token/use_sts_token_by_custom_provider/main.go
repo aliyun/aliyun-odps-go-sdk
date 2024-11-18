@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
+
+	"github.com/aliyun/credentials-go/credentials"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
-	"github.com/aliyun/credentials-go/credentials"
 )
 
-type CustomCredentialProvider struct {
-}
+type CustomCredentialProvider struct{}
 
 func (cp *CustomCredentialProvider) GetType() (*string, error) {
 	s := "CustomProvider"
@@ -16,7 +17,6 @@ func (cp *CustomCredentialProvider) GetType() (*string, error) {
 }
 
 func (cp *CustomCredentialProvider) GetCredential() (*credentials.CredentialModel, error) {
-
 	accessKeyId := ""
 	accessKeySecurity := ""
 	accessKeyToken := ""

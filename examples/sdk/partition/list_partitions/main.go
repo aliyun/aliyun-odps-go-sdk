@@ -2,16 +2,16 @@ package main
 
 import (
 	"fmt"
+	"log"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
-	"log"
 )
 
 func main() {
 	// Specify the ini file path
 	configPath := "./config.ini"
 	conf, err := odps.NewConfigFromIni(configPath)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -26,7 +26,6 @@ func main() {
 	table := tables.Get("all_types_demo")
 
 	partitions, err := table.GetPartitions()
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

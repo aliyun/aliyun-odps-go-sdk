@@ -17,10 +17,11 @@
 package tunnel
 
 import (
+	"github.com/pkg/errors"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/ipc"
-	"github.com/pkg/errors"
 )
 
 type RecordArrowWriter struct {

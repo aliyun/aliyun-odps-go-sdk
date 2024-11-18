@@ -2,17 +2,17 @@ package main
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"log"
 	"time"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 )
 
 func main() {
 	// Specify the ini file path
 	configPath := "./config.ini"
 	conf, err := odps.NewConfigFromIni(configPath)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -26,7 +26,7 @@ func main() {
 	startTime, _ := time.Parse(timeFormat, "2024-10-11 02:15:30")
 	endTime, _ := time.Parse(timeFormat, "2024-10-13 06:22:02")
 
-	var f = func(i *odps.Instance) {
+	f := func(i *odps.Instance) {
 		if err != nil {
 			log.Fatalf("%+v", err)
 		}

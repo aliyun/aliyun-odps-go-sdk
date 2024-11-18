@@ -27,7 +27,7 @@ import (
 
 func ExampleTables_List() {
 	ts := odps.NewTables(odpsIns, "", "")
-	var f = func(t *odps.Table, err error) {
+	f := func(t *odps.Table, err error) {
 		if err != nil {
 			log.Fatalf("%+v", err)
 		}

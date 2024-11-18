@@ -17,8 +17,9 @@
 package tunnel
 
 import (
-	"google.golang.org/protobuf/encoding/protowire"
 	"time"
+
+	"google.golang.org/protobuf/encoding/protowire"
 )
 
 var epochDay time.Time

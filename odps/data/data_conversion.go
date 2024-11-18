@@ -17,8 +17,9 @@
 package data
 
 import (
-	"github.com/pkg/errors"
 	"reflect"
+
+	"github.com/pkg/errors"
 )
 
 var odpsDataType = reflect.TypeOf((*Data)(nil)).Elem()

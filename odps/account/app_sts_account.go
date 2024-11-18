@@ -18,9 +18,10 @@ package account
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"net/http"
 	"strings"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
 type AppStsAccount struct {
@@ -40,7 +41,6 @@ func NewAppStsAccount(accessId, accessKey, stsToken string) *AppStsAccount {
 
 func (account *AppStsAccount) SignRequest(req *http.Request, endpoint string) error {
 	err := account.AliyunAccount.SignRequest(req, endpoint)
-
 	if err != nil {
 		return err
 	}

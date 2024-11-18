@@ -3,9 +3,10 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 	"log"
 	"reflect"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 )
 
 func main() {
@@ -30,7 +31,6 @@ func main() {
 		sql.Named("p1", 20),
 		sql.Named("p2", "hangzhou"),
 	)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

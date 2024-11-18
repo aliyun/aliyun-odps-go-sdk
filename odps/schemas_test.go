@@ -18,8 +18,9 @@ package odps_test
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"testing"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 )
 
 func TestSchemas_List(t *testing.T) {
@@ -40,7 +41,7 @@ func TestSchemas_GetSchema(t *testing.T) {
 
 func TestSchemas_ListTableBySchema(te *testing.T) {
 	ts := odps.NewTables(odpsIns, defaultProjectName, "exist_schema")
-	var f = func(t *odps.Table, err error) {
+	f := func(t *odps.Table, err error) {
 		if err != nil {
 			te.Fatalf("%+v", err)
 		}

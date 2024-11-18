@@ -24,11 +24,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pkg/errors"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"github.com/pkg/errors"
 )
 
 type DownLoadStatus int
@@ -88,7 +89,6 @@ func CreateDownloadSession(
 	restClient restclient.RestClient,
 	opts ...Option,
 ) (*DownloadSession, error) {
-
 	cfg := newSessionConfig(opts...)
 
 	session := DownloadSession{
@@ -132,7 +132,6 @@ func AttachToExistedDownloadSession(
 	restClient restclient.RestClient,
 	opts ...Option,
 ) (*DownloadSession, error) {
-
 	cfg := newSessionConfig(opts...)
 
 	session := DownloadSession{
@@ -325,7 +324,6 @@ func (ds *DownloadSession) loadInformation(req *http.Request) error {
 		decoder := json.NewDecoder(res.Body)
 		return decoder.Decode(&resModel)
 	})
-
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -369,7 +367,6 @@ func (ds *DownloadSession) newDownloadConnection(start, count int, columnNames [
 		nil,
 		queryArgs,
 	)
-
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}

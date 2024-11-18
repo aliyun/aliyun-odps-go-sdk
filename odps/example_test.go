@@ -26,17 +26,19 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 )
 
-var account = account2.AccountFromEnv()
-var endpoint = restclient.LoadEndpointFromEnv()
-var odpsIns = odps.NewOdps(account, endpoint)
-var defaultProjectName = "go_sdk_regression_testing"
+var (
+	account            = account2.AccountFromEnv()
+	endpoint           = restclient.LoadEndpointFromEnv()
+	odpsIns            = odps.NewOdps(account, endpoint)
+	defaultProjectName = "go_sdk_regression_testing"
+)
 
 func init() {
 	if account == nil {
 		panic("account environments are not set")
 	}
 
-	//odpsIns.SetDefaultProjectName("odps_smoke_test")
+	// odpsIns.SetDefaultProjectName("odps_smoke_test")
 	odpsIns.SetDefaultProjectName(defaultProjectName)
 	// 在这里初始化表、分区等
 	createUserTable("user")

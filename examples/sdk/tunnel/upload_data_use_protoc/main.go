@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
+	"log"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
-	"log"
 )
 
 func main() {
@@ -39,7 +40,6 @@ func main() {
 		tunnel.SessionCfg.WithPartitionKey("p1=20,p2='hangzhou'"),
 		tunnel.SessionCfg.WithDefaultDeflateCompressor(),
 	)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -71,7 +71,6 @@ func main() {
 
 			for i := 0; i < 100; i++ {
 				err = recordWriter.Write(record)
-
 				if err != nil {
 					_ = recordWriter.Close()
 					errChan <- err
@@ -90,7 +89,6 @@ func main() {
 	// Wait for all writers to finish uploading data
 	for i := 0; i < writerNum; i++ {
 		err := <-errChan
-
 		if err != nil {
 			log.Fatalf("%+v", err)
 		}

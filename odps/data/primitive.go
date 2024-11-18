@@ -19,18 +19,21 @@ package data
 import (
 	"fmt"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 )
 
-type Bool bool
-type TinyInt int8
-type Int int32
-type SmallInt int16
-type BigInt int64
-type Float float32
-type Double float64
-type String string
+type (
+	Bool     bool
+	TinyInt  int8
+	Int      int32
+	SmallInt int16
+	BigInt   int64
+	Float    float32
+	Double   float64
+	String   string
+)
 
 func (b Bool) Type() datatype.DataType {
 	return datatype.BooleanType

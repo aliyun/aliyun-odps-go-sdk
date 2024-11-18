@@ -18,9 +18,11 @@ package data
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
-	"github.com/pkg/errors"
 	"time"
+
+	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 )
 
 type IntervalDayTime struct {

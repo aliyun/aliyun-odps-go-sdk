@@ -25,7 +25,6 @@ func main() {
 
 	createJson := func(value interface{}) *data.Json {
 		jsonObj, err := data.NewJson(value)
-
 		if err != nil {
 			log.Fatalf("%+v", err)
 		}

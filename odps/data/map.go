@@ -17,10 +17,12 @@
 package data
 
 import (
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
-	"github.com/pkg/errors"
 	"reflect"
 	"strings"
+
+	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 )
 
 type Map struct {

@@ -18,8 +18,9 @@ package odps_test
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"log"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 )
 
 func ExamplePartition_Load() {

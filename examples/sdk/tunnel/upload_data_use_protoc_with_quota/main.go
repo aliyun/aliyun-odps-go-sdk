@@ -27,7 +27,6 @@ func main() {
 		conf.ProjectName,
 		"mf_test",
 	)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

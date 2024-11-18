@@ -36,7 +36,6 @@ func main() {
 		tableName,
 		tunnel.SessionCfg.WithDefaultDeflateCompressor(),
 	)
-
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -45,7 +44,6 @@ func main() {
 
 	createJson := func(value interface{}) *data.Json {
 		jsonObj, err := data.NewJson(value)
-
 		if err != nil {
 			log.Fatalf("%+v", err)
 		}
@@ -101,7 +99,6 @@ func main() {
 
 	for _, record := range records {
 		err = recordWriter.Write(record)
-
 		if err != nil {
 			log.Fatalf("%+v", err)
 		}

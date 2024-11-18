@@ -18,8 +18,9 @@ package odps
 
 import (
 	"encoding/xml"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"net/url"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
 type Schemas struct {
@@ -93,7 +94,6 @@ func (ss *Schemas) Create(schemaName string, createIfNotExists bool, comment str
 		IfNotExists bool
 	}
 	postBodyModel := createSchemaModel{
-
 		Project:     ss.projectName,
 		Name:        schemaName,
 		Comment:     comment,
