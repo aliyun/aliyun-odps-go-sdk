@@ -22,8 +22,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
 type TypeID int
