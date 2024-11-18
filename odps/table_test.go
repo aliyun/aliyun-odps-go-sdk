@@ -57,7 +57,7 @@ func TestTable_AddColumns(t *testing.T) {
 	newColumns := []tableschema.Column{c1, c2, c3, c4, c5, c6}
 
 	actualSQL := table.generateAddColumnsSQL(newColumns, true)
-	expectedSQL := "alter table project.schema.table add columns if not exists (c1 BIGINT comment 'c1 is bigint', c2 STRING comment 'c2 is string', c3 DECIMAL(18,8) comment 'c3 is decimal(18,8)', c4 VARCHAR(100) comment 'c4 is varchar(100)', c5 DATETIME comment 'c5 is datetime', c6 MAP<STRING,BIGINT> comment 'c6 is map(string,bigint)');"
+	expectedSQL := "alter table project.`schema`.`table` add columns if not exists (`c1` BIGINT comment 'c1 is bigint', `c2` STRING comment 'c2 is string', `c3` DECIMAL(18,8) comment 'c3 is decimal(18,8)', `c4` VARCHAR(100) comment 'c4 is varchar(100)', `c5` DATETIME comment 'c5 is datetime', `c6` MAP<STRING,BIGINT> comment 'c6 is map(string,bigint)');"
 	if actualSQL != expectedSQL {
 		t.Errorf("Expected SQL: %s, but got: %s", expectedSQL, actualSQL)
 	}
@@ -66,7 +66,7 @@ func TestTable_AddColumns(t *testing.T) {
 func TestTable_Rename(t *testing.T) {
 	table := NewTable(nil, "project", "schema", "table")
 	actualSQL := table.generateRenameTableSQL("project_new")
-	expectedSQL := "alter table project.schema.table rename to 'project_new';"
+	expectedSQL := "alter table project.`schema`.`table` rename to `project_new`;"
 
 	if actualSQL != expectedSQL {
 		t.Errorf("Expected SQL: %s, but got: %s", expectedSQL, actualSQL)
@@ -76,7 +76,7 @@ func TestTable_Rename(t *testing.T) {
 func TestTable_DropColumns(t *testing.T) {
 	table := NewTable(nil, "project", "schema", "table")
 	actualSQL := table.generateDropColumnsSQL([]string{"c1", "c2", "c3", "c4"})
-	expectedSQL := "alter table project.schema.table drop columns c1, c2, c3, c4;"
+	expectedSQL := "alter table project.`schema`.`table` drop columns `c1`, `c2`, `c3`, `c4`;"
 
 	if actualSQL != expectedSQL {
 		t.Errorf("Expected SQL: %s, but got: %s", expectedSQL, actualSQL)
@@ -86,7 +86,7 @@ func TestTable_DropColumns(t *testing.T) {
 func TestTable_ChangeOwner(t *testing.T) {
 	table := NewTable(nil, "project", "schema", "table")
 
-	expectedSQL := "alter table project.schema.table changeowner to 'ALIYUN$xxx@aliyun.com';"
+	expectedSQL := "alter table project.`schema`.`table` changeowner to 'ALIYUN$xxx@aliyun.com';"
 	actualSQL := table.generateChangeOwnerSQL("ALIYUN$xxx@aliyun.com")
 
 	if actualSQL != expectedSQL {
@@ -97,7 +97,7 @@ func TestTable_ChangeOwner(t *testing.T) {
 func TestTable_ChangeComment(t *testing.T) {
 	table := NewTable(nil, "project", "schema", "table")
 
-	expectedSQL := "alter table project.schema.table set comment 'This\\'s comment.';"
+	expectedSQL := "alter table project.`schema`.`table` set comment 'This\\'s comment.';"
 	actualSQL := table.generateChangeCommentSQL("This's comment.")
 
 	if actualSQL != expectedSQL {
@@ -108,7 +108,7 @@ func TestTable_ChangeComment(t *testing.T) {
 func TestTable_Touch(t *testing.T) {
 	table := NewTable(nil, "project", "schema", "table")
 
-	expectedSQL := "alter table project.schema.table touch;"
+	expectedSQL := "alter table project.`schema`.`table` touch;"
 	actualSQL := table.generateTouchTableSQL()
 
 	if actualSQL != expectedSQL {
@@ -131,7 +131,7 @@ func TestGenerateChangeClusterInfoSQL_Hash_NoSortNoBucket(t *testing.T) {
 	sql := table.generateChangeClusterInfoSQL(clusterInfo)
 
 	// 验证
-	expectedSQL := "alter table project.schema.table clustered by (col1);"
+	expectedSQL := "alter table project.`schema`.`table` clustered by (`col1`);"
 	if sql != expectedSQL {
 		t.Errorf("Expected SQL: '%s', got: '%s'", expectedSQL, sql)
 	}
@@ -155,7 +155,7 @@ func TestGenerateChangeClusterInfoSQL_Range_Sort_Bucket(t *testing.T) {
 	sql := table.generateChangeClusterInfoSQL(clusterInfo)
 
 	// 验证
-	expectedSQL := "alter table project.schema.table range clustered by (col1) sorted by (sort_col1 asc, sort_col2 desc) into 10 buckets;"
+	expectedSQL := "alter table project.`schema`.`table` range clustered by (`col1`) sorted by (`sort_col1` asc, `sort_col2` desc) into 10 buckets;"
 	if sql != expectedSQL {
 		t.Errorf("Expected SQL: '%s', got: '%s'", expectedSQL, sql)
 	}
@@ -179,7 +179,7 @@ func TestGenerateChangeClusterInfoSQL_Hash_Sort_Bucket(t *testing.T) {
 	sql := table.generateChangeClusterInfoSQL(clusterInfo)
 
 	// 验证
-	expectedSQL := "alter table project.schema.table clustered by (col1) sorted by (sort_col1 asc, sort_col2 desc) into 10 buckets;"
+	expectedSQL := "alter table project.`schema`.`table` clustered by (`col1`) sorted by (`sort_col1` asc, `sort_col2` desc) into 10 buckets;"
 	if sql != expectedSQL {
 		t.Errorf("Expected SQL: '%s', got: '%s'", expectedSQL, sql)
 	}
@@ -200,7 +200,7 @@ func TestGenerateChangeClusterInfoSQL_EmptySortCols(t *testing.T) {
 	sql := table.generateChangeClusterInfoSQL(clusterInfo)
 
 	// 验证
-	expectedSQL := "alter table project.schema.table range clustered by (col1) into 10 buckets;"
+	expectedSQL := "alter table project.`schema`.`table` range clustered by (`col1`) into 10 buckets;"
 	if sql != expectedSQL {
 		t.Errorf("Expected SQL: '%s', got: '%s'", expectedSQL, sql)
 	}
@@ -223,7 +223,7 @@ func TestGenerateChangeClusterInfoSQL_ZeroBucketNum(t *testing.T) {
 	sql := table.generateChangeClusterInfoSQL(clusterInfo)
 
 	// 验证
-	expectedSQL := "alter table project.schema.table range clustered by (col1) sorted by (sort_col1 asc, sort_col2 desc);"
+	expectedSQL := "alter table project.`schema`.`table` range clustered by (`col1`) sorted by (`sort_col1` asc, `sort_col2` desc);"
 	if sql != expectedSQL {
 		t.Errorf("Expected SQL: '%s', got: '%s'", expectedSQL, sql)
 	}

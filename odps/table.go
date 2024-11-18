@@ -684,7 +684,7 @@ func (t *Table) generateChangeOwnerSQL(newOwner string) string {
 	if t.tableSchema.IsVirtualView {
 		target = "view"
 	}
-	return fmt.Sprintf("alter %s %s  changeowner to %s;", target, t.getFullName(), common.QuoteString(newOwner))
+	return fmt.Sprintf("alter %s %s changeowner to %s;", target, t.getFullName(), common.QuoteString(newOwner))
 }
 
 // ChangeComment Modify the comment content of the table.
@@ -717,12 +717,19 @@ func (t *Table) generateChangeClusterInfoSQL(clusterInfo tableschema.ClusterInfo
 		if clusterInfo.ClusterType == tableschema.CLUSTER_TYPE.Range {
 			sb.WriteString(" range")
 		}
-		sb.WriteString(fmt.Sprintf(" clustered by (%s)", strings.Join(clusterInfo.ClusterCols, ",")))
+		sb.WriteString(fmt.Sprintf(" clustered by ("))
+		for index, clusterCol := range clusterInfo.ClusterCols {
+			sb.WriteString(fmt.Sprintf("%s", common.QuoteRef(clusterCol)))
+			if index < len(clusterInfo.ClusterCols)-1 {
+				sb.WriteString(", ")
+			}
+		}
+		sb.WriteString(")")
 	}
 	if len(clusterInfo.SortCols) > 0 {
 		sb.WriteString(" sorted by (")
 		for index, sortCol := range clusterInfo.SortCols {
-			sb.WriteString(fmt.Sprintf("%s %s", sortCol.Name, string(sortCol.Order)))
+			sb.WriteString(fmt.Sprintf("%s %s", common.QuoteRef(sortCol.Name), string(sortCol.Order)))
 			if index < len(clusterInfo.SortCols)-1 {
 				sb.WriteString(", ")
 			}
@@ -768,7 +775,7 @@ func (t *Table) generateAddColumnsSQL(columns []tableschema.Column, ifNotExists 
 	}
 	sb.WriteString("(")
 	for index, column := range columns {
-		sb.WriteString(fmt.Sprintf("%s %s", column.Name, column.Type))
+		sb.WriteString(fmt.Sprintf("%s %s", common.QuoteRef(column.Name), column.Type))
 		if column.Comment != "" {
 			sb.WriteString(fmt.Sprintf(" comment %s", common.QuoteString(column.Comment)))
 		}
@@ -785,7 +792,11 @@ func (t *Table) DropColumns(columnNames []string) error {
 }
 
 func (t *Table) generateDropColumnsSQL(columnNames []string) string {
-	return fmt.Sprintf("alter table %s drop columns %s;", t.getFullName(), strings.Join(columnNames, ", "))
+	quotedColumns := make([]string, len(columnNames))
+	for i, columnName := range columnNames {
+		quotedColumns[i] = common.QuoteRef(columnName)
+	}
+	return fmt.Sprintf("alter table %s drop columns %s;", t.getFullName(), strings.Join(quotedColumns, ", ")) // 生成 SQL 语句
 }
 
 func (t *Table) AlterColumnType(columnName string, columnType datatype.DataType) error {
