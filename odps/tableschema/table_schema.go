@@ -73,7 +73,8 @@ type TableSchema struct {
 	RefreshHistory  string
 
 	// for clustered info
-	ClusterInfo ClusterInfo
+	TblProperties map[string]string `json:"-"`
+	ClusterInfo   ClusterInfo
 }
 
 type ClusterType = string
@@ -118,6 +119,7 @@ type SchemaBuilder struct {
 	location                         string
 	viewText                         string
 	lifecycle                        int
+	tblProperties                    map[string]string
 	clusterInfo                      ClusterInfo
 	isVirtualView                    bool
 	isMaterializedView               bool
@@ -172,6 +174,12 @@ func (builder *SchemaBuilder) Location(location string) *SchemaBuilder {
 // Lifecycle 表的生命周期，仅支持正整数。单位：天
 func (builder *SchemaBuilder) Lifecycle(lifecycle int) *SchemaBuilder {
 	builder.lifecycle = lifecycle
+	return builder
+}
+
+// TblProperties 表的属性，key-value 形式
+func (builder *SchemaBuilder) TblProperties(properties map[string]string) *SchemaBuilder {
+	builder.tblProperties = properties
 	return builder
 }
 
@@ -238,6 +246,7 @@ func (builder *SchemaBuilder) Build() TableSchema {
 		StorageHandler:   builder.storageHandler,
 		Location:         builder.location,
 		ClusterInfo:      builder.clusterInfo,
+		TblProperties:    builder.tblProperties,
 
 		IsVirtualView:                    builder.isVirtualView,
 		IsMaterializedView:               builder.isMaterializedView,
@@ -287,6 +296,7 @@ func (schema *TableSchema) ToBaseSQLString(projectName string, schemaName string
 		"notLast": func(i, length int) bool {
 			return i < length-1
 		},
+		"quoteString": common.QuoteString,
 	}
 
 	tplStr := "{{$columnNum := len .Schema.Columns}}" +
@@ -294,16 +304,16 @@ func (schema *TableSchema) ToBaseSQLString(projectName string, schemaName string
 		"create {{if .IsExternal -}} external {{ end -}} table {{ if .CreateIfNotExists }}if not exists{{ end }} " +
 		"{{.ProjectName}}.{{if ne .SchemaName \"\"}}`{{.SchemaName}}`.{{end}}`{{.Schema.TableName}}` (\n" +
 		"{{ range $i, $column := .Schema.Columns  }}" +
-		"    `{{.Name}}` {{.Type.Name | print}} {{ if ne .Comment \"\" }}comment '{{.Comment}}'{{ end }}{{ if notLast $i $columnNum  }},{{ end }}\n" +
+		"    `{{.Name}}` {{.Type.Name | print}} {{ if ne .Comment \"\" }}comment {{quoteString .Comment}}{{ end }}{{ if notLast $i $columnNum  }},{{ end }}\n" +
 		"{{ end }}" +
 		")" +
 		"{{ if ne .Schema.Comment \"\"  }}" +
-		"\ncomment '{{.Schema.Comment}}'" +
+		"\ncomment {{quoteString .Schema.Comment}}" +
 		"{{ end }}" +
 		"{{ if gt $partitionNum 0 }}" +
 		"\npartitioned by (" +
 		"{{ range $i, $partition := .Schema.PartitionColumns }}" +
-		"`{{.Name}}` {{.Type | print}} {{- if ne .Comment \"\" }} comment '{{.Comment}}' {{- end -}} {{- if notLast $i $partitionNum  }}, {{ end }}" +
+		"`{{.Name}}` {{.Type | print}} {{- if ne .Comment \"\" }} comment {{quoteString .Comment}} {{- end -}} {{- if notLast $i $partitionNum  }}, {{ end }}" +
 		"{{ end -}}" +
 		")" +
 		"{{ end }}"
@@ -356,6 +366,7 @@ func (schema *TableSchema) ToViewSQLString(projectName string, schemaName string
 		"notLast": func(i, length int) bool {
 			return i < length-1
 		},
+		"quoteString": common.QuoteString,
 	}
 
 	tplStr := "{{$columnNum := len .Schema.Columns}}" +
@@ -391,7 +402,7 @@ func (schema *TableSchema) ToViewSQLString(projectName string, schemaName string
 		"{{end -}}" +
 		"{{ if gt $columnNum 0 }}" +
 		"(\n {{ range $i, $column := .Schema.Columns  }}" +
-		"    `{{.Name}}` {{ if ne .Comment \"\" }}comment '{{.Comment}}'{{ end }}{{ if notLast $i $columnNum  }},{{ end }}\n" +
+		"    `{{.Name}}` {{ if ne .Comment \"\" }}comment {{quoteString .Comment}}{{ end }}{{ if notLast $i $columnNum  }},{{ end }}\n" +
 		"{{ end }}" +
 		")" +
 		"{{ end }}" +
@@ -401,7 +412,7 @@ func (schema *TableSchema) ToViewSQLString(projectName string, schemaName string
 		"{{end -}}" +
 		"{{end -}}" +
 		"{{ if ne .Schema.Comment \"\"  }}" +
-		"\ncomment '{{.Schema.Comment}}'" +
+		"\ncomment {{quoteString .Schema.Comment}}" +
 		"{{ end }}" +
 		"{{ if .Schema.IsMaterializedView }}" +
 		"{{ if gt $partitionNum 0 }}" +
@@ -487,7 +498,7 @@ func (schema *TableSchema) ToViewSQLString(projectName string, schemaName string
 }
 
 func (schema *TableSchema) ToSQLString(projectName string, schemaName string, createIfNotExists bool) (string, error) {
-	baseSql, err := schema.ToBaseSQLString(projectName, schemaName, createIfNotExists, false)
+	baseSQL, err := schema.ToBaseSQLString(projectName, schemaName, createIfNotExists, false)
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
@@ -496,41 +507,60 @@ func (schema *TableSchema) ToSQLString(projectName string, schemaName string, cr
 	clusterInfo := schema.ClusterInfo
 	if len(clusterInfo.ClusterCols) > 0 {
 
+		quotedColumns := make([]string, len(clusterInfo.ClusterCols))
+		for i, columnName := range clusterInfo.ClusterCols {
+			quotedColumns[i] = common.QuoteRef(columnName)
+		}
+
 		if clusterInfo.ClusterType == CLUSTER_TYPE.Hash {
-			baseSql += "\nclustered by (" + strings.Join(clusterInfo.ClusterCols, ", ") + ")"
+			baseSQL += "\nclustered by (" + strings.Join(quotedColumns, ", ") + ")"
 		}
 
 		if clusterInfo.ClusterType == CLUSTER_TYPE.Range {
-			baseSql += "\nrange clustered by (" + strings.Join(clusterInfo.ClusterCols, ", ") + ")"
+			baseSQL += "\nrange clustered by (" + strings.Join(quotedColumns, ", ") + ")"
 		}
 
 		sortColsNum := len(clusterInfo.SortCols)
 		if sortColsNum > 0 {
-			baseSql += "\nsorted by ("
+			baseSQL += "\nsorted by ("
 
 			for i, sc := range clusterInfo.SortCols {
-				baseSql += sc.Name + " " + string(sc.Order)
-
+				baseSQL += common.QuoteRef(sc.Name) + " " + string(sc.Order)
 				if i < sortColsNum-1 {
-					baseSql += ", "
+					baseSQL += ", "
 				}
 			}
 
-			baseSql += ")"
+			baseSQL += ")"
+		}
+		if clusterInfo.BucketNum > 0 {
+			baseSQL += "\nINTO " + strconv.Itoa(clusterInfo.BucketNum) + " BUCKETS"
+		}
+	}
+
+	if len(schema.TblProperties) > 0 {
+		baseSQL += "\nTBLPROPERTIES ("
+		i := 0
+		sortColsNum := len(schema.TblProperties)
+
+		for k, v := range schema.TblProperties {
+			baseSQL += fmt.Sprintf("%s=%s", common.QuoteString(k), common.QuoteString(v))
+			i++
+			if i < sortColsNum {
+				baseSQL += ", "
+			}
 		}
 
-		if clusterInfo.BucketNum > 0 {
-			baseSql += "\nINTO " + strconv.Itoa(clusterInfo.BucketNum) + " BUCKETS"
-		}
+		baseSQL += ")"
 	}
 
 	if schema.Lifecycle > 0 {
-		baseSql += fmt.Sprintf("\nlifecycle %d", schema.Lifecycle)
+		baseSQL += fmt.Sprintf("\nlifecycle %d", schema.Lifecycle)
 	}
 
-	baseSql += ";"
+	baseSQL += ";"
 
-	return baseSql, nil
+	return baseSQL, nil
 }
 
 func (schema *TableSchema) ToExternalSQLString(
@@ -548,13 +578,13 @@ func (schema *TableSchema) ToExternalSQLString(
 		return "", errors.New("TableSchema.Location is not set")
 	}
 
-	baseSql, err := schema.ToBaseSQLString(projectName, schemaName, createIfNotExists, true)
+	baseSQL, err := schema.ToBaseSQLString(projectName, schemaName, createIfNotExists, true)
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
 
 	var builder strings.Builder
-	builder.WriteString(baseSql)
+	builder.WriteString(baseSQL)
 
 	// stored by, 用于指定自定义格式StorageHandler的类名或其他外部表文件格式
 	builder.WriteString(fmt.Sprintf("\nstored by '%s'\n", schema.StorageHandler))
@@ -565,7 +595,7 @@ func (schema *TableSchema) ToExternalSQLString(
 		i, n := 0, len(serdeProperties)
 
 		for key, value := range serdeProperties {
-			builder.WriteString(fmt.Sprintf("'%s'='%s'", key, value))
+			builder.WriteString(fmt.Sprintf("%s=%s", common.QuoteString(key), common.QuoteString(value)))
 			i += 1
 			if i < n {
 				builder.WriteString(", ")
@@ -590,6 +620,22 @@ func (schema *TableSchema) ToExternalSQLString(
 			}
 		}
 		builder.WriteString("'\n")
+	}
+
+	if len(schema.TblProperties) > 0 {
+		builder.WriteString("TBLPROPERTIES (")
+		i := 0
+		sortColsNum := len(schema.TblProperties)
+
+		for k, v := range schema.TblProperties {
+			builder.WriteString(fmt.Sprintf("%s=%s", common.QuoteString(k), common.QuoteString(v)))
+			i++
+			if i < sortColsNum {
+				builder.WriteString(", ")
+			}
+		}
+
+		builder.WriteString(")\n")
 	}
 
 	if schema.Lifecycle > 0 {

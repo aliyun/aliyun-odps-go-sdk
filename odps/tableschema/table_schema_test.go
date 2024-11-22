@@ -2,10 +2,82 @@ package tableschema
 
 import (
 	"fmt"
+	"log"
 	"testing"
 
 	datatype2 "github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 )
+
+func TestTable_CreateNormal(t *testing.T) {
+	tableSchema := NewSchemaBuilder().Name("newTable").
+		Column(Column{
+			Name:    "col1",
+			Type:    datatype2.BigIntType,
+			Comment: "I'm col1",
+		}).
+		Column(Column{
+			Name:    "col2",
+			Type:    datatype2.BigIntType,
+			Comment: "I'm col2",
+		}).
+		Comment("This's table comment").
+		PartitionColumn(Column{
+			Name:    "p1",
+			Type:    datatype2.StringType,
+			Comment: "I'm p1",
+		}).
+		TblProperties(map[string]string{"transactional": "false"}).Lifecycle(10).Build()
+
+	sqlString, err := tableSchema.ToSQLString("project", "schema", true)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	expect := "create table if not exists project.`schema`.`newTable` (\n    `col1` BIGINT comment 'I\\'m col1',\n    `col2` BIGINT comment 'I\\'m col2'\n)\ncomment 'This\\'s table comment'\npartitioned by (`p1` STRING comment 'I\\'m p1')\nTBLPROPERTIES ('transactional'='false')\nlifecycle 10;"
+	if sqlString != expect {
+		t.Errorf("Expected SQL:\n %s, but got:\n %s", expect, sqlString)
+	}
+}
+
+func TestTable_CreateExternal(t *testing.T) {
+	tableSchema := NewSchemaBuilder().Name("newTable").
+		Column(Column{
+			Name:    "col1",
+			Type:    datatype2.BigIntType,
+			Comment: "I'm col1",
+		}).
+		Column(Column{
+			Name:    "col2",
+			Type:    datatype2.BigIntType,
+			Comment: "I'm col2",
+		}).
+		Comment("This's table comment").
+		PartitionColumn(Column{
+			Name:    "p1",
+			Type:    datatype2.StringType,
+			Comment: "I'm p1",
+		}).
+		TblProperties(map[string]string{"transactional": "false"}).Lifecycle(10).
+		Location("MOCKoss://full/uri/path/to/oss/directory/").
+		StorageHandler("com.aliyun.odps.udf.example.text.TextStorageHandler").
+		Lifecycle(10).
+		Build()
+
+	// 定义 properties 映射
+	serDeProperties := map[string]string{
+		"odps.text.option.delimiter": "|",
+		"my.own.option":              "value",
+	}
+	jars := []string{
+		"odps-udf-example.jar",
+		"another.jar",
+	}
+
+	sqlString, err := tableSchema.ToExternalSQLString("project", "schema", true, serDeProperties, jars)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	log.Print(sqlString)
+}
 
 func TestToViewSQLString(t *testing.T) {
 	sb := NewSchemaBuilder()

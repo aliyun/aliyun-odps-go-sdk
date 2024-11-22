@@ -667,12 +667,13 @@ func (t *Table) getPartitions(partitionSpec string) ([]Partition, error) {
 	return partitions, nil
 }
 
-func (t *Table) CreateShards(shardCount int) error {
-	sql := fmt.Sprintf("alter table %s into %d shards;", t.getFullName(), shardCount)
+// Update Table
+
+// SetLifeCycle Modify the life cycle of an existing partitioned table or non-partitioned table.
+func (t *Table) SetLifeCycle(days int) error {
+	sql := fmt.Sprintf("alter table %s set lifecycle %d;", t.getFullName(), days)
 	return t.executeSql(sql)
 }
-
-// Update Table
 
 // ChangeOwner Only the Project Owner or users with the Super_Administrator role can execute commands that modify the table Owner.
 func (t *Table) ChangeOwner(newOwner string) error {
