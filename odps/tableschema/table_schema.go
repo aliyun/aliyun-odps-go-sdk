@@ -26,6 +26,8 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
@@ -311,9 +313,14 @@ func (schema *TableSchema) ToBaseSQLString(projectName string, schemaName string
 		"\ncomment {{quoteString .Schema.Comment}}" +
 		"{{ end }}" +
 		"{{ if gt $partitionNum 0 }}" +
+		"{{ if (index .Schema.PartitionColumns 0).GenerateExpression }}" +
+		"\nauto partition by (" +
+		"{{ (index .Schema.PartitionColumns 0).GenerateExpression.String }} AS {{ (index .Schema.PartitionColumns 0).Name }}" +
+		"{{ else }}" +
 		"\npartitioned by (" +
 		"{{ range $i, $partition := .Schema.PartitionColumns }}" +
 		"`{{.Name}}` {{.Type | print}} {{- if ne .Comment \"\" }} comment {{quoteString .Comment}} {{- end -}} {{- if notLast $i $partitionNum  }}, {{ end }}" +
+		"{{ end -}}" +
 		"{{ end -}}" +
 		")" +
 		"{{ end }}"
@@ -667,4 +674,22 @@ func (schema *TableSchema) FieldByName(name string) (Column, bool) {
 	}
 
 	return Column{}, false
+}
+
+// GeneratePartitionSpec Used for Auto-Partition tables to automatically generate partition columns based on Record
+func (schema *TableSchema) GeneratePartitionSpec(record *data.Record) (string, error) {
+	var builder strings.Builder
+	for index, partitionColumn := range schema.PartitionColumns {
+		if partitionColumn.GenerateExpression != nil {
+			if index > 0 {
+				builder.WriteString("/")
+			}
+			generate, err := partitionColumn.GenerateExpression.generate(record, schema)
+			if err != nil {
+				return "", err
+			}
+			builder.WriteString(partitionColumn.Name + "=" + generate)
+		}
+	}
+	return builder.String(), nil
 }
