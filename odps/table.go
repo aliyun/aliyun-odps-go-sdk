@@ -58,19 +58,26 @@ type TableOrErr struct {
 }
 
 type tableModel struct {
-	XMLName       xml.Name `xml:"Table"`
-	Name          string
-	TableId       string
-	Format        string
-	Schema        string
-	Comment       string
-	Owner         string
-	ProjectName   string `xml:"Project"`
-	SchemaName    string
-	TableLabel    string
-	CryptoAlgo    string
-	TableMaskInfo string
-	Type          TableType
+	XMLName         xml.Name `xml:"Table"`
+	Name            string
+	TableID         string `xml:"TableId"`
+	Format          string
+	Schema          string
+	Comment         string
+	Owner           string
+	ProjectName     string `xml:"Project"`
+	SchemaName      string
+	TableLabel      string
+	CryptoAlgo      string
+	TableMaskInfo   string
+	ColumnMaskInfos []ColumnMaskInfo // Data policy names bind with columns
+	Type            TableType
+}
+
+// ColumnMaskInfo is used for the return value of Table.ColumnMaskInfos
+type ColumnMaskInfo struct {
+	Name           string   // Column Name
+	PolicyNameList []string // Data policy names bind with column
 }
 
 func NewTable(odpsIns *Odps, projectName string, schemaName string, tableName string) *Table {
@@ -186,7 +193,7 @@ func (t *Table) Owner() string {
 }
 
 func (t *Table) TableID() string {
-	return t.model.TableId
+	return t.model.TableID
 }
 
 func (t *Table) CryptoAlgo() string {
@@ -375,6 +382,29 @@ func (t *Table) Schema() tableschema.TableSchema {
 
 func (t *Table) SchemaJson() string {
 	return t.model.Schema
+}
+
+// ColumnMaskInfos Returns the column level data policy of the table
+func (t *Table) ColumnMaskInfos() ([]ColumnMaskInfo, error) {
+	if t.model.ColumnMaskInfos != nil {
+		return t.model.ColumnMaskInfos, nil
+	}
+
+	if t.model.TableMaskInfo == "" {
+		return nil, nil
+	}
+
+	type ColumnMaskInfoList struct {
+		ColumnMaskInfoList []ColumnMaskInfo `json:"columnMaskInfoList"`
+	}
+	var columnMaskInfoList ColumnMaskInfoList
+
+	err := json.Unmarshal([]byte(t.model.TableMaskInfo), &columnMaskInfoList)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	t.model.ColumnMaskInfos = columnMaskInfoList.ColumnMaskInfoList
+	return t.model.ColumnMaskInfos, nil
 }
 
 func (t *Table) Delete() error {
