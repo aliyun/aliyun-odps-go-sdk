@@ -33,6 +33,7 @@ import (
 type Partition struct {
 	odpsIns       *Odps
 	projectName   string
+	schemaName    string
 	tableName     string
 	model         partitionModel
 	extendedModel partitionExtendedModel
@@ -62,7 +63,9 @@ type partitionExtendedModel struct {
 	Reserved     string `json:"Reserved"`
 }
 
-func NewPartition(odpsIns *Odps, projectName, tableName string, value string) *Partition {
+// NewPartition get partition object by table and partitionSpec, this method does not actually create a Partition in MaxCompute,
+// but only obtains the Partition object.
+func NewPartition(odpsIns *Odps, projectName, schemaName, tableName string, value string) *Partition {
 	parts := strings.Split(value, "/")
 	columns := make([]PartitionColumn, len(parts))
 
@@ -81,6 +84,7 @@ func NewPartition(odpsIns *Odps, projectName, tableName string, value string) *P
 	return &Partition{
 		odpsIns:     odpsIns,
 		projectName: projectName,
+		schemaName:  schemaName,
 		tableName:   tableName,
 		model:       pm,
 	}
@@ -129,11 +133,14 @@ func (p *Partition) Spec() string {
 func (p *Partition) Load() error {
 	var rb common.ResourceBuilder
 	rb.SetProject(p.projectName)
-	resource := rb.Table(p.tableName)
+	resource := rb.Table("", p.tableName)
 	client := p.odpsIns.restClient
 
-	queryArgs := make(url.Values, 1)
+	queryArgs := make(url.Values, 2)
 	queryArgs.Set("partition", p.Spec())
+	if p.schemaName != "" {
+		queryArgs.Set("curr_schema", p.schemaName)
+	}
 
 	type ResModel struct {
 		XMLName xml.Name `xml:"Partition"`
@@ -165,12 +172,15 @@ func (p *Partition) Load() error {
 func (p *Partition) LoadExtended() error {
 	var rb common.ResourceBuilder
 	rb.SetProject(p.projectName)
-	resource := rb.Table(p.tableName)
+	resource := rb.Table("", p.tableName)
 	client := p.odpsIns.restClient
 
-	queryArgs := make(url.Values, 1)
+	queryArgs := make(url.Values, 4)
 	queryArgs.Set("partition", p.Spec())
 	queryArgs.Set("extended", "")
+	if p.schemaName != "" {
+		queryArgs.Set("curr_schema", p.schemaName)
+	}
 
 	type ResModel struct {
 		XMLName xml.Name `xml:"Partition"`

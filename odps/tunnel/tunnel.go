@@ -232,11 +232,7 @@ func (t *Tunnel) Preview(table *odps.Table, partitionValue string, limit int64) 
 	}
 	resource := common.NewResourceBuilder(projectName)
 	var resourceUrl string
-	if schemaName != "" {
-		resourceUrl = resource.TableWithSchemaName(tableName, schemaName)
-	} else {
-		resourceUrl = resource.Table(tableName)
-	}
+	resourceUrl = resource.Table(schemaName, tableName)
 	resourceUrl += "/preview"
 
 	client, err := t.getRestClient(projectName)
