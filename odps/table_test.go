@@ -1,6 +1,8 @@
 package odps
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
