@@ -78,7 +78,7 @@ func (perm *Permission) Resource() string {
 	case ObjectTypeProject:
 		return rb.Project()
 	case ObjectTypeTable:
-		return rb.Table(perm.ObjectName)
+		return rb.Table("", perm.ObjectName)
 	case ObjectTypeFunction:
 		return rb.Function(perm.ObjectName)
 	case ObjectTypeInstance:

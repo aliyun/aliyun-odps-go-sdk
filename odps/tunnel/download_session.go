@@ -194,7 +194,7 @@ func (ds *DownloadSession) SetPartitionKey(partitionKey string) {
 
 func (ds *DownloadSession) ResourceUrl() string {
 	rb := common.NewResourceBuilder(ds.ProjectName)
-	return rb.Table(ds.TableName)
+	return rb.Table(ds.SchemaName, ds.TableName)
 }
 
 func (ds *DownloadSession) OpenRecordArrowReader(start, count int, columnNames []string) (*RecordArrowReader, error) {

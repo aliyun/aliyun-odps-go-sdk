@@ -199,7 +199,7 @@ func (u *UploadSession) ShouldTransform() bool {
 
 func (u *UploadSession) ResourceUrl() string {
 	rb := common.NewResourceBuilder(u.ProjectName)
-	return rb.Table(u.TableName)
+	return rb.Table(u.SchemaName, u.TableName)
 }
 
 func (u *UploadSession) OpenRecordArrowWriter(blockId int) (*RecordArrowWriter, error) {

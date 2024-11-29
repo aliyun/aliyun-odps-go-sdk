@@ -173,7 +173,7 @@ func (t *Table) Name() string {
 
 func (t *Table) ResourceUrl() string {
 	rb := common.ResourceBuilder{ProjectName: t.ProjectName()}
-	return rb.Table(t.Name())
+	return rb.Table("", t.Name())
 }
 
 func (t *Table) Comment() string {
@@ -679,6 +679,7 @@ func (t *Table) getPartitions(partitionSpec string) ([]Partition, error) {
 			partition := Partition{
 				odpsIns:     t.odpsIns,
 				projectName: t.ProjectName(),
+				schemaName:  t.SchemaName(),
 				tableName:   t.Name(),
 				model:       pModel,
 			}
