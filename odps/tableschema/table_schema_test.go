@@ -79,6 +79,40 @@ func TestTable_CreateExternal(t *testing.T) {
 	log.Print(sqlString)
 }
 
+func TestTable_CreateAutoPartition(t *testing.T) {
+	tableSchema := NewSchemaBuilder().Name("newTable").
+		Column(Column{
+			Name:    "col1",
+			Type:    datatype2.TimestampType,
+			Comment: "I'm col1",
+		}).
+		Column(Column{
+			Name:    "col2",
+			Type:    datatype2.BigIntType,
+			Comment: "I'm col2",
+		}).
+		Comment("This's table comment").
+		PartitionColumn(Column{
+			Name:               "p1",
+			Type:               datatype2.StringType,
+			GenerateExpression: NewTruncTime("col1", DAY),
+		}).
+		Lifecycle(10).Build()
+
+	sqlString, err := tableSchema.ToSQLString("project", "schema", true)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	println(sqlString)
+	// create table if not exists project.`schema`.`newTable` (
+	//    `col1` TIMESTAMP comment 'I\'m col1',
+	//    `col2` BIGINT comment 'I\'m col2'
+	//)
+	//comment 'This\'s table comment'
+	//auto partition by (trunc_time(col1, 'day') AS p1)
+	//lifecycle 10;
+}
+
 func TestToViewSQLString(t *testing.T) {
 	sb := NewSchemaBuilder()
 	columns := []Column{
