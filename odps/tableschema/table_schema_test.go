@@ -109,7 +109,7 @@ func TestTable_CreateAutoPartition(t *testing.T) {
 	//    `col2` BIGINT comment 'I\'m col2'
 	//)
 	//comment 'This\'s table comment'
-	//auto partition by (trunc_time(col1, 'day') AS p1)
+	//auto partitioned by (trunc_time(col1, 'day') AS p1)
 	//lifecycle 10;
 }
 

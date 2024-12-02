@@ -314,7 +314,7 @@ func (schema *TableSchema) ToBaseSQLString(projectName string, schemaName string
 		"{{ end }}" +
 		"{{ if gt $partitionNum 0 }}" +
 		"{{ if (index .Schema.PartitionColumns 0).GenerateExpression }}" +
-		"\nauto partition by (" +
+		"\nauto partitioned by (" +
 		"{{ (index .Schema.PartitionColumns 0).GenerateExpression.String }} AS {{ (index .Schema.PartitionColumns 0).Name }}" +
 		"{{ else }}" +
 		"\npartitioned by (" +
