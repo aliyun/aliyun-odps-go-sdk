@@ -26,7 +26,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
+	"github.com/apache/arrow/go/v9/arrow"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
@@ -200,16 +201,6 @@ func (u *UploadSession) ShouldTransform() bool {
 func (u *UploadSession) ResourceUrl() string {
 	rb := common.NewResourceBuilder(u.ProjectName)
 	return rb.Table(u.SchemaName, u.TableName)
-}
-
-func (u *UploadSession) OpenRecordArrowWriter(blockId int) (*RecordArrowWriter, error) {
-	conn, err := u.newUploadConnection(blockId, true)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	writer := newRecordArrowWriter(conn, u.arrowSchema)
-	return &writer, nil
 }
 
 func (u *UploadSession) OpenRecordWriter(blockId int) (*RecordProtocWriter, error) {

@@ -28,7 +28,8 @@ import (
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
+	"github.com/apache/arrow/go/v9/arrow"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
