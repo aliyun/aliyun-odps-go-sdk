@@ -5,7 +5,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
+	"github.com/apache/arrow/go/v9/arrow/array"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"

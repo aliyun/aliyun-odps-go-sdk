@@ -24,8 +24,9 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
+	"github.com/apache/arrow/go/v9/arrow"
+	"github.com/apache/arrow/go/v9/arrow/array"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 )
@@ -192,7 +193,7 @@ func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error) {
 	return arrow.Null, errors.Errorf("unknown odps data type: %s", odpsType.Name())
 }
 
-func toMaxComputeData(vector array.Interface, index int, typeInfo datatype.DataType, cfg *arrowOptions) (data.Data, error) {
+func toMaxComputeData(vector arrow.Array, index int, typeInfo datatype.DataType, cfg *arrowOptions) (data.Data, error) {
 	switch typeInfo.ID() {
 	case datatype.BOOLEAN:
 		value := vector.(*array.Boolean).Value(index)
@@ -407,7 +408,7 @@ func toMaxComputeData(vector array.Interface, index int, typeInfo datatype.DataT
 }
 
 // ToMaxComputeRecords 将 Arrow Record Batch 转换为 ODPS Record 列表
-func ToMaxComputeRecords(arrowBatch array.Record, columns []Column, opt ...ArrowOptions) ([]data.Record, error) {
+func ToMaxComputeRecords(arrowBatch arrow.Record, columns []Column, opt ...ArrowOptions) ([]data.Record, error) {
 	cfg := newTypeConvertConfig(opt...)
 	odpsRecords := make([]data.Record, 0, int(arrowBatch.NumRows()))
 	// 迭代每一行

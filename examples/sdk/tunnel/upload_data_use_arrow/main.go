@@ -7,9 +7,10 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow/memory"
+	"github.com/apache/arrow/go/v9/arrow"
+	"github.com/apache/arrow/go/v9/arrow/array"
+	"github.com/apache/arrow/go/v9/arrow/memory"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	odpsdata "github.com/aliyun/aliyun-odps-go-sdk/odps/data"

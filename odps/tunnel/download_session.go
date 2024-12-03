@@ -26,7 +26,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
+	"github.com/apache/arrow/go/v9/arrow"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
@@ -195,36 +196,6 @@ func (ds *DownloadSession) SetPartitionKey(partitionKey string) {
 func (ds *DownloadSession) ResourceUrl() string {
 	rb := common.NewResourceBuilder(ds.ProjectName)
 	return rb.Table(ds.SchemaName, ds.TableName)
-}
-
-func (ds *DownloadSession) OpenRecordArrowReader(start, count int, columnNames []string) (*RecordArrowReader, error) {
-	arrowSchema := ds.arrowSchema
-	if len(columnNames) == 0 {
-		columnNames = make([]string, len(ds.schema.Columns))
-		for i, c := range ds.schema.Columns {
-			columnNames[i] = c.Name
-		}
-	}
-
-	arrowFields := make([]arrow.Field, 0, len(columnNames))
-	for _, columnName := range columnNames {
-		fs, ok := ds.arrowSchema.FieldsByName(columnName)
-		if !ok {
-			return nil, errors.Errorf("no column names %s in table %s", columnName, ds.TableName)
-		}
-
-		arrowFields = append(arrowFields, fs...)
-	}
-
-	arrowSchema = arrow.NewSchema(arrowFields, nil)
-
-	res, err := ds.newDownloadConnection(start, count, columnNames, true)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	reader := newRecordArrowReader(res, arrowSchema)
-	return &reader, nil
 }
 
 func (ds *DownloadSession) OpenRecordReader(start, count int, columnNames []string) (*RecordProtocReader, error) {

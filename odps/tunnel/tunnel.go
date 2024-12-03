@@ -25,7 +25,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow/ipc"
+	"github.com/apache/arrow/go/v9/arrow/ipc"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
