@@ -60,10 +60,12 @@ type TableSchema struct {
 	ViewExpandedText string
 
 	// extended schema, got by adding "?extended" to table api
-	FileNum      int
-	IsArchived   bool
-	PhysicalSize int
-	Reserved     string // reserved json string, 字段不固定
+	FileNum       int
+	IsArchived    bool
+	PhysicalSize  int
+	Reserved      string // reserved json string, 字段不固定
+	PrimaryKeys   []string
+	Transactional bool
 
 	// for external table extended info
 	StorageHandler  string
@@ -77,6 +79,12 @@ type TableSchema struct {
 	// for clustered info
 	TblProperties map[string]string `json:"-"`
 	ClusterInfo   ClusterInfo
+}
+
+type reservedJSON struct {
+	ClusterInfo
+	Transactional string   `json:"Transactional"`
+	PrimaryKeys   []string `json:"PrimaryKey"`
 }
 
 type ClusterType = string
@@ -121,6 +129,7 @@ type SchemaBuilder struct {
 	location                         string
 	viewText                         string
 	lifecycle                        int
+	primaryKeys                      []string
 	tblProperties                    map[string]string
 	clusterInfo                      ClusterInfo
 	isVirtualView                    bool
@@ -238,6 +247,12 @@ func (builder *SchemaBuilder) MvProperties(properties map[string]string) *Schema
 	return builder
 }
 
+// PrimaryKeys specify primary keys of the table
+func (builder *SchemaBuilder) PrimaryKeys(primaryKeys []string) *SchemaBuilder {
+	builder.primaryKeys = primaryKeys
+	return builder
+}
+
 func (builder *SchemaBuilder) Build() TableSchema {
 	return TableSchema{
 		TableName:        builder.name,
@@ -249,6 +264,7 @@ func (builder *SchemaBuilder) Build() TableSchema {
 		Location:         builder.location,
 		ClusterInfo:      builder.clusterInfo,
 		TblProperties:    builder.tblProperties,
+		PrimaryKeys:      builder.primaryKeys,
 
 		IsVirtualView:                    builder.isVirtualView,
 		IsMaterializedView:               builder.isMaterializedView,
@@ -282,6 +298,16 @@ func (schema *TableSchema) UnmarshalJSON(data []byte) error {
 			return err
 		}
 	}
+	if tempSchema.Reserved != "" {
+		var reservedData reservedJSON
+		err := json.Unmarshal([]byte(tempSchema.Reserved), &reservedData)
+		if err != nil {
+			return err
+		}
+		schema.ClusterInfo = reservedData.ClusterInfo
+		schema.PrimaryKeys = reservedData.PrimaryKeys
+		schema.Transactional = common.StringToBool(reservedData.Transactional)
+	}
 	return nil
 }
 
@@ -303,10 +329,14 @@ func (schema *TableSchema) ToBaseSQLString(projectName string, schemaName string
 
 	tplStr := "{{$columnNum := len .Schema.Columns}}" +
 		"{{$partitionNum := len .Schema.PartitionColumns}}" +
+		"{{$primaryKeysNum:= len .Schema.PrimaryKeys}}" +
 		"create {{if .IsExternal -}} external {{ end -}} table {{ if .CreateIfNotExists }}if not exists{{ end }} " +
 		"{{.ProjectName}}.{{if ne .SchemaName \"\"}}`{{.SchemaName}}`.{{end}}`{{.Schema.TableName}}` (\n" +
 		"{{ range $i, $column := .Schema.Columns  }}" +
-		"    `{{.Name}}` {{.Type.Name | print}} {{ if ne .Comment \"\" }}comment {{quoteString .Comment}}{{ end }}{{ if notLast $i $columnNum  }},{{ end }}\n" +
+		"    `{{.Name}}` {{.Type.Name | print}} {{ if not .IsNullable }}not null{{ end }} {{ if ne .Comment \"\" }}comment {{quoteString .Comment}}{{ end }}{{ if notLast $i $columnNum  }},{{ end }}\n" +
+		"{{ end }}" +
+		"{{ if gt $primaryKeysNum 0 }}" +
+		",primary key({{ range $i, $pk := .Schema.PrimaryKeys  }} `{{.}}`{{ if notLast $i $primaryKeysNum  }},{{ end }}{{ end }})" +
 		"{{ end }}" +
 		")" +
 		"{{ if ne .Schema.Comment \"\"  }}" +

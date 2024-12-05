@@ -269,8 +269,11 @@ func ExampleTunnel_DownloadInSpecificSchema() {
 		log.Fatalf("%+v", err)
 	}
 	reader, err := session.OpenRecordReader(0, 10, nil)
-	read, err := reader.Read()
-	println(read.String())
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+	record, err := reader.Read()
+	println(record.Len())
 	// Output:
 }
 
