@@ -155,14 +155,6 @@ func (t *Table) LoadExtendedInfo() error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	// Reserved信息中提取出Cluster信息
-	if t.tableSchema.Reserved != "" {
-		err = json.Unmarshal([]byte(t.tableSchema.Reserved), &t.tableSchema.ClusterInfo)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-	}
 	t.beLoadedExtended = true
 	return nil
 }
@@ -210,6 +202,16 @@ func (t *Table) SchemaName() string {
 
 func (t *Table) Type() TableType {
 	return t.model.Type
+}
+
+// Transactional Returns whether the table is Transaction Table or Delta Table
+func (t *Table) Transactional() bool {
+	return t.tableSchema.Transactional
+}
+
+// PrimaryKeys Returns the primary keys of the table
+func (t *Table) PrimaryKeys() []string {
+	return t.tableSchema.PrimaryKeys
 }
 
 func (t *Table) CreatedTime() time.Time {
@@ -382,6 +384,11 @@ func (t *Table) Schema() tableschema.TableSchema {
 
 func (t *Table) SchemaJson() string {
 	return t.model.Schema
+}
+
+// ClusterInfo Returns the cluster info of the table
+func (t *Table) ClusterInfo() tableschema.ClusterInfo {
+	return t.tableSchema.ClusterInfo
 }
 
 // ColumnMaskInfos Returns the column level data policy of the table

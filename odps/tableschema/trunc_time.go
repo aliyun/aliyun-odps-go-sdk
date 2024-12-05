@@ -163,5 +163,5 @@ func (t *TruncTime) minGenerateValue() string {
 
 // String Returns a string representation like "trunc_time(dateColumnName, 'datePart')"
 func (t *TruncTime) String() string {
-	return fmt.Sprintf("%s(%s, '%s')", name, t.dateColumnName, t.datePart)
+	return fmt.Sprintf("%s(`%s`, '%s')", name, t.dateColumnName, t.datePart)
 }
