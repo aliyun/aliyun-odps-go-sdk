@@ -21,6 +21,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 
@@ -225,6 +226,51 @@ func Example_tunnel_download_arrow_with_partition() {
 		log.Fatalf("%+v", err)
 	}
 
+	// Output:
+}
+
+func ExampleTunnel_UploadInSpecificSchema() {
+	session, err := tunnelIns.CreateUploadSession(ProjectName, "test", tunnel2.SessionCfg.WithSchemaName("new_Schema"))
+	println(session.Id)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+	writer, err := session.OpenRecordWriter(0)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	record := data.NewRecord(1)
+	record[0] = data.BigInt(1)
+
+	for i := 0; i < 10; i++ {
+		err = writer.Write(record)
+		if err != nil {
+			log.Fatalf("%+v", err)
+		}
+	}
+
+	err = writer.Close()
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	err = session.Commit([]int{0})
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+	// Output:
+}
+
+func ExampleTunnel_DownloadInSpecificSchema() {
+	session, err := tunnelIns.CreateDownloadSession(ProjectName, "test", tunnel2.SessionCfg.WithSchemaName("new_Schema"))
+	println(session.Id)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+	reader, err := session.OpenRecordReader(0, 10, nil)
+	read, err := reader.Read()
+	println(read.String())
 	// Output:
 }
 
