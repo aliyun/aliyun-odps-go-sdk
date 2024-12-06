@@ -29,7 +29,7 @@ type Column struct {
 	Type               datatype2.DataType
 	Comment            string
 	Label              string
-	IsNullable         bool
+	NotNull            bool
 	HasDefaultValue    bool
 	DefaultValue       string
 	ExtendedLabels     []string
@@ -75,7 +75,7 @@ func (c *Column) UnmarshalJSON(data []byte) error {
 		Type:               _type,
 		Comment:            cs.Comment,
 		Label:              cs.Label,
-		IsNullable:         cs.IsNullable,
+		NotNull:            !cs.IsNullable,
 		HasDefaultValue:    cs.HasDefaultValue,
 		DefaultValue:       cs.DefaultValue,
 		ExtendedLabels:     cs.ExtendedLabels,
