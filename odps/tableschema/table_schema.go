@@ -333,7 +333,7 @@ func (schema *TableSchema) ToBaseSQLString(projectName string, schemaName string
 		"create {{if .IsExternal -}} external {{ end -}} table {{ if .CreateIfNotExists }}if not exists{{ end }} " +
 		"{{.ProjectName}}.{{if ne .SchemaName \"\"}}`{{.SchemaName}}`.{{end}}`{{.Schema.TableName}}` (\n" +
 		"{{ range $i, $column := .Schema.Columns  }}" +
-		"    `{{.Name}}` {{.Type.Name | print}} {{ if not .IsNullable }}not null{{ end }} {{ if ne .Comment \"\" }}comment {{quoteString .Comment}}{{ end }}{{ if notLast $i $columnNum  }},{{ end }}\n" +
+		"    `{{.Name}}` {{.Type.Name | print}} {{ if .NotNull }}not null{{ end }} {{ if ne .Comment \"\" }}comment {{quoteString .Comment}}{{ end }}{{ if notLast $i $columnNum  }},{{ end }}\n" +
 		"{{ end }}" +
 		"{{ if gt $primaryKeysNum 0 }}" +
 		",primary key({{ range $i, $pk := .Schema.PrimaryKeys  }} `{{.}}`{{ if notLast $i $primaryKeysNum  }},{{ end }}{{ end }})" +
@@ -690,7 +690,7 @@ func (schema *TableSchema) ToArrowSchema() *arrow.Schema {
 		fields[i] = arrow.Field{
 			Name:     column.Name,
 			Type:     arrowType,
-			Nullable: column.IsNullable,
+			Nullable: !column.NotNull,
 		}
 	}
 	return arrow.NewSchema(fields, nil)

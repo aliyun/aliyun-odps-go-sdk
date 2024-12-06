@@ -165,9 +165,9 @@ func ExampleTable_GetClusterInfo() {
 	}
 	schema := tableschema.NewSchemaBuilder().
 		Name("cluster_table").
-		Column(tableschema.Column{Name: "c1", Type: datatype.StringType, IsNullable: false}).
-		Column(tableschema.Column{Name: "c2", Type: datatype.StringType, IsNullable: true}).
-		Column(tableschema.Column{Name: "c3", Type: datatype.StringType, IsNullable: true}).
+		Column(tableschema.Column{Name: "c1", Type: datatype.StringType, NotNull: true}).
+		Column(tableschema.Column{Name: "c2", Type: datatype.StringType, NotNull: false}).
+		Column(tableschema.Column{Name: "c3", Type: datatype.StringType, NotNull: false}).
 		ClusterType(cluster.ClusterType).
 		ClusterColumns(cluster.ClusterCols).
 		ClusterSortColumns(cluster.SortCols).
@@ -194,9 +194,9 @@ func ExampleTable_GetClusterInfo() {
 }
 
 func ExampleTable_GetPrimaryKey() {
-	schema := tableschema.NewSchemaBuilder().Name("has_pk").PrimaryKeys([]string{"id", "name"}).Column(tableschema.Column{Name: "id", Type: datatype.IntType, IsNullable: false}).
-		Column(tableschema.Column{Name: "name", Type: datatype.StringType, IsNullable: false}).
-		Column(tableschema.Column{Name: "name2", Type: datatype.StringType, IsNullable: true}).
+	schema := tableschema.NewSchemaBuilder().Name("has_pk").PrimaryKeys([]string{"id", "name"}).Column(tableschema.Column{Name: "id", Type: datatype.IntType, NotNull: true}).
+		Column(tableschema.Column{Name: "name", Type: datatype.StringType, NotNull: true}).
+		Column(tableschema.Column{Name: "name2", Type: datatype.StringType, NotNull: false}).
 		Build()
 	println(schema.ToSQLString("go_sdk_regression_testing", "default", true))
 	err := odpsIns.Tables().Create(schema, true, nil, nil)
@@ -217,9 +217,9 @@ func ExampleTable_GetPrimaryKey() {
 }
 
 func ExampleTable_IsTransactional() {
-	schema := tableschema.NewSchemaBuilder().Name("deltaTable").PrimaryKeys([]string{"id", "name"}).Column(tableschema.Column{Name: "id", Type: datatype.IntType, IsNullable: false}).
-		Column(tableschema.Column{Name: "name", Type: datatype.StringType, IsNullable: false}).
-		Column(tableschema.Column{Name: "name2", Type: datatype.StringType, IsNullable: true}).
+	schema := tableschema.NewSchemaBuilder().Name("deltaTable").PrimaryKeys([]string{"id", "name"}).Column(tableschema.Column{Name: "id", Type: datatype.IntType, NotNull: true}).
+		Column(tableschema.Column{Name: "name", Type: datatype.StringType, NotNull: true}).
+		Column(tableschema.Column{Name: "name2", Type: datatype.StringType, NotNull: false}).
 		TblProperties(map[string]string{"transactional": "true"}).
 		Build()
 	println(schema.ToSQLString("go_sdk_regression_testing", "default", true))
