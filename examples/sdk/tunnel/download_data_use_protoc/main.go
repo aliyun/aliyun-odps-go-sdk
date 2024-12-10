@@ -37,6 +37,7 @@ func main() {
 		project.Name(),
 		"all_types_demo",
 		tunnel2.SessionCfg.WithPartitionKey("p1=20,p2='hangzhou'"),
+		tunnel2.SessionCfg.WithSchemaName("default"),
 	)
 	if err != nil {
 		log.Fatalf("%+v", err)

@@ -156,27 +156,84 @@ func ExampleTable_ExecSql() {
 	// Output:
 }
 
-//func ExampleTable_Read() {
-//	table := odps.NewTable(odpsIns, defaultProjectName, "sale_detail")
-//	columns := []string{
-//		"shop_name", "customer_id", "total_price", "sale_date", "region",
-//	}
-//	reader, err := table.Read("", columns, -1, "")
-//	if err != nil {
-//		log.Fatalf("%+v", err)
-//	}
-//
-//	for {
-//		record, err := reader.Read()
-//		if err == io.EOF {
-//			break
-//		}
-//		if err != nil {
-//			log.Fatal(err)
-//		}
-//
-//		println(fmt.Sprintf("%+v", record))
-//	}
-//
-//	// Output:
-//}
+func ExampleTable_GetClusterInfo() {
+	cluster := tableschema.ClusterInfo{
+		ClusterType: tableschema.CLUSTER_TYPE.Hash,
+		ClusterCols: []string{"c1", "c2"},
+		SortCols:    []tableschema.SortColumn{{Name: "c1", Order: "asc"}, {Name: "c2", Order: "desc"}},
+		BucketNum:   16,
+	}
+	schema := tableschema.NewSchemaBuilder().
+		Name("cluster_table").
+		Column(tableschema.Column{Name: "c1", Type: datatype.StringType, NotNull: true}).
+		Column(tableschema.Column{Name: "c2", Type: datatype.StringType, NotNull: false}).
+		Column(tableschema.Column{Name: "c3", Type: datatype.StringType, NotNull: false}).
+		ClusterType(cluster.ClusterType).
+		ClusterColumns(cluster.ClusterCols).
+		ClusterSortColumns(cluster.SortCols).
+		ClusterBucketNum(cluster.BucketNum).
+		Build()
+	println(schema.ToSQLString("go_sdk_regression_testing", "default", true))
+	err := odpsIns.Tables().Create(schema, true, nil, nil)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	table := odpsIns.Table("cluster_table")
+	err = table.Load()
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+	info := table.ClusterInfo()
+	println(info.ClusterType)
+	println(info.ClusterCols)
+	println(info.SortCols)
+	println(info.BucketNum)
+
+	// Output:
+}
+
+func ExampleTable_GetPrimaryKey() {
+	schema := tableschema.NewSchemaBuilder().Name("has_pk").PrimaryKeys([]string{"id", "name"}).Column(tableschema.Column{Name: "id", Type: datatype.IntType, NotNull: true}).
+		Column(tableschema.Column{Name: "name", Type: datatype.StringType, NotNull: true}).
+		Column(tableschema.Column{Name: "name2", Type: datatype.StringType, NotNull: false}).
+		Build()
+	println(schema.ToSQLString("go_sdk_regression_testing", "default", true))
+	err := odpsIns.Tables().Create(schema, true, nil, nil)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	table := odpsIns.Table("has_pk")
+	err = table.Load()
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	for _, str := range table.PrimaryKeys() {
+		println(str)
+	}
+	// Output:
+}
+
+func ExampleTable_IsTransactional() {
+	schema := tableschema.NewSchemaBuilder().Name("deltaTable").PrimaryKeys([]string{"id", "name"}).Column(tableschema.Column{Name: "id", Type: datatype.IntType, NotNull: true}).
+		Column(tableschema.Column{Name: "name", Type: datatype.StringType, NotNull: true}).
+		Column(tableschema.Column{Name: "name2", Type: datatype.StringType, NotNull: false}).
+		TblProperties(map[string]string{"transactional": "true"}).
+		Build()
+	println(schema.ToSQLString("go_sdk_regression_testing", "default", true))
+	err := odpsIns.Tables().Create(schema, true, nil, nil)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	table := odpsIns.Table("deltaTable")
+	err = table.Load()
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	println(table.Transactional())
+	// Output:
+}

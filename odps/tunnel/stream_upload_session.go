@@ -58,7 +58,8 @@ type StreamUploadSession struct {
 
 func (su *StreamUploadSession) ResourceUrl() string {
 	rb := common.NewResourceBuilder(su.ProjectName)
-	return rb.TableStream(su.TableName)
+	tableResource := rb.Table(su.SchemaName, su.TableName)
+	return tableResource + common.StreamsPath
 }
 
 // CreateStreamUploadSession create a new stream upload session before uploading data。

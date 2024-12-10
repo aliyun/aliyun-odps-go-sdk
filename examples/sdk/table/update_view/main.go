@@ -49,7 +49,7 @@ func main() {
 	// [(<col_name> [comment <col_comment>], ...)]
 	// [comment <view_comment>]
 	// as <select_statement>;
-	
+
 	viewName := "test_view_new"
 
 	c1 := tableschema.Column{
@@ -67,27 +67,25 @@ func main() {
 		Type: datatype.IntType,
 	}
 
-	c4:=tableschema.Column{
+	c4 := tableschema.Column{
 		Name: "tiny_int_type",
 		Type: datatype.TinyIntType,
 	}
 
-	c5:=tableschema.Column{
+	c5 := tableschema.Column{
 		Name: "bigint_type",
 		Type: datatype.BigIntType,
 	}
 
-
 	sb := tableschema.NewSchemaBuilder()
 
 	schema := sb.Name(viewName). // table name
-		Columns(c1, c2, c3,c4,c5). // columns
-		Comment("create Virtual view").
-		Lifecycle(10).
-		IsVirtualView(true).
-		ViewText("select string_type,date_type,int_type,tiny_int_type,bigint_type from all_types_demo").
-		Build()
-
+					Columns(c1, c2, c3, c4, c5). // columns
+					Comment("create Virtual view").
+					Lifecycle(10).
+					IsVirtualView(true).
+					ViewText("select string_type,date_type,int_type,tiny_int_type,bigint_type from all_types_demo").
+					Build()
 
 	tablesIns := odpsIns.Tables()
 

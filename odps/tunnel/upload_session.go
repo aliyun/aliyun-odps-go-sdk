@@ -199,7 +199,7 @@ func (u *UploadSession) ShouldTransform() bool {
 
 func (u *UploadSession) ResourceUrl() string {
 	rb := common.NewResourceBuilder(u.ProjectName)
-	return rb.Table(u.TableName)
+	return rb.Table(u.SchemaName, u.TableName)
 }
 
 func (u *UploadSession) OpenRecordArrowWriter(blockId int) (*RecordArrowWriter, error) {
@@ -262,8 +262,9 @@ func (u *UploadSession) Commit(blockIds []int) error {
 	if u.partitionKey != "" {
 		queryArgs.Set("partition", u.partitionKey)
 	}
+	headers := getCommonHeaders()
 
-	req, err := u.RestClient.NewRequestWithUrlQuery(common.HttpMethod.PostMethod, u.ResourceUrl(), nil, queryArgs)
+	req, err := u.RestClient.NewRequestWithParamsAndHeaders(common.HttpMethod.PostMethod, u.ResourceUrl(), nil, queryArgs, headers)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -338,6 +339,7 @@ func (u *UploadSession) loadInformation(req *http.Request) error {
 }
 
 func (u *UploadSession) newInitiationRequest() (*http.Request, error) {
+	headers := getCommonHeaders()
 	resource := u.ResourceUrl()
 	queryArgs := make(url.Values, 3)
 	queryArgs.Set("uploads", "")
@@ -353,12 +355,10 @@ func (u *UploadSession) newInitiationRequest() (*http.Request, error) {
 	if u.QuotaName != "" {
 		queryArgs.Set("quotaName", u.QuotaName)
 	}
-	req, err := u.RestClient.NewRequestWithUrlQuery(common.HttpMethod.PostMethod, resource, nil, queryArgs)
+	req, err := u.RestClient.NewRequestWithParamsAndHeaders(common.HttpMethod.PostMethod, resource, nil, queryArgs, headers)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-
-	addCommonSessionHttpHeader(req.Header)
 	return req, nil
 }
 
@@ -381,6 +381,7 @@ func (u *UploadSession) newLoadRequest() (*http.Request, error) {
 }
 
 func (u *UploadSession) newUploadConnection(blockId int, useArrow bool) (*httpConnection, error) {
+	headers := getCommonHeaders()
 	queryArgs := make(url.Values, 4)
 	queryArgs.Set("uploadid", u.Id)
 	queryArgs.Set("blockid", strconv.Itoa(blockId))
@@ -398,12 +399,11 @@ func (u *UploadSession) newUploadConnection(blockId int, useArrow bool) (*httpCo
 	reader, writer = io.Pipe()
 
 	resource := u.ResourceUrl()
-	req, err := u.RestClient.NewRequestWithUrlQuery(common.HttpMethod.PutMethod, resource, reader, queryArgs)
+	req, err := u.RestClient.NewRequestWithParamsAndHeaders(common.HttpMethod.PutMethod, resource, reader, queryArgs, headers)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 	req.Header.Set(common.HttpHeaderContentType, "application/octet-stream")
-	addCommonSessionHttpHeader(req.Header)
 
 	if u.Compressor != nil {
 		req.Header.Set("Content-Encoding", u.Compressor.Name())

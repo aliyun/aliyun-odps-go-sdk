@@ -25,25 +25,29 @@ import (
 )
 
 type Column struct {
-	Name            string
-	Type            datatype2.DataType
-	Comment         string
-	Label           string
-	IsNullable      bool
-	HasDefaultValue bool
-	DefaultValue    string
-	ExtendedLabels  []string
+	Name               string
+	Type               datatype2.DataType
+	Comment            string
+	Label              string
+	NotNull            bool
+	HasDefaultValue    bool
+	DefaultValue       string
+	ExtendedLabels     []string
+	GenerateExpression GenerateExpression
 }
 
 func (c *Column) UnmarshalJSON(data []byte) error {
 	type ColumnShadow struct {
-		Name            string
-		Type            string
-		Comment         string
-		Label           string
-		IsNullable      bool
-		HasDefaultValue bool
-		ExtendedLabels  []string
+		Name                  string
+		Type                  string
+		Comment               string
+		Label                 string
+		IsNullable            bool
+		HasDefaultValue       bool
+		DefaultValue          string
+		ExtendedLabels        []string
+		HasGenerateExpression bool
+		GenerateExpression    string
 	}
 
 	var cs ColumnShadow
@@ -56,16 +60,26 @@ func (c *Column) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	*c = Column{
-		Name:            cs.Name,
-		Type:            _type,
-		Comment:         cs.Comment,
-		Label:           cs.Label,
-		IsNullable:      cs.IsNullable,
-		HasDefaultValue: cs.HasDefaultValue,
-		ExtendedLabels:  cs.ExtendedLabels,
+	var _expression GenerateExpression
+	if cs.HasGenerateExpression {
+		_expression, err = parseGenerateExpression(cs.GenerateExpression)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+	} else {
+		_expression = nil
 	}
 
+	*c = Column{
+		Name:               cs.Name,
+		Type:               _type,
+		Comment:            cs.Comment,
+		Label:              cs.Label,
+		NotNull:            !cs.IsNullable,
+		HasDefaultValue:    cs.HasDefaultValue,
+		DefaultValue:       cs.DefaultValue,
+		ExtendedLabels:     cs.ExtendedLabels,
+		GenerateExpression: _expression,
+	}
 	return nil
 }
