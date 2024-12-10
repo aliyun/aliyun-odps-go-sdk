@@ -58,19 +58,26 @@ type TableOrErr struct {
 }
 
 type tableModel struct {
-	XMLName       xml.Name `xml:"Table"`
-	Name          string
-	TableId       string
-	Format        string
-	Schema        string
-	Comment       string
-	Owner         string
-	ProjectName   string `xml:"Project"`
-	SchemaName    string
-	TableLabel    string
-	CryptoAlgo    string
-	TableMaskInfo string
-	Type          TableType
+	XMLName         xml.Name `xml:"Table"`
+	Name            string
+	TableID         string `xml:"TableId"`
+	Format          string
+	Schema          string
+	Comment         string
+	Owner           string
+	ProjectName     string `xml:"Project"`
+	SchemaName      string
+	TableLabel      string
+	CryptoAlgo      string
+	TableMaskInfo   string
+	ColumnMaskInfos []ColumnMaskInfo // Data policy names bind with columns
+	Type            TableType
+}
+
+// ColumnMaskInfo is used for the return value of Table.ColumnMaskInfos
+type ColumnMaskInfo struct {
+	Name           string   // Column Name
+	PolicyNameList []string // Data policy names bind with column
 }
 
 func NewTable(odpsIns *Odps, projectName string, schemaName string, tableName string) *Table {
@@ -148,14 +155,6 @@ func (t *Table) LoadExtendedInfo() error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	// Reserved信息中提取出Cluster信息
-	if t.tableSchema.Reserved != "" {
-		err = json.Unmarshal([]byte(t.tableSchema.Reserved), &t.tableSchema.ClusterInfo)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-	}
 	t.beLoadedExtended = true
 	return nil
 }
@@ -166,7 +165,7 @@ func (t *Table) Name() string {
 
 func (t *Table) ResourceUrl() string {
 	rb := common.ResourceBuilder{ProjectName: t.ProjectName()}
-	return rb.Table(t.Name())
+	return rb.Table("", t.Name())
 }
 
 func (t *Table) Comment() string {
@@ -186,7 +185,7 @@ func (t *Table) Owner() string {
 }
 
 func (t *Table) TableID() string {
-	return t.model.TableId
+	return t.model.TableID
 }
 
 func (t *Table) CryptoAlgo() string {
@@ -203,6 +202,16 @@ func (t *Table) SchemaName() string {
 
 func (t *Table) Type() TableType {
 	return t.model.Type
+}
+
+// Transactional Returns whether the table is Transaction Table or Delta Table
+func (t *Table) Transactional() bool {
+	return t.tableSchema.Transactional
+}
+
+// PrimaryKeys Returns the primary keys of the table
+func (t *Table) PrimaryKeys() []string {
+	return t.tableSchema.PrimaryKeys
 }
 
 func (t *Table) CreatedTime() time.Time {
@@ -375,6 +384,34 @@ func (t *Table) Schema() tableschema.TableSchema {
 
 func (t *Table) SchemaJson() string {
 	return t.model.Schema
+}
+
+// ClusterInfo Returns the cluster info of the table
+func (t *Table) ClusterInfo() tableschema.ClusterInfo {
+	return t.tableSchema.ClusterInfo
+}
+
+// ColumnMaskInfos Returns the column level data policy of the table
+func (t *Table) ColumnMaskInfos() ([]ColumnMaskInfo, error) {
+	if t.model.ColumnMaskInfos != nil {
+		return t.model.ColumnMaskInfos, nil
+	}
+
+	if t.model.TableMaskInfo == "" {
+		return nil, nil
+	}
+
+	type ColumnMaskInfoList struct {
+		ColumnMaskInfoList []ColumnMaskInfo `json:"columnMaskInfoList"`
+	}
+	var columnMaskInfoList ColumnMaskInfoList
+
+	err := json.Unmarshal([]byte(t.model.TableMaskInfo), &columnMaskInfoList)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	t.model.ColumnMaskInfos = columnMaskInfoList.ColumnMaskInfoList
+	return t.model.ColumnMaskInfos, nil
 }
 
 func (t *Table) Delete() error {
@@ -649,6 +686,7 @@ func (t *Table) getPartitions(partitionSpec string) ([]Partition, error) {
 			partition := Partition{
 				odpsIns:     t.odpsIns,
 				projectName: t.ProjectName(),
+				schemaName:  t.SchemaName(),
 				tableName:   t.Name(),
 				model:       pModel,
 			}
@@ -667,12 +705,13 @@ func (t *Table) getPartitions(partitionSpec string) ([]Partition, error) {
 	return partitions, nil
 }
 
-func (t *Table) CreateShards(shardCount int) error {
-	sql := fmt.Sprintf("alter table %s into %d shards;", t.getFullName(), shardCount)
+// Update Table
+
+// SetLifeCycle Modify the life cycle of an existing partitioned table or non-partitioned table.
+func (t *Table) SetLifeCycle(days int) error {
+	sql := fmt.Sprintf("alter table %s set lifecycle %d;", t.getFullName(), days)
 	return t.executeSql(sql)
 }
-
-// Update Table
 
 // ChangeOwner Only the Project Owner or users with the Super_Administrator role can execute commands that modify the table Owner.
 func (t *Table) ChangeOwner(newOwner string) error {

@@ -77,9 +77,13 @@ func (rb *ResourceBuilder) Tables() string {
 	return path.Join(ProjectsPath, rb.ProjectName, TablesPath)
 }
 
+
 // Table returns the table resource path
-func (rb *ResourceBuilder) Table(tableName string) string {
-	return path.Join(ProjectsPath, rb.ProjectName, TablesPath, url.PathEscape(tableName))
+func (rb *ResourceBuilder) Table(schemaName, tableName string) string {
+	if schemaName == "" {
+		return path.Join(ProjectsPath, rb.ProjectName, TablesPath, url.PathEscape(tableName))
+	}
+	return path.Join(ProjectsPath, rb.ProjectName, SchemasPath, url.PathEscape(schemaName), TablesPath, url.PathEscape(tableName))
 }
 
 // Schemas returns the schemas resource path

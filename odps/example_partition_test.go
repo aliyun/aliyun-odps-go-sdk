@@ -29,7 +29,7 @@ func ExamplePartition_Load() {
 		log.Fatalf("%+v", err)
 	}
 
-	partition := odps.NewPartition(odpsIns, defaultProjectName, "sale_detail", "sale_date=201910/region=shanghai")
+	partition := odps.NewPartition(odpsIns, defaultProjectName, "", "sale_detail", "sale_date=201910/region=shanghai")
 	err = partition.Load()
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -48,7 +48,7 @@ func ExamplePartition_LoadExtended() {
 		log.Fatalf("%+v", err)
 	}
 
-	partition := odps.NewPartition(odpsIns, defaultProjectName, "sale_detail", "sale_date=201910/region=shanghai")
+	partition := odps.NewPartition(odpsIns, defaultProjectName, "", "sale_detail", "sale_date=201910/region=shanghai")
 	err = partition.LoadExtended()
 	if err != nil {
 		log.Fatalf("%+v", err)

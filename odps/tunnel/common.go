@@ -68,7 +68,7 @@ func (s *schemaResModel) toTableSchema(tableName string) (tableschema.TableSchem
 			Name:         rawColumn.Name,
 			Type:         _type,
 			Comment:      rawColumn.Comment,
-			IsNullable:   rawColumn.Nullable,
+			NotNull:      !rawColumn.Nullable,
 			DefaultValue: rawColumn.DefaultValue,
 		}
 

@@ -134,7 +134,7 @@ func (rr *rowsReader) ColumnTypeDatabaseTypeName(index int) string {
 func (rr *rowsReader) ColumnTypeScanType(index int) reflect.Type {
 	column := rr.columns[index]
 	dataType := column.Type
-	nullable := column.IsNullable
+	nullable := !column.NotNull
 
 	switch dataType.ID() {
 	case datatype.BIGINT:
