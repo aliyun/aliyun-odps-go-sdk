@@ -47,17 +47,17 @@ const (
 	TunnelPath          = "/tunnel"
 )
 
-// ResourceBuilder is a builder for resource
+// ResourceBuilder is a helper to build resource path
 type ResourceBuilder struct {
 	ProjectName string
 }
 
-// NewResourceBuilder create a new ResourceBuilder
+// NewResourceBuilder creates a new ResourceBuilder
 func NewResourceBuilder(projectName string) ResourceBuilder {
 	return ResourceBuilder{ProjectName: url.QueryEscape(projectName)}
 }
 
-// SetProject set the project name
+// SetProject sets the project name
 func (rb *ResourceBuilder) SetProject(name string) {
 	rb.ProjectName = url.QueryEscape(name)
 }
@@ -185,7 +185,7 @@ func (rb *ResourceBuilder) Authorization() string {
 	return path.Join(ProjectsPath, rb.ProjectName, AuthorizationPath)
 }
 
-// AuthorizationId returns the authorization resource path
+// AuthorizationId returns the authorization resource path with instance id
 func (rb *ResourceBuilder) AuthorizationId(instanceId string) string {
 	return path.Join(ProjectsPath, rb.ProjectName, AuthorizationPath, url.PathEscape(instanceId))
 }
