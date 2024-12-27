@@ -7,7 +7,7 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 )
 
-func main(){
+func main() {
 	// Specify the ini file path
 	configPath := "./config.ini"
 	conf, err := odps.NewConfigFromIni(configPath)

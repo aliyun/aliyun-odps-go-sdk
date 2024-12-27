@@ -7,6 +7,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/url"
 	"strconv"
 	"strings"
@@ -78,7 +79,6 @@ func (r *Resources) List(f func(*Resource, error), filters ...RFileFunc) {
 			break
 		}
 	}
-
 }
 
 // Get get a resource
@@ -204,7 +204,7 @@ func (r *Resources) createTempPartFile(projectName, schemaName string, fr FileRe
 		return errors.WithStack(err)
 	}
 	if resp.StatusCode != 201 {
-		data, _ := io.ReadAll(resp.Body)
+		data, _ := ioutil.ReadAll(resp.Body)
 		return errors.WithStack(errors.New(string(data)))
 	}
 	return nil
@@ -261,7 +261,7 @@ func (r *Resources) mergeTempPartFile(projectName, schemaName string, fr FileRes
 		return errors.WithStack(err)
 	}
 	if resp.StatusCode != 201 {
-		data, _ := io.ReadAll(resp.Body)
+		data, _ := ioutil.ReadAll(resp.Body)
 		return errors.WithStack(errors.New(string(data)))
 	}
 
@@ -339,7 +339,7 @@ func (r *Resources) CreateTableResource(projectName, schemaName string, tr Table
 		return errors.WithStack(err)
 	}
 	if resp.StatusCode != 201 {
-		data, _ := io.ReadAll(resp.Body)
+		data, _ := ioutil.ReadAll(resp.Body)
 		return errors.WithStack(errors.New(string(data)))
 	}
 

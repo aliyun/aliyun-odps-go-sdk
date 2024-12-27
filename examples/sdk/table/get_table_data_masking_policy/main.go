@@ -30,12 +30,12 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	maskInfos,err  := table.ColumnMaskInfos()
+	maskInfos, err := table.ColumnMaskInfos()
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-	
-	for _,maskInfo := range maskInfos{
+
+	for _, maskInfo := range maskInfos {
 		fmt.Println("column name = ", maskInfo.Name)
 		fmt.Println("column policy name = ", maskInfo.PolicyNameList)
 	}

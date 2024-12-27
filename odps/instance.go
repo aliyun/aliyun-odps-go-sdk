@@ -55,6 +55,7 @@ type Instance struct {
 	taskNameCommitted string
 	taskResults       []TaskResult
 	isSync            bool
+	UniqueIdentifyID  string
 }
 
 // InstanceOrErr is used for the return value of Instances.List

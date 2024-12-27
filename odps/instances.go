@@ -29,6 +29,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/options"
 )
 
 // Instances is used to get or create instance(s)
@@ -60,24 +61,52 @@ func (instances *Instances) CreateTask(projectName string, task Task) (*Instance
 }
 
 func (instances *Instances) CreateTaskWithPriority(projectName string, task Task, jobPriority int) (*Instance, error) {
+	instanceOptions := options.NewCreateInstanceOption()
+	instanceOptions.ProjectName = projectName
+	instanceOptions.Priority = jobPriority
+	return instances.CreateTaskWithOption(task, instanceOptions)
+}
+
+// CreateTaskWithOption Create a Task (maybe SQLTask) with options.CreateInstanceOption
+func (instances *Instances) CreateTaskWithOption(task Task, instanceOption *options.CreateInstanceOption) (*Instance, error) {
+	if instanceOption == nil {
+		instanceOption = options.NewCreateInstanceOption()
+	}
+	projectName := instanceOption.ProjectName
+	if projectName == "" {
+		projectName = instances.projectName
+	}
+	jobPriority := instanceOption.Priority
+	if jobPriority == 0 {
+		jobPriority = DefaultJobPriority
+	}
+
 	uuidStr := uuid.New().String()
 	task.AddProperty("uuid", uuidStr)
 
+	// The order of each field is strictly ordered
 	type InstanceCreationModel struct {
 		XMLName xml.Name `xml:"Instance"`
 		Job     struct {
-			Priority int
-			Tasks    Task `xml:"Tasks>Task"`
+			Name             string `xml:"Name,omitempty"`
+			Priority         int
+			UniqueIdentifyID string `xml:"Guid,omitempty"`
+			Tasks            Task   `xml:"Tasks>Task"`
 		}
 	}
 
 	instanceCreationModel := InstanceCreationModel{
 		Job: struct {
-			Priority int
-			Tasks    Task `xml:"Tasks>Task"`
+			Name             string `xml:"Name,omitempty"`
+			Priority         int
+			UniqueIdentifyID string `xml:"Guid,omitempty"`
+
+			Tasks Task `xml:"Tasks>Task"`
 		}{
-			Priority: jobPriority,
-			Tasks:    task,
+			Name:             instanceOption.JobName,
+			Priority:         jobPriority,
+			UniqueIdentifyID: instanceOption.UniqueIdentifyID,
+			Tasks:            task,
 		},
 	}
 
@@ -91,10 +120,15 @@ func (instances *Instances) CreateTaskWithPriority(projectName string, task Task
 	rb := common.ResourceBuilder{}
 	rb.SetProject(projectName)
 	resource := rb.Instances()
+
+	queryArg := make(url.Values)
+	if instanceOption.TryWait {
+		queryArg.Set("tryWait", "")
+	}
 	var instanceId string
 	var isSync bool
 
-	err := client.DoXmlWithParseFunc(common.HttpMethod.PostMethod, resource, nil, nil, &instanceCreationModel, func(res *http.Response) error {
+	err := client.DoXmlWithParseFunc(common.HttpMethod.PostMethod, resource, queryArg, nil, &instanceCreationModel, func(res *http.Response) error {
 		location := res.Header.Get(common.HttpHeaderLocation)
 
 		if location == "" {

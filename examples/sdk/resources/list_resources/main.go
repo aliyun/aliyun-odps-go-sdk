@@ -8,7 +8,7 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 )
 
-func main(){
+func main() {
 	// Specify the ini file path
 	configPath := "./config.ini"
 	conf, err := odps.NewConfigFromIni(configPath)
@@ -30,6 +30,6 @@ func main(){
 		fmt.Printf("%+v\n", resource)
 	})
 
-	resource1:= resources.Get("bank_customer.txt")
+	resource1 := resources.Get("bank_customer.txt")
 	fmt.Println(resource1.Exist())
 }

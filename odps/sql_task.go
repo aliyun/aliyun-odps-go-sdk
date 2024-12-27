@@ -24,6 +24,8 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/options"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
@@ -49,8 +51,45 @@ func NewSqlTask(name string, query string, hints map[string]string) SQLTask {
 		hintsJson, _ := json.Marshal(hints)
 		sqlTask.Config = append(sqlTask.Config, common.Property{Name: "settings", Value: string(hintsJson)})
 	}
+	return sqlTask
+}
 
-	// TODO add alias
+// NewSQLTaskWithOption Create a SQLTask with options.SQLTaskOption
+func NewSQLTaskWithOption(query string, option *options.SQLTaskOption) SQLTask {
+	if option == nil {
+		return NewAnonymousSQLTask(query, nil)
+	}
+	taskName := option.TaskName
+	if taskName == "" {
+		taskName = "AnonymousSQLTask"
+	}
+	sqlTask := SQLTask{
+		TaskName: TaskName(taskName),
+		Query:    query,
+	}
+	taskType := option.Type
+	if taskType == "" {
+		taskType = "sql"
+	}
+	sqlTask.Config = append(sqlTask.Config, common.Property{Name: "type", Value: taskType})
+
+	hints := option.Hints
+	if hints == nil && option.DefaultSchema != "" {
+		hints = make(map[string]string)
+		hints["odps.default.schema"] = option.DefaultSchema
+	}
+	if hints != nil {
+		if hints["odps.default.schema"] == "" && option.DefaultSchema != "" {
+			hints["odps.default.schema"] = option.DefaultSchema
+		}
+		hintsJSON, _ := json.Marshal(hints)
+		sqlTask.Config = append(sqlTask.Config, common.Property{Name: "settings", Value: string(hintsJSON)})
+	}
+
+	if option.Aliases != nil {
+		aliasJSON, _ := json.Marshal(option.Aliases)
+		sqlTask.Config = append(sqlTask.Config, common.Property{Name: "aliases", Value: string(aliasJSON)})
+	}
 	return sqlTask
 }
 
