@@ -132,7 +132,7 @@ func (odps *Odps) ExecSQlWithHints(sql string, hints map[string]string) (*Instan
 	if odps.defaultProject == "" {
 		return nil, errors.New("default project has not been set for odps")
 	}
-	option := options.NewSQLTaskOption()
+	option := options.NewSQLTaskOptions()
 	option.Hints = hints
 	return odps.ExecSQlWithOption(sql, option)
 }
@@ -145,16 +145,16 @@ func (odps *Odps) ExecSQl(sql string, hints ...map[string]string) (*Instance, er
 	return odps.ExecSQlWithHints(sql, hints[0])
 }
 
-// ExecSQlWithOption Create a SQLTask with options.SQLTaskOption
-func (odps *Odps) ExecSQlWithOption(sql string, option *options.SQLTaskOption) (*Instance, error) {
+// ExecSQlWithOption Create a SQLTask with options.SQLTaskOptions
+func (odps *Odps) ExecSQlWithOption(sql string, option *options.SQLTaskOptions) (*Instance, error) {
 	if option.Hints == nil {
 		option.Hints = make(map[string]string)
 	}
 	if odps.currentSchema != "" && option.DefaultSchema != "" {
 		option.DefaultSchema = odps.currentSchema
 	}
-	task := NewSQLTaskWithOption(sql, option)
+	task := NewSQLTaskWithOptions(sql, option)
 	instances := NewInstances(odps, odps.defaultProject)
-	i, err := instances.CreateTaskWithOption(&task, option.InstanceOption)
+	i, err := instances.CreateTask(odps.defaultProject, &task, option.InstanceOption)
 	return i, errors.WithStack(err)
 }

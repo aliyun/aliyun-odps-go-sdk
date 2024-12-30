@@ -32,10 +32,10 @@ func main() {
 	}
 	println(ins1.Id())
 
-	instanceOption := options.NewCreateInstanceOption()
+	instanceOption := options.NewCreateInstanceOptions()
 	instanceOption.UniqueIdentifyID = "123456"
 
-	option := options.NewSQLTaskOption()
+	option := options.NewSQLTaskOptions()
 	option.InstanceOption = instanceOption
 
 	ins2, err := odpsIns.ExecSQlWithOption("select 1;", option)

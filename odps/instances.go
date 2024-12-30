@@ -43,7 +43,7 @@ type Instances struct {
 func NewInstances(odpsIns *Odps, projectName ...string) *Instances {
 	var _projectName string
 
-	if projectName == nil {
+	if len(projectName) == 0 {
 		_projectName = odpsIns.DefaultProjectName()
 	} else {
 		_projectName = projectName[0]
@@ -55,28 +55,26 @@ func NewInstances(odpsIns *Odps, projectName ...string) *Instances {
 	}
 }
 
-func (instances *Instances) CreateTask(projectName string, task Task) (*Instance, error) {
-	i, err := instances.CreateTaskWithPriority(projectName, task, DefaultJobPriority)
-	return i, errors.WithStack(err)
-}
-
+// CreateTaskWithPriority Create a Task (maybe SQLTask) with specified priority
 func (instances *Instances) CreateTaskWithPriority(projectName string, task Task, jobPriority int) (*Instance, error) {
-	instanceOptions := options.NewCreateInstanceOption()
-	instanceOptions.ProjectName = projectName
+	instanceOptions := options.NewCreateInstanceOptions()
 	instanceOptions.Priority = jobPriority
-	return instances.CreateTaskWithOption(task, instanceOptions)
+	return instances.CreateTask(projectName, task, instanceOptions)
 }
 
-// CreateTaskWithOption Create a Task (maybe SQLTask) with options.CreateInstanceOption
-func (instances *Instances) CreateTaskWithOption(task Task, instanceOption *options.CreateInstanceOption) (*Instance, error) {
-	if instanceOption == nil {
-		instanceOption = options.NewCreateInstanceOption()
+// CreateTask Create a Task (maybe SQLTask) with options.CreateInstanceOptions
+func (instances *Instances) CreateTask(projectName string, task Task, createInstanceOptions ...*options.CreateInstanceOptions) (*Instance, error) {
+	var instanceOptions *options.CreateInstanceOptions
+	if len(createInstanceOptions) != 0 {
+		instanceOptions = createInstanceOptions[0]
 	}
-	projectName := instanceOption.ProjectName
+	if instanceOptions == nil {
+		instanceOptions = options.NewCreateInstanceOptions()
+	}
 	if projectName == "" {
 		projectName = instances.projectName
 	}
-	jobPriority := instanceOption.Priority
+	jobPriority := instanceOptions.Priority
 	if jobPriority == 0 {
 		jobPriority = DefaultJobPriority
 	}
@@ -103,9 +101,9 @@ func (instances *Instances) CreateTaskWithOption(task Task, instanceOption *opti
 
 			Tasks Task `xml:"Tasks>Task"`
 		}{
-			Name:             instanceOption.JobName,
+			Name:             instanceOptions.JobName,
 			Priority:         jobPriority,
-			UniqueIdentifyID: instanceOption.UniqueIdentifyID,
+			UniqueIdentifyID: instanceOptions.UniqueIdentifyID,
 			Tasks:            task,
 		},
 	}
@@ -122,7 +120,7 @@ func (instances *Instances) CreateTaskWithOption(task Task, instanceOption *opti
 	resource := rb.Instances()
 
 	queryArg := make(url.Values)
-	if instanceOption.TryWait {
+	if instanceOptions.TryWait {
 		queryArg.Set("tryWait", "")
 	}
 	var instanceId string

@@ -1,34 +1,33 @@
 package options
 
-// CreateInstanceOption holds the configuration for creating an instance.
-type CreateInstanceOption struct {
-	ProjectName      string // Project name
+// CreateInstanceOptions holds the configuration for creating an instance.
+type CreateInstanceOptions struct {
 	Priority         int    // Pointer to allow nil value
 	JobName          string // Job name
 	TryWait          bool   // Try wait flag
 	UniqueIdentifyID string // Unique identification ID
 }
 
-// NewCreateInstanceOption initializes a new instance of CreateInstanceOption.
-func NewCreateInstanceOption() *CreateInstanceOption {
-	return &CreateInstanceOption{
+// NewCreateInstanceOptions initializes a new instance of CreateInstanceOptions.
+func NewCreateInstanceOptions() *CreateInstanceOptions {
+	return &CreateInstanceOptions{
 		Priority: 9,
 	}
 }
 
-// SQLTaskOption holds the configuration for creating a SQLTask.
-type SQLTaskOption struct {
+// SQLTaskOptions holds the configuration for creating a SQLTask.
+type SQLTaskOptions struct {
 	TaskName       string
-	InstanceOption *CreateInstanceOption // Pointer to handle nil
+	InstanceOption *CreateInstanceOptions // Pointer to handle nil
 	Hints          map[string]string
 	Aliases        map[string]string
 	Type           string
 	DefaultSchema  string // Hint of "odps.default.schema" has a higher priority than this one
 }
 
-// NewSQLTaskOption initializes a new instance of SQLTaskOption with default values.
-func NewSQLTaskOption() *SQLTaskOption {
-	return &SQLTaskOption{
+// NewSQLTaskOptions initializes a new instance of SQLTaskOptions with default values.
+func NewSQLTaskOptions() *SQLTaskOptions {
+	return &SQLTaskOptions{
 		TaskName: "AnonymousSQLTask",
 		Type:     "sql",
 		Hints:    make(map[string]string),

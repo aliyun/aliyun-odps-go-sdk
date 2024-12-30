@@ -54,8 +54,8 @@ func NewSqlTask(name string, query string, hints map[string]string) SQLTask {
 	return sqlTask
 }
 
-// NewSQLTaskWithOption Create a SQLTask with options.SQLTaskOption
-func NewSQLTaskWithOption(query string, option *options.SQLTaskOption) SQLTask {
+// NewSQLTaskWithOptions Create a SQLTask with options.SQLTaskOptions
+func NewSQLTaskWithOptions(query string, option *options.SQLTaskOptions) SQLTask {
 	if option == nil {
 		return NewAnonymousSQLTask(query, nil)
 	}
