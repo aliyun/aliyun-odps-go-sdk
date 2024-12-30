@@ -52,6 +52,7 @@ func NewHttpNotOk(res *http.Response) HttpError {
 	var body []byte
 
 	if res.Body != nil {
+		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
 		body, _ = ioutil.ReadAll(res.Body)
 		_ = res.Body.Close()
 	}

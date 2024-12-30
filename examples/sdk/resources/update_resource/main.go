@@ -8,7 +8,7 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 )
 
-func main(){
+func main() {
 	// Specify the ini file path
 	configPath := "./config.ini"
 	conf, err := odps.NewConfigFromIni(configPath)
@@ -23,8 +23,8 @@ func main(){
 	odpsIns.SetCurrentSchemaName("default")
 	resources := odps.NewResources(odpsIns)
 
-	file,err:=os.Open("xxxx")
-	if err!=nil{
+	file, err := os.Open("xxxx")
+	if err != nil {
 		log.Fatal(err)
 	}
 	defer file.Close()
@@ -32,8 +32,8 @@ func main(){
 	fr := odps.NewFileResource("bank_data")
 	fr.SetReader(file)
 
-	err=resources.UpdateFileResource("","",fr)
-	if err!=nil{
+	err = resources.UpdateFileResource("", "", fr)
+	if err != nil {
 		log.Fatal(err)
 	}
 }

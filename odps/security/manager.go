@@ -129,6 +129,7 @@ func (sm *Manager) getPolicy(resource, policyType string) ([]byte, error) {
 
 	err := client.GetWithParseFunc(resource, queryArgs, func(res *http.Response) error {
 		var err error
+		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
 		body, err = ioutil.ReadAll(res.Body)
 		return errors.WithStack(err)
 	})

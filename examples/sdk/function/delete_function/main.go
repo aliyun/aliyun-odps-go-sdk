@@ -8,7 +8,7 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 )
 
-func main(){
+func main() {
 	// Specify the ini file path
 	configPath := "./config.ini"
 	conf, err := odps.NewConfigFromIni(configPath)
@@ -22,13 +22,12 @@ func main(){
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
 	odpsIns.SetCurrentSchemaName("default")
 
-
 	functions := odps.NewFunctions(odpsIns)
-	function,_:=functions.Get("test_sleep2")
-	
+	function, _ := functions.Get("test_sleep2")
+
 	fmt.Println(function.Exist())
-	err= functions.Delete("test_sleep2")
-	if err!=nil{
+	err = functions.Delete("test_sleep2")
+	if err != nil {
 		log.Fatalf("%+v", err)
 	}
 	fmt.Println(function.Exist())

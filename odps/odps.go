@@ -21,6 +21,8 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/options"
+
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
@@ -130,11 +132,9 @@ func (odps *Odps) ExecSQlWithHints(sql string, hints map[string]string) (*Instan
 	if odps.defaultProject == "" {
 		return nil, errors.New("default project has not been set for odps")
 	}
-
-	task := NewAnonymousSQLTask(sql, hints)
-	Instances := NewInstances(odps, odps.defaultProject)
-	i, err := Instances.CreateTask(odps.defaultProject, &task)
-	return i, errors.WithStack(err)
+	option := options.NewSQLTaskOptions()
+	option.Hints = hints
+	return odps.ExecSQlWithOption(sql, option)
 }
 
 func (odps *Odps) ExecSQl(sql string, hints ...map[string]string) (*Instance, error) {
@@ -143,4 +143,18 @@ func (odps *Odps) ExecSQl(sql string, hints ...map[string]string) (*Instance, er
 	}
 
 	return odps.ExecSQlWithHints(sql, hints[0])
+}
+
+// ExecSQlWithOption Create a SQLTask with options.SQLTaskOptions
+func (odps *Odps) ExecSQlWithOption(sql string, option *options.SQLTaskOptions) (*Instance, error) {
+	if option.Hints == nil {
+		option.Hints = make(map[string]string)
+	}
+	if odps.currentSchema != "" && option.DefaultSchema != "" {
+		option.DefaultSchema = odps.currentSchema
+	}
+	task := NewSQLTaskWithOptions(sql, option)
+	instances := NewInstances(odps, odps.defaultProject)
+	i, err := instances.CreateTask(odps.defaultProject, &task, option.InstanceOption)
+	return i, errors.WithStack(err)
 }
