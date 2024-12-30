@@ -2,6 +2,7 @@ package odps
 
 import (
 	"encoding/xml"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -57,6 +58,39 @@ func (s *Schema) Exists() (bool, error) {
 	}
 
 	return true, nil
+}
+
+// ChangeComment Modify the comment content of the schema.
+func (s *Schema) ChangeComment(newComment string) error {
+	return s.executeSQL(s.generateChangeCommentSQL(newComment))
+}
+
+func (s *Schema) generateChangeCommentSQL(newComment string) string {
+	return fmt.Sprintf("alter schema %s.%s set comment %s;", common.QuoteRef(s.ProjectName()), common.QuoteRef(s.Name()), common.QuoteString(newComment))
+}
+
+// ChangeOwner Only the Project Owner or users with the Super_Administrator role can execute commands that modify the schema Owner.
+func (s *Schema) ChangeOwner(newOwner string) error {
+	return s.executeSQL(s.generateChangeOwnerSQL(newOwner))
+}
+
+func (s *Schema) generateChangeOwnerSQL(newOwner string) string {
+	return fmt.Sprintf("alter schema %s.%s changeowner to %s;", common.QuoteRef(s.ProjectName()), common.QuoteRef(s.Name()), common.QuoteString(newOwner))
+}
+
+func (s *Schema) executeSQL(sql string) error {
+	hints := make(map[string]string)
+	hints["odps.namespace.schema"] = "true"
+
+	ins, err := s.odpsIns.ExecSQlWithHints(sql, hints)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	err = ins.WaitForSuccess()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	return nil
 }
 
 // Name return the schema name
