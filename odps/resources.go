@@ -204,6 +204,7 @@ func (r *Resources) createTempPartFile(projectName, schemaName string, fr FileRe
 		return errors.WithStack(err)
 	}
 	if resp.StatusCode != 201 {
+		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
 		data, _ := ioutil.ReadAll(resp.Body)
 		return errors.WithStack(errors.New(string(data)))
 	}
@@ -261,6 +262,7 @@ func (r *Resources) mergeTempPartFile(projectName, schemaName string, fr FileRes
 		return errors.WithStack(err)
 	}
 	if resp.StatusCode != 201 {
+		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
 		data, _ := ioutil.ReadAll(resp.Body)
 		return errors.WithStack(errors.New(string(data)))
 	}
@@ -339,6 +341,7 @@ func (r *Resources) CreateTableResource(projectName, schemaName string, tr Table
 		return errors.WithStack(err)
 	}
 	if resp.StatusCode != 201 {
+		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
 		data, _ := ioutil.ReadAll(resp.Body)
 		return errors.WithStack(errors.New(string(data)))
 	}

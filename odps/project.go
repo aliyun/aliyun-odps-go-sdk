@@ -338,6 +338,7 @@ func (p *Project) GetTunnelEndpoint(quotaNames ...string) (string, error) {
 	schema := req.URL.Scheme
 	var tunnelEndpoint string
 	err = client.DoWithParseFunc(req, func(res *http.Response) error {
+		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
 		b, err := ioutil.ReadAll(res.Body)
 		if err != nil {
 			return errors.WithStack(err)

@@ -187,6 +187,7 @@ func (instance *Instance) GetTaskDetail(taskName string) ([]byte, error) {
 
 	err := client.GetWithParseFunc(instance.resourceUrl, queryArgs, func(res *http.Response) error {
 		var err error
+		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
 		body, err = ioutil.ReadAll(res.Body)
 		return errors.WithStack(err)
 	})
@@ -235,6 +236,7 @@ func (instance *Instance) GetTaskQuotaJson(taskName string) (string, error) {
 
 	err := client.GetWithParseFunc(instance.resourceUrl, queryArgs, func(res *http.Response) error {
 		var err error
+		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
 		body, err = ioutil.ReadAll(res.Body)
 		return errors.WithStack(err)
 	})
@@ -255,6 +257,7 @@ func (instance *Instance) GetCachedInfo() (string, error) {
 
 	err := client.GetWithParseFunc(instance.resourceUrl, queryArgs, func(res *http.Response) error {
 		var err error
+		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
 		body, err = ioutil.ReadAll(res.Body)
 		return errors.WithStack(err)
 	})
