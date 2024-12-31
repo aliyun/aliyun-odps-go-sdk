@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
@@ -126,38 +127,60 @@ func (instances *Instances) CreateTask(projectName string, task Task, createInst
 	var instanceId string
 	var isSync bool
 
-	err := client.DoXmlWithParseFunc(common.HttpMethod.PostMethod, resource, queryArg, nil, &instanceCreationModel, func(res *http.Response) error {
-		location := res.Header.Get(common.HttpHeaderLocation)
+	startTime := time.Now()
+	maxRetryDuration := 180 * time.Second
 
-		if location == "" {
-			return errors.New("invalid response, Location header required")
+	// 循环，直到达到最大重试时间
+	for {
+		err := client.DoXmlWithParseFunc(common.HttpMethod.PostMethod, resource, queryArg, nil, &instanceCreationModel, func(res *http.Response) error {
+			location := res.Header.Get(common.HttpHeaderLocation)
+
+			if location == "" {
+				return errors.New("invalid response, Location header required")
+			}
+
+			splitAt := strings.LastIndex(location, "/")
+			if splitAt < 0 || splitAt == len(location)-1 {
+				return errors.New("invalid response, value of Location header is invalid")
+			}
+
+			instanceId = location[splitAt+1:]
+			isSync = res.StatusCode == 201
+
+			if res.StatusCode == 409 {
+				return restclient.NewHttpNotOk(res)
+			}
+			if isSync {
+				return nil
+			}
+			decoder := xml.NewDecoder(res.Body)
+			return errors.WithStack(decoder.Decode(&resModel))
+		})
+		if err != nil {
+			if time.Since(startTime) >= maxRetryDuration {
+				return nil, err
+			}
+			var httpErr restclient.HttpError
+			if errors.As(err, &httpErr) && httpErr.Response.StatusCode == 409 {
+				retryAfter := httpErr.Response.Header.Get("Retry-After")
+				if retryAfter != "" {
+					retryAfterInt, ioErr := strconv.Atoi(retryAfter)
+					if ioErr != nil {
+						retryAfterInt = 5
+					}
+					time.Sleep(time.Second * time.Duration(retryAfterInt))
+				}
+				continue
+			}
+			return nil, err
 		}
+		instance := NewInstance(instances.odpsIns, projectName, instanceId)
+		instance.taskNameCommitted = task.GetName()
+		instance.taskResults = resModel.Tasks
+		instance.isSync = isSync
 
-		splitAt := strings.LastIndex(location, "/")
-		if splitAt < 0 || splitAt == len(location)-1 {
-			return errors.New("invalid response, value of Location header is invalid")
-		}
-
-		instanceId = location[splitAt+1:]
-		isSync = res.StatusCode == 201
-
-		if isSync {
-			return nil
-		}
-
-		decoder := xml.NewDecoder(res.Body)
-		return errors.WithStack(decoder.Decode(&resModel))
-	})
-	if err != nil {
-		return nil, errors.WithStack(err)
+		return instance, nil
 	}
-
-	instance := NewInstance(instances.odpsIns, projectName, instanceId)
-	instance.taskNameCommitted = task.GetName()
-	instance.taskResults = resModel.Tasks
-	instance.isSync = isSync
-
-	return instance, nil
 }
 
 // List Get all instances, the filters can be given with InstanceFilter.Status, InstanceFilter.OnlyOwner,

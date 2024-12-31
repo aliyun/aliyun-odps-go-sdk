@@ -32,7 +32,7 @@ func TestTable_CreateNormal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-	expect := "create table if not exists project.`schema`.`newTable` (\n    `col1` BIGINT comment 'I\\'m col1',\n    `col2` BIGINT comment 'I\\'m col2'\n)\ncomment 'This\\'s table comment'\npartitioned by (`p1` STRING comment 'I\\'m p1')\nTBLPROPERTIES ('transactional'='false')\nlifecycle 10;"
+	expect := "create table if not exists project.`schema`.`newTable` (\n    `col1` BIGINT  comment 'I\\'m col1',\n    `col2` BIGINT  comment 'I\\'m col2'\n)\ncomment 'This\\'s table comment'\npartitioned by (`p1` STRING comment 'I\\'m p1')\nTBLPROPERTIES ('transactional'='false')\nlifecycle 10;"
 	if sqlString != expect {
 		t.Errorf("Expected SQL:\n %s, but got:\n %s", expect, sqlString)
 	}
