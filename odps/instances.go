@@ -25,9 +25,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/options"
@@ -169,6 +170,8 @@ func (instances *Instances) CreateTask(projectName string, task Task, createInst
 						retryAfterInt = 5
 					}
 					time.Sleep(time.Second * time.Duration(retryAfterInt))
+				} else {
+					time.Sleep(time.Second * 5)
 				}
 				continue
 			}
