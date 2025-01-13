@@ -4,8 +4,11 @@ import (
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/base64"
+	"fmt"
 	"net/url"
+	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -120,5 +123,41 @@ func GetSignature(strToSign *string, accessKeyId *string, accessKeySecret *strin
 	h.Write([]byte(*strToSign))
 	signature := base64.StdEncoding.EncodeToString(h.Sum(nil))
 	res := "ODPS " + *accessKeyId + ":" + signature
+	return &res
+}
+
+// ToString 转换为字符串，能够兼容指针类型与非指针类型
+func ToString(obj interface{}) *string {
+	if obj == nil {
+		return nil
+	}
+	// 使用 reflect 获取值
+	v := reflect.ValueOf(obj)
+
+	// 如果是指针，获取其指向的值
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return nil
+		}
+		// 获取指针指向的值
+		v = v.Elem()
+	}
+
+	var res string
+	// 根据类型转换为字符串
+	switch v.Kind() {
+	case reflect.String:
+		res = v.String()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		res = strconv.FormatInt(v.Int(), 10)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		res = strconv.FormatUint(v.Uint(), 10)
+	case reflect.Float32, reflect.Float64:
+		res = strconv.FormatFloat(v.Float(), 'f', -1, 64)
+	case reflect.Bool:
+		res = strconv.FormatBool(v.Bool())
+	default:
+		res = fmt.Sprintf("%v", obj)
+	}
 	return &res
 }
