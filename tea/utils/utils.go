@@ -20,14 +20,15 @@ const (
 var GMT, _ = time.LoadLocation("GMT")
 
 // GetApiTimestamp 获取格式为 'Fri, 13 Dec 2024 02:57:00 GMT' 的时间戳
-func GetApiTimestamp() (result string) {
-	return time.Now().In(GMT).Format(time.RFC1123)
+func GetApiTimestamp() (result *string) {
+	timestamp := time.Now().In(GMT).Format(time.RFC1123)
+	return &timestamp
 }
 
 // BuildCanonicalString 构建规范字符串
-func BuildCanonicalString(method string, resource string, params map[string]string, headers map[string]string) (result string) {
+func BuildCanonicalString(method *string, resource *string, params map[string]*string, headers map[string]*string) (result *string) {
 	var builder strings.Builder
-	builder.WriteString(method + "\n")
+	builder.WriteString(*method + "\n")
 
 	headersToSign := make(map[string]string)
 
@@ -36,7 +37,11 @@ func BuildCanonicalString(method string, resource string, params map[string]stri
 		if key != "" {
 			lowerKey := strings.ToLower(key)
 			if lowerKey == strings.ToLower(ContentMD5) || lowerKey == strings.ToLower(ContentType) || lowerKey == strings.ToLower(Date) || strings.HasPrefix(lowerKey, PREFIX) {
-				headersToSign[lowerKey] = value
+				if value != nil {
+					headersToSign[lowerKey] = *value
+				} else {
+					headersToSign[lowerKey] = ""
+				}
 			}
 		}
 	}
@@ -52,7 +57,11 @@ func BuildCanonicalString(method string, resource string, params map[string]stri
 	// 添加 params
 	for key, value := range params {
 		if strings.HasPrefix(key, PREFIX) {
-			headersToSign[key] = value
+			if value != nil {
+				headersToSign[key] = *value
+			} else {
+				headersToSign[key] = ""
+			}
 		}
 	}
 
@@ -64,19 +73,24 @@ func BuildCanonicalString(method string, resource string, params map[string]stri
 	sort.Strings(keys)
 
 	for _, key := range keys {
-		builder.WriteString(key + ":" + headersToSign[key] + "\n")
+		if strings.HasPrefix(key, PREFIX) {
+			builder.WriteString(key + ":" + headersToSign[key])
+		} else {
+			builder.WriteString(headersToSign[key])
+		}
+		builder.WriteString("\n")
 	}
 
 	// 添加资源部分
 	builder.WriteString(buildCanonicalResource(resource, params))
-
-	return builder.String()
+	res := builder.String()
+	return &res
 }
 
 // buildCanonicalResource 构建规范资源字符串
-func buildCanonicalResource(resource string, params map[string]string) string {
+func buildCanonicalResource(resource *string, params map[string]*string) string {
 	var builder strings.Builder
-	builder.WriteString(resource)
+	builder.WriteString(*resource)
 
 	if params != nil && len(params) > 0 {
 		var keys []string
@@ -91,8 +105,8 @@ func buildCanonicalResource(resource string, params map[string]string) string {
 				builder.WriteString("&")
 			}
 			builder.WriteString(url.QueryEscape(key))
-			if value, exists := params[key]; exists && value != "" {
-				builder.WriteString("=" + url.QueryEscape(value))
+			if value, exists := params[key]; exists && *value != "" {
+				builder.WriteString("=" + url.QueryEscape(*value))
 			}
 		}
 	}
@@ -100,10 +114,11 @@ func buildCanonicalResource(resource string, params map[string]string) string {
 }
 
 // GetSignature 获取签名
-func GetSignature(strToSign string, accessKeyId string, accessKeySecret string) (result string) {
-	secretKey := []byte(accessKeySecret)
+func GetSignature(strToSign *string, accessKeyId *string, accessKeySecret *string) (result *string) {
+	secretKey := []byte(*accessKeySecret)
 	h := hmac.New(sha1.New, secretKey)
-	h.Write([]byte(strToSign))
+	h.Write([]byte(*strToSign))
 	signature := base64.StdEncoding.EncodeToString(h.Sum(nil))
-	return "ODPS " + accessKeyId + ":" + signature
+	res := "ODPS " + *accessKeyId + ":" + signature
+	return &res
 }
