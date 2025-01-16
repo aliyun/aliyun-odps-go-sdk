@@ -89,7 +89,7 @@ func (r *RecordProtocWriter) write(record data.Record) error {
 	}
 
 	for colIndex, value := range record {
-		if value == nil {
+		if value == nil || value.Type() == datatype.NullType {
 			continue
 		}
 

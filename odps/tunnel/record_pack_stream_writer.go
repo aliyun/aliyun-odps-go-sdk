@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"time"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/pkg/errors"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
@@ -69,7 +70,7 @@ func checkIfRecordSchemaMatchSessionSchema(record *data.Record, schema []tablesc
 	}
 	for index, recordData := range *record {
 		colType := schema[index].Type.ID()
-		if recordData != nil && recordData.Type().ID() != colType {
+		if recordData != nil && recordData.Type() != datatype.NullType && recordData.Type().ID() != colType {
 			return errors.Errorf("Record schema not match session schema, index: %d, record type: %s, session schema type: %s",
 				index, recordData.Type().Name(), schema[index].Type.Name())
 		}
