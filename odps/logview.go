@@ -29,7 +29,8 @@ import (
 )
 
 const (
-	HostDefault = "https://logview.alibaba-inc.com"
+	HostDefault   = "https://logview.alibaba-inc.com"
+	HostDefaultV2 = "https://maxcompute.console.aliyun.com"
 )
 
 type LogView struct {
@@ -98,6 +99,17 @@ func (lv *LogView) GenerateLogView(instance *Instance, hours int) (string, error
 
 	logViewUrl.RawQuery = queryArgs.Encode()
 	return logViewUrl.String(), nil
+}
+
+func (lv *LogView) GenerateLogViewV2(instance *Instance, regionID string) (string, error) {
+	client := lv.odpsIns.RestClient()
+	return fmt.Sprintf("%s/%s/job-insights?h=%s&p=%s&i=%s",
+		HostDefaultV2,
+		regionID,
+		client.Endpoint(),
+		instance.ProjectName(),
+		instance.Id(),
+	), nil
 }
 
 func (lv *LogView) generateInstanceToken(instance *Instance, hours int) (string, error) {
