@@ -123,7 +123,7 @@ func TestArrowStreamWriter_WriteBasicType(t *testing.T) {
 		case "c9":
 			builder := fieldBuilder.(*array.TimestampBuilder)
 			t := now
-			builder.Append(arrow.Timestamp(t.UnixMilli()))
+			builder.Append(arrow.Timestamp(t.UnixNano() / 1e6))
 		case "c10":
 			builder := fieldBuilder.(*array.Decimal128Builder)
 			// 0.00000000000000001
