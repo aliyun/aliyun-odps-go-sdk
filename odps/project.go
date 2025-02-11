@@ -146,19 +146,23 @@ func (p *Project) _loadFromOdps(params optionalParams) (*projectModel, error) {
 		header := res.Header
 		model.Owner = header.Get(common.HttpHeaderOdpsOwner)
 
-		creationTime, err := common.ParseRFC1123Date(header.Get(common.HttpHeaderOdpsCreationTime))
-		if err != nil {
-			log.Printf("/project get creation time error, %v", err)
+		createTimeStr := header.Get(common.HttpHeaderOdpsCreationTime)
+		if createTimeStr != "" {
+			creationTime, err := common.ParseRFC1123Date(createTimeStr)
+			if err != nil {
+				log.Printf("/project get creation time error, %v", err)
+			}
+			model.CreationTime = common.GMTTime(creationTime)
 		}
 
-		lastModifiedTime, _ := common.ParseRFC1123Date(header.Get(common.HttpHeaderLastModified))
-		if err != nil {
-			log.Printf("/project get last modified time error, %v", err)
+		lastModifiedTimeStr := header.Get(common.HttpHeaderLastModified)
+		if lastModifiedTimeStr != "" {
+			lastModifiedTime, err := common.ParseRFC1123Date(lastModifiedTimeStr)
+			if err != nil {
+				log.Printf("/project get last modified time error, %v", err)
+			}
+			model.LastModifiedTime = common.GMTTime(lastModifiedTime)
 		}
-
-		model.CreationTime = common.GMTTime(creationTime)
-		model.LastModifiedTime = common.GMTTime(lastModifiedTime)
-
 		return nil
 	}
 
