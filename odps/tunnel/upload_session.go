@@ -349,7 +349,7 @@ func (u *UploadSession) newInitiationRequest() (*http.Request, error) {
 	}
 
 	if u.Overwrite {
-		queryArgs.Set("override", "true")
+		queryArgs.Set("overwrite", "true")
 	}
 
 	if u.QuotaName != "" {
