@@ -59,6 +59,8 @@ func TestUploadSession_Overwrite(t *testing.T) {
 }
 
 func TestUploadSession_CreatePartition(t *testing.T) {
+	t.Skip("跳过此测试：服务端尚未发布该功能")
+
 	tableName := "upload_create_partition_test"
 	tableSchema := tableschema.NewSchemaBuilder().Name(tableName).Column(
 		tableschema.Column{Name: "c1", Type: datatype.BigIntType},
