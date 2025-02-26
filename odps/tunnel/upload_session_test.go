@@ -57,3 +57,47 @@ func TestUploadSession_Overwrite(t *testing.T) {
 		t.Fatal("Expected 1, got " + result[0].Content())
 	}
 }
+
+func TestUploadSession_CreatePartition(t *testing.T) {
+	tableName := "upload_create_partition_test"
+	tableSchema := tableschema.NewSchemaBuilder().Name(tableName).Column(
+		tableschema.Column{Name: "c1", Type: datatype.BigIntType},
+	).Column(tableschema.Column{Name: "c2", Type: datatype.StringType}).PartitionColumn(tableschema.Column{Name: "p1", Type: datatype.StringType}).Build()
+
+	err := odpsIns.Tables().Create(tableSchema, true, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	session, err := tunnelIns.CreateUploadSession(ProjectName, tableName, tunnel.SessionCfg.WithPartitionKey("p1='hello'"), tunnel.SessionCfg.WithCreatePartition())
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer, err := session.OpenRecordWriter(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := data.NewRecord(2)
+	record[0] = data.BigInt(1)
+	record[1] = data.String("1")
+
+	err = writer.Write(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = writer.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = session.Commit([]int{0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	partitions, err := odpsIns.Table(tableName).GetPartitions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(partitions) != 1 {
+		t.Fatal("Expected 1, got " + string(rune(len(partitions))))
+	}
+}

@@ -31,7 +31,7 @@ type sessionConfig struct {
 	Async bool
 	// SlotNum for stream upload session only
 	SlotNum int
-	// CreatePartition for stream upload session only
+	// CreatePartition for upload session (batch and stream) only
 	CreatePartition bool
 	// Columns for stream upload session only
 	Columns       []string

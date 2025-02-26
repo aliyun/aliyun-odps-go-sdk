@@ -72,9 +72,10 @@ type UploadSession struct {
 	Id          string
 	ProjectName string
 	// TODO use schema to get the resource url of a table
-	SchemaName string
-	TableName  string
-	QuotaName  string
+	SchemaName      string
+	TableName       string
+	QuotaName       string
+	CreatePartition bool
 	// The partition keys used by a session can not contain "'", for example, "region=hangzhou" is a
 	// positive case, and "region='hangzhou'" is a negative case. But the partition keys like "region='hangzhou'" are more
 	// common, to avoid the users use the error format, the partitionKey of UploadSession is private, it can be set when
@@ -120,14 +121,15 @@ func CreateUploadSession(
 	cfg := newSessionConfig(opts...)
 
 	session := UploadSession{
-		ProjectName:  projectName,
-		SchemaName:   cfg.SchemaName,
-		TableName:    tableName,
-		QuotaName:    quotaName,
-		partitionKey: cfg.PartitionKey,
-		RestClient:   restClient,
-		Overwrite:    cfg.Overwrite,
-		Compressor:   cfg.Compressor,
+		ProjectName:     projectName,
+		SchemaName:      cfg.SchemaName,
+		TableName:       tableName,
+		QuotaName:       quotaName,
+		partitionKey:    cfg.PartitionKey,
+		RestClient:      restClient,
+		Overwrite:       cfg.Overwrite,
+		Compressor:      cfg.Compressor,
+		CreatePartition: cfg.CreatePartition,
 	}
 
 	req, err := session.newInitiationRequest()
@@ -346,6 +348,10 @@ func (u *UploadSession) newInitiationRequest() (*http.Request, error) {
 
 	if u.partitionKey != "" {
 		queryArgs.Set("partition", u.partitionKey)
+	}
+
+	if u.CreatePartition {
+		queryArgs.Set("create_partition", "true")
 	}
 
 	if u.Overwrite {
