@@ -40,3 +40,7 @@ linters-settings:
       - "-SA1019"  # Enable using a deprecated function, variable, constant or field. For compatibility reasons.
   goimports:
     local-prefixes: github.com/aliyun/aliyun-odps-go-sdk
+  revive:
+    rules:
+      - name: var-naming
+        disabled: true

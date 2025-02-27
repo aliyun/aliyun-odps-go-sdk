@@ -128,6 +128,10 @@ func (odps *Odps) LogView() *LogView {
 	return &LogView{odpsIns: odps}
 }
 
+func (odps *Odps) Tenant() *Tenant {
+	return NewTenant(odps)
+}
+
 func (odps *Odps) ExecSQlWithHints(sql string, hints map[string]string) (*Instance, error) {
 	if odps.defaultProject == "" {
 		return nil, errors.New("default project has not been set for odps")
