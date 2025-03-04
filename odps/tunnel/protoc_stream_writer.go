@@ -41,21 +41,21 @@ func (r *ProtocStreamWriter) WriteTag(num protowire.Number, typ protowire.Type) 
 func (r *ProtocStreamWriter) WriteVarint(v uint64) error {
 	b := make([]byte, 0, 1)
 	b = protowire.AppendVarint(b, v)
-	_, err := io.Copy(r.inner, bytes.NewReader(b))
+	_, err := r.inner.Write(b)
 	return err
 }
 
 func (r *ProtocStreamWriter) WriteFixed32(val uint32) error {
 	b := make([]byte, 0, 4)
 	b = protowire.AppendFixed32(b, val)
-	_, err := io.Copy(r.inner, bytes.NewReader(b))
+	_, err := r.inner.Write(b)
 	return err
 }
 
 func (r *ProtocStreamWriter) WriteFixed64(val uint64) error {
 	b := make([]byte, 0, 8)
 	b = protowire.AppendFixed64(b, val)
-	_, err := io.Copy(r.inner, bytes.NewReader(b))
+	_, err := r.inner.Write(b)
 	return err
 }
 
@@ -65,7 +65,7 @@ func (r *ProtocStreamWriter) WriteBytes(b []byte) error {
 		return err
 	}
 
-	_, err = io.Copy(r.inner, bytes.NewReader(b))
+	_, err := r.inner.Write(b)
 	return err
 }
 
