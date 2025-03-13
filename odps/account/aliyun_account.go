@@ -80,13 +80,23 @@ func (account *AliyunAccount) GetType() Provider {
 }
 
 func (account *AliyunAccount) SignRequest(req *http.Request, endpoint string) error {
+	canonicalString := account.buildCanonicalString(req, endpoint)
+	// Generate signature
+	signature := account.generateSignature(canonicalString.Bytes())
+	// Set authorization header
+	req.Header.Set(common.HttpHeaderAuthorization, signature)
+	return nil
+}
+
+// buildCanonicalString constructs canonical string for ODPS signature
+func (account *AliyunAccount) buildCanonicalString(req *http.Request, endpoint string) bytes.Buffer {
 	var msg bytes.Buffer
 
-	// write verb
+	// Write HTTP method
 	msg.WriteString(req.Method)
 	msg.WriteByte('\n')
 
-	// write common header
+	// Write standard headers
 	msg.WriteString(req.Header.Get(common.HttpHeaderContentMD5))
 	msg.WriteByte('\n')
 	msg.WriteString(req.Header.Get(common.HttpHeaderContentType))
@@ -94,72 +104,82 @@ func (account *AliyunAccount) SignRequest(req *http.Request, endpoint string) er
 	msg.WriteString(req.Header.Get(common.HttpHeaderDate))
 	msg.WriteByte('\n')
 
-	// build canonical header
+	// Write canonical headers
+	msg.WriteString(account.buildCanonicalHeaders(req.Header))
+
+	// Write canonical resource
+	msg.WriteString(account.buildCanonicalResource(req, endpoint))
+	return msg
+}
+
+// buildCanonicalHeaders constructs canonical headers for ODPS signature
+func (account *AliyunAccount) buildCanonicalHeaders(headers http.Header) string {
+	var headerBuf bytes.Buffer
 	var canonicalHeaderKeys []string
 
-	for key := range req.Header {
-		if strings.HasPrefix(strings.ToLower(key), common.HttpHeaderOdpsPrefix) {
-			canonicalHeaderKeys = append(canonicalHeaderKeys, key)
+	// Collect ODPS-specific headers
+	for key := range headers {
+		lowerKey := strings.ToLower(key)
+		if strings.HasPrefix(lowerKey, common.HttpHeaderOdpsPrefix) {
+			canonicalHeaderKeys = append(canonicalHeaderKeys, lowerKey)
 		}
 	}
-
+	// Sort and write headers
 	sort.Strings(canonicalHeaderKeys)
-
 	for _, key := range canonicalHeaderKeys {
-		msg.WriteString(strings.ToLower(key))
-		msg.WriteByte(':')
-		msg.WriteString(strings.Join(req.Header[key], ","))
-		msg.WriteByte('\n')
+		headerBuf.WriteString(key)
+		headerBuf.WriteByte(':')
+		headerBuf.WriteString(strings.Join(headers.Values(key), ","))
+		headerBuf.WriteByte('\n')
 	}
+	return headerBuf.String()
+}
 
-	// build canonical resource
-	var canonicalResource bytes.Buffer
-	endpointSeg, _ := url.Parse(endpoint)
-	basePath := endpointSeg.Path
+// buildCanonicalResource constructs canonical resource path for ODPS signature
+func (account *AliyunAccount) buildCanonicalResource(req *http.Request, endpoint string) string {
+	var resBuf bytes.Buffer
+	parsedEndpoint, _ := url.Parse(endpoint)
+	basePath := parsedEndpoint.Path
+
+	// Handle path normalization
 	if strings.HasPrefix(req.URL.Path, basePath) {
-		canonicalResource.WriteString(req.URL.Path[len(endpointSeg.Path):])
+		resBuf.WriteString(req.URL.Path[len(basePath):])
 	} else {
-		canonicalResource.WriteString(req.URL.Path)
+		resBuf.WriteString(req.URL.Path)
 	}
 
-	if urlParams := req.URL.Query(); len(urlParams) > 0 {
-		canonicalResource.WriteByte('?')
-
-		var paramKeys []string
-
-		for k := range urlParams {
+	// Handle query parameters
+	queryParams := req.URL.Query()
+	if len(queryParams) > 0 {
+		resBuf.WriteByte('?')
+		paramKeys := make([]string, 0, len(queryParams))
+		for k := range queryParams {
 			paramKeys = append(paramKeys, k)
 		}
-
 		sort.Strings(paramKeys)
 
-		for i, k := range paramKeys {
+		for i, key := range paramKeys {
 			if i > 0 {
-				canonicalResource.WriteByte('&')
+				resBuf.WriteByte('&')
 			}
-
-			canonicalResource.WriteString(k)
-
-			if v := urlParams.Get(k); v != "" {
-				canonicalResource.WriteByte('=')
-				canonicalResource.WriteString(v)
+			resBuf.WriteString(key)
+			if value := queryParams.Get(key); value != "" {
+				resBuf.WriteByte('=')
+				resBuf.WriteString(value)
 			}
 		}
 	}
 
-	msg.Write(canonicalResource.Bytes())
+	return resBuf.String()
+}
 
-	// signature = base64(HMacSha1(msg))
-	_signature := base64HmacSha1([]byte(account.accessKey), msg.Bytes())
-
-	// Set header: "Authorization: ODPS" + AccessID + ":" + Signature
-	var signature bytes.Buffer
-	signature.WriteString("ODPS ")
-	signature.WriteString(account.accessId)
-	signature.WriteByte(':')
-	signature.WriteString(_signature)
-
-	req.Header.Set(common.HttpHeaderAuthorization, signature.String())
-
-	return nil
+// generateSignature creates the final authorization signature
+func (account *AliyunAccount) generateSignature(data []byte) string {
+	signature := base64HmacSha1([]byte(account.accessKey), data)
+	var authBuf bytes.Buffer
+	authBuf.WriteString("ODPS ")
+	authBuf.WriteString(account.accessId)
+	authBuf.WriteByte(':')
+	authBuf.WriteString(signature)
+	return authBuf.String()
 }
