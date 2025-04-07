@@ -271,12 +271,19 @@ func (u *UploadSession) Commit(blockIds []int) error {
 		return errors.WithStack(err)
 	}
 
-	Retry(func() error {
+	err = Retry(func() error {
 		res, err := u.RestClient.Do(req)
-		if err == nil {
-			_ = res.Body.Close()
+		if err != nil {
+			return err
 		}
-		return errors.WithStack(err)
+		if res.StatusCode/100 != 2 {
+			return restclient.NewHttpNotOk(res)
+		} else {
+			if res.Body != nil {
+				_ = res.Body.Close()
+			}
+		}
+		return nil
 	})
 
 	return errors.WithStack(err)

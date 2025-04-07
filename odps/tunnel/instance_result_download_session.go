@@ -302,11 +302,10 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 
 	var res *http.Response
 
-	Retry(func() error {
+	err = Retry(func() error {
 		res, err = is.RestClient.Do(req)
 		return errors.WithStack(err)
 	})
-
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
