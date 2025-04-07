@@ -19,9 +19,22 @@ package tunnel
 import (
 	"io"
 	"math"
+	"sync"
 
 	"google.golang.org/protobuf/encoding/protowire"
 )
+
+var bufPool = &sync.Pool{
+	New: func() interface{} {
+		v := make([]byte, 0, 10)
+		return &v
+	},
+}
+
+func releaseToPool(b *[]byte) {
+	*b = (*b)[:0]
+	bufPool.Put(b)
+}
 
 type ProtocStreamWriter struct {
 	inner io.Writer
@@ -38,20 +51,26 @@ func (r *ProtocStreamWriter) WriteTag(num protowire.Number, typ protowire.Type) 
 }
 
 func (r *ProtocStreamWriter) WriteVarint(v uint64) error {
-	b := protowire.AppendVarint(nil, v)
-	err := writeFull(r.inner, b)
+	b := bufPool.Get().(*[]byte)
+	*b = protowire.AppendVarint(*b, v)
+	err := writeFull(r.inner, *b)
+	releaseToPool(b)
 	return err
 }
 
 func (r *ProtocStreamWriter) WriteFixed32(val uint32) error {
-	b := protowire.AppendFixed32(nil, val)
-	err := writeFull(r.inner, b)
+	b := bufPool.Get().(*[]byte)
+	*b = protowire.AppendFixed32(*b, val)
+	err := writeFull(r.inner, *b)
+	releaseToPool(b)
 	return err
 }
 
 func (r *ProtocStreamWriter) WriteFixed64(val uint64) error {
-	b := protowire.AppendFixed64(nil, val)
-	err := writeFull(r.inner, b)
+	b := bufPool.Get().(*[]byte)
+	*b = protowire.AppendFixed64(*b, val)
+	err := writeFull(r.inner, *b)
+	releaseToPool(b)
 	return err
 }
 
