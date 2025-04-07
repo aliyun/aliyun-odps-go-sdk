@@ -1,12 +1,10 @@
 # This workflow will build a golang project
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
 
-name: CI
+name: CI-go1.15
 
 on:
   workflow_dispatch: # 支持手动触发
-  push:
-    branches: [ "master" ]
 
 jobs:
 
@@ -36,7 +34,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.23'
+        go-version: '1.15'
 
     - name: Build
       run: go build -v ./...
