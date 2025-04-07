@@ -101,11 +101,12 @@ func min(x, y int) int {
 	return y
 }
 
-func Retry(f func() error) {
+func Retry(f func() error) error {
+	// TODO: use tunnel retry strategy and add retry logger
 	sleepTime := int64(1)
-
+	var err error
 	for i := 0; i < 3; i++ {
-		err := f()
+		err = f()
 		if err == nil {
 			break
 		}
@@ -113,6 +114,7 @@ func Retry(f func() error) {
 		sleepTime *= 1 << i
 		time.Sleep(time.Duration(sleepTime) * time.Second)
 	}
+	return err
 }
 
 type bufWriter struct {
