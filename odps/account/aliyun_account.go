@@ -30,12 +30,21 @@ import (
 type AliyunAccount struct {
 	accessId  string
 	accessKey string
+	regionId  string
 }
 
-func NewAliyunAccount(accessId string, accessKey string) *AliyunAccount {
-	return &AliyunAccount{
-		accessId:  accessId,
-		accessKey: accessKey,
+func NewAliyunAccount(accessId string, accessKey string, regionId ...string) *AliyunAccount {
+	if len(regionId) > 0 {
+		return &AliyunAccount{
+			accessId:  accessId,
+			accessKey: accessKey,
+			regionId:  regionId[0],
+		}
+	} else {
+		return &AliyunAccount{
+			accessId:  accessId,
+			accessKey: accessKey,
+		}
 	}
 }
 
@@ -73,6 +82,10 @@ func (account *AliyunAccount) AccessId() string {
 
 func (account *AliyunAccount) AccessKey() string {
 	return account.accessKey
+}
+
+func (account *AliyunAccount) RegionId() string {
+	return account.regionId
 }
 
 func (account *AliyunAccount) GetType() Provider {
