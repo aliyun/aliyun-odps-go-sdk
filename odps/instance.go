@@ -55,6 +55,11 @@ type Instance struct {
 	taskNameCommitted string
 	taskResults       []TaskResult
 	isSync            bool
+	MaxQA             struct {
+		isMaxQA     bool
+		queryCookie string
+		sessionID   string
+	}
 }
 
 // InstanceOrErr is used for the return value of Instances.List
@@ -100,10 +105,22 @@ func (instance *Instance) Load() error {
 	type ResModel struct {
 		XMLName xml.Name `xml:"Instance"`
 		Status  InstanceStatus
+		Results []TaskResult `xml:"Tasks>Task"`
 	}
 	var resModel ResModel
 
-	err := client.GetWithParseFunc(instance.resourceUrl, nil, func(res *http.Response) error {
+	resource := instance.resourceUrl
+	headers := make(map[string]string)
+	queryArgs := make(url.Values)
+	if instance.MaxQA.isMaxQA {
+		resource = "/mcqa" + resource
+		headers[common.HttpHeaderMaxQASessionID] = instance.MaxQA.sessionID
+		if instance.MaxQA.queryCookie != "" {
+			headers[common.HttpHeaderMaxQAQueryCookie] = instance.MaxQA.queryCookie
+		}
+		queryArgs.Set("instancestatus", "")
+	}
+	err := client.GetWithParseFunc(resource, queryArgs, headers, func(res *http.Response) error {
 		header := res.Header
 		instance.owner = header.Get(common.HttpHeaderOdpsOwner)
 		instance.startTime, _ = common.ParseRFC1123Date(header.Get(common.HttpHeaderOdpsStartTime))
@@ -115,6 +132,10 @@ func (instance *Instance) Load() error {
 		}
 
 		instance.status = resModel.Status
+		if resModel.Results != nil {
+			instance.taskResults = resModel.Results
+			instance.isSync = true
+		}
 		return nil
 	})
 
@@ -129,9 +150,17 @@ func (instance *Instance) Terminate() error {
 	bodyModel := BodyModel{
 		Status: InstanceTerminated,
 	}
-
+	resource := instance.resourceUrl
+	headers := make(map[string]string)
+	if instance.MaxQA.isMaxQA {
+		resource = "/mcqa" + resource
+		headers[common.HttpHeaderMaxQASessionID] = instance.MaxQA.sessionID
+		if instance.MaxQA.queryCookie != "" {
+			headers[common.HttpHeaderMaxQAQueryCookie] = instance.MaxQA.queryCookie
+		}
+	}
 	client := instance.odpsIns.restClient
-	err := client.DoXmlWithParseFunc("PUT", instance.resourceUrl, nil, nil, &bodyModel, nil)
+	err := client.DoXmlWithParseFunc("PUT", resource, nil, headers, &bodyModel, nil)
 	return errors.WithStack(err)
 }
 
@@ -148,7 +177,7 @@ func (instance *Instance) GetTasks() ([]TaskInInstance, error) {
 	var resModel ResModel
 	client := instance.odpsIns.restClient
 
-	err := client.GetWithModel(instance.resourceUrl, urlQuery, &resModel)
+	err := client.GetWithModel(instance.resourceUrl, urlQuery, nil, &resModel)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -169,7 +198,16 @@ func (instance *Instance) GetTaskProgress(taskName string) ([]TaskProgressStage,
 
 	var resModel ResModel
 
-	err := client.GetWithModel(instance.resourceUrl, queryArgs, &resModel)
+	resource := instance.resourceUrl
+	headers := make(map[string]string)
+	if instance.MaxQA.isMaxQA {
+		resource = "/mcqa" + resource
+		headers[common.HttpHeaderMaxQASessionID] = instance.MaxQA.sessionID
+		if instance.MaxQA.queryCookie != "" {
+			headers[common.HttpHeaderMaxQAQueryCookie] = instance.MaxQA.queryCookie
+		}
+	}
+	err := client.GetWithModel(resource, queryArgs, headers, &resModel)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -185,7 +223,16 @@ func (instance *Instance) GetTaskDetail(taskName string) ([]byte, error) {
 	client := instance.odpsIns.restClient
 	var body []byte
 
-	err := client.GetWithParseFunc(instance.resourceUrl, queryArgs, func(res *http.Response) error {
+	resource := instance.resourceUrl
+	headers := make(map[string]string)
+	if instance.MaxQA.isMaxQA {
+		resource = "/mcqa" + resource
+		headers[common.HttpHeaderMaxQASessionID] = instance.MaxQA.sessionID
+		if instance.MaxQA.queryCookie != "" {
+			headers[common.HttpHeaderMaxQAQueryCookie] = instance.MaxQA.queryCookie
+		}
+	}
+	err := client.GetWithParseFunc(resource, queryArgs, headers, func(res *http.Response) error {
 		var err error
 		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
 		body, err = ioutil.ReadAll(res.Body)
@@ -210,7 +257,7 @@ func (instance *Instance) GetTaskSummary(taskName string) (*TaskSummary, error) 
 
 	var resModel ResModel
 
-	err := client.GetWithParseFunc(instance.resourceUrl, queryArgs, func(res *http.Response) error {
+	err := client.GetWithParseFunc(instance.resourceUrl, queryArgs, nil, func(res *http.Response) error {
 		decoder := json.NewDecoder(res.Body)
 		return errors.WithStack(decoder.Decode(&resModel))
 	})
@@ -234,7 +281,7 @@ func (instance *Instance) GetTaskQuotaJson(taskName string) (string, error) {
 	client := instance.odpsIns.restClient
 	var body []byte
 
-	err := client.GetWithParseFunc(instance.resourceUrl, queryArgs, func(res *http.Response) error {
+	err := client.GetWithParseFunc(instance.resourceUrl, queryArgs, nil, func(res *http.Response) error {
 		var err error
 		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
 		body, err = ioutil.ReadAll(res.Body)
@@ -255,7 +302,7 @@ func (instance *Instance) GetCachedInfo() (string, error) {
 	client := instance.odpsIns.restClient
 	var body []byte
 
-	err := client.GetWithParseFunc(instance.resourceUrl, queryArgs, func(res *http.Response) error {
+	err := client.GetWithParseFunc(instance.resourceUrl, queryArgs, nil, func(res *http.Response) error {
 		var err error
 		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
 		body, err = ioutil.ReadAll(res.Body)
@@ -342,6 +389,17 @@ func (instance *Instance) WaitForSuccess() error {
 }
 
 func (instance *Instance) GetResult() ([]TaskResult, error) {
+	if instance.isSync {
+		return instance.taskResults, nil
+	}
+	if instance.MaxQA.isMaxQA {
+		err := instance.Load()
+		if err != nil {
+			return nil, err
+		}
+		return instance.taskResults, nil
+	}
+
 	queryArgs := make(url.Values, 1)
 	queryArgs.Set("result", "")
 	client := instance.odpsIns.restClient
@@ -352,7 +410,7 @@ func (instance *Instance) GetResult() ([]TaskResult, error) {
 	}
 
 	var resModel ResModel
-	err := client.GetWithModel(instance.resourceUrl, queryArgs, &resModel)
+	err := client.GetWithModel(instance.resourceUrl, queryArgs, nil, &resModel)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}

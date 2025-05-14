@@ -61,7 +61,7 @@ func (r *Resources) List(f func(*Resource, error), filters ...RFileFunc) {
 	var resModel ResModel
 
 	for {
-		err := client.GetWithModel(resource, queryArgs, &resModel)
+		err := client.GetWithModel(resource, queryArgs, nil, &resModel)
 		if err != nil {
 			f(nil, err)
 			break

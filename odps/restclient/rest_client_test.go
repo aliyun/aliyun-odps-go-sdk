@@ -42,7 +42,7 @@ func TestRestClient_GetWithModel_Success(t *testing.T) {
 	client := NewOdpsRestClient(MockAccount{}, ts.URL)
 	var resp TestResponse
 
-	err := client.GetWithModel("test", url.Values{}, &resp)
+	err := client.GetWithModel("test", url.Values{}, nil, &resp)
 	assert.NoError(t, err)
 	assert.Equal(t, "Hello", resp.Message)
 }

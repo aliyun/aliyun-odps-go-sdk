@@ -78,6 +78,7 @@ type projectModel struct {
 	DefaultCluster     string            `xml:"DefaultCluster"`
 	Clusters           []Cluster         `xml:"Clusters"`
 	ExtendedProperties []common.Property `xml:"ExtendedProperties>Property"`
+	TenantId           string            `xml:"TenantId"`
 	// 这三个字段在/projects中和/projects/<ProjectName>接口中返回的未知不一样,
 	// 前者是body的xml数据中，后者在header里
 	Owner            string         `xml:"Owner"`
@@ -166,7 +167,7 @@ func (p *Project) _loadFromOdps(params optionalParams) (*projectModel, error) {
 		return nil
 	}
 
-	if err := client.GetWithParseFunc(resource, urlQuery, parseFunc); err != nil {
+	if err := client.GetWithParseFunc(resource, urlQuery, nil, parseFunc); err != nil {
 		return nil, errors.WithStack(err)
 	}
 
@@ -216,6 +217,11 @@ func (p *Project) Status() ProjectStatus {
 
 func (p *Project) ProjectGroupName() string {
 	return p.model.ProjectGroupName
+}
+
+// TenantId get project owner's tenant id
+func (p *Project) TenantId() string {
+	return p.model.TenantId
 }
 
 // PropertiesHasBeSet Properties get the properties those have be set for the project

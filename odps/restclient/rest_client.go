@@ -117,7 +117,6 @@ func (client *RestClient) client() *http.Client {
 		Proxy:              http.ProxyFromEnvironment,
 		DialContext:        dialer.DialContext,
 		ForceAttemptHTTP2:  false,
-		DisableKeepAlives:  true,
 		DisableCompression: client.DisableCompression,
 	}
 
@@ -233,8 +232,8 @@ func (client *RestClient) DoWithModel(req *http.Request, model interface{}) erro
 	return errors.WithStack(client.DoWithParseFunc(req, parseFunc))
 }
 
-func (client *RestClient) GetWithModel(resource string, queryArgs url.Values, model interface{}) error {
-	req, err := client.NewRequestWithUrlQuery(common.HttpMethod.GetMethod, resource, nil, queryArgs)
+func (client *RestClient) GetWithModel(resource string, queryArgs url.Values, headers map[string]string, model interface{}) error {
+	req, err := client.NewRequestWithParamsAndHeaders(common.HttpMethod.GetMethod, resource, nil, queryArgs, headers)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -242,8 +241,8 @@ func (client *RestClient) GetWithModel(resource string, queryArgs url.Values, mo
 	return errors.WithStack(client.DoWithModel(req, model))
 }
 
-func (client *RestClient) GetWithParseFunc(resource string, queryArgs url.Values, parseFunc func(res *http.Response) error) error {
-	req, err := client.NewRequestWithUrlQuery(common.HttpMethod.GetMethod, resource, nil, queryArgs)
+func (client *RestClient) GetWithParseFunc(resource string, queryArgs url.Values, headers map[string]string, parseFunc func(res *http.Response) error) error {
+	req, err := client.NewRequestWithParamsAndHeaders(common.HttpMethod.GetMethod, resource, nil, queryArgs, headers)
 	if err != nil {
 		return errors.WithStack(err)
 	}

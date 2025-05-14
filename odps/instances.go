@@ -126,14 +126,32 @@ func (instances *Instances) CreateTask(projectName string, task Task, createInst
 		queryArg.Set("tryWait", "")
 	}
 	var instanceId string
-	var isSync bool
+
+	headers := make(map[string]string)
+
+	maxqaOptions := instanceOptions.MaxQAOptions
+	if maxqaOptions.UseMaxQA {
+		if maxqaOptions.SessionID == "" && maxqaOptions.QuotaName == "" {
+			return nil, errors.New("The MaxQA job must provide a SessionID or QuotaName.")
+		}
+		if maxqaOptions.SessionID == "" {
+			id, err := getMaxQASessionID(instances.odpsIns, maxqaOptions.QuotaName, projectName)
+			if err != nil {
+				return nil, err
+			}
+			maxqaOptions.SessionID = id
+		}
+		resource = "/mcqa" + resource
+		headers[common.HttpHeaderMaxQASessionID] = maxqaOptions.SessionID
+	}
+	var maxqaQueryCookie string
 
 	startTime := time.Now()
 	maxRetryDuration := 180 * time.Second
 
 	// 循环，直到达到最大重试时间
 	for {
-		err := client.DoXmlWithParseFunc(common.HttpMethod.PostMethod, resource, queryArg, nil, &instanceCreationModel, func(res *http.Response) error {
+		err := client.DoXmlWithParseFunc(common.HttpMethod.PostMethod, resource, queryArg, headers, &instanceCreationModel, func(res *http.Response) error {
 			location := res.Header.Get(common.HttpHeaderLocation)
 
 			if location == "" {
@@ -146,12 +164,11 @@ func (instances *Instances) CreateTask(projectName string, task Task, createInst
 			}
 
 			instanceId = location[splitAt+1:]
-			isSync = res.StatusCode == 201
-
 			if res.StatusCode == 409 {
 				return restclient.NewHttpNotOk(res)
 			}
-			if isSync {
+			if res.StatusCode == 201 {
+				maxqaQueryCookie = res.Header.Get(common.HttpHeaderMaxQAQueryCookie)
 				return nil
 			}
 			decoder := xml.NewDecoder(res.Body)
@@ -180,8 +197,12 @@ func (instances *Instances) CreateTask(projectName string, task Task, createInst
 		instance := NewInstance(instances.odpsIns, projectName, instanceId)
 		instance.taskNameCommitted = task.GetName()
 		instance.taskResults = resModel.Tasks
-		instance.isSync = isSync
-
+		instance.isSync = resModel.Tasks != nil && len(resModel.Tasks) > 0
+		if maxqaOptions.UseMaxQA {
+			instance.MaxQA.isMaxQA = maxqaOptions.UseMaxQA
+			instance.MaxQA.sessionID = maxqaOptions.SessionID
+			instance.MaxQA.queryCookie = maxqaQueryCookie
+		}
 		return instance, nil
 	}
 }
@@ -215,7 +236,7 @@ func (instances *Instances) List(f func(*Instance), filters ...InsFilterFunc) er
 
 	var resModel ResModel
 	for {
-		err := client.GetWithModel(resources, queryArgs, &resModel)
+		err := client.GetWithModel(resources, queryArgs, nil, &resModel)
 		if err != nil {
 			return err
 		}
@@ -267,7 +288,7 @@ func (instances *Instances) ListInstancesQueued(filters ...InsFilterFunc) ([]str
 	var insList []string
 
 	for {
-		err := client.GetWithModel(resources, queryArgs, &resModel)
+		err := client.GetWithModel(resources, queryArgs, nil, &resModel)
 		if err != nil {
 			return insList, errors.WithStack(err)
 		}
@@ -334,4 +355,27 @@ var InstanceFilter = struct {
 
 func (instances *Instances) Get(instanceId string) *Instance {
 	return NewInstance(instances.odpsIns, instances.projectName, instanceId)
+}
+
+func getMaxQASessionID(ins *Odps, quotaName string, projectName string) (string, error) {
+	tenantId := ins.Project(projectName).TenantId()
+	resource := "/quotas/" + quotaName
+	queryArgs := make(url.Values, 4)
+	queryArgs.Set("project", projectName)
+	queryArgs.Set("version", "wlm")
+	queryArgs.Set("tenant", tenantId)
+
+	request, err := ins.restClient.NewRequestWithUrlQuery(common.HttpMethod.GetMethod, resource, nil, queryArgs)
+	if err != nil {
+		return "", err
+	}
+	response, err := ins.restClient.Do(request)
+	if err != nil {
+		return "", err
+	}
+	if response.StatusCode/100 != 2 {
+		return "", restclient.NewHttpNotOk(response)
+	}
+	maxqaSessionId := response.Header.Get(common.HttpHeaderMaxQASessionID)
+	return maxqaSessionId, nil
 }

@@ -96,6 +96,8 @@ const (
 	HttpHeaderOdpsCopyFileSource            = "x-odps-copy-file-source"
 	HttpHeaderOdpsResourceIsTemp            = "x-odps-resource-istemp"
 	HttpHeaderOdpsResourceMergeTotalBytes   = "x-odps-resource-merge-total-bytes"
+	HttpHeaderMaxQAQueryCookie              = "x-odps-mcqa-query-cookie"
+	HttpHeaderMaxQASessionID                = "x-odps-mcqa-conn"
 
 	XMLContentType = "application/xml"
 )

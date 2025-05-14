@@ -77,7 +77,7 @@ func (ts *Tables) List(f func(*Table, error), filters ...TFilterFunc) {
 
 	var resModel ResModel
 	for {
-		err := client.GetWithModel(resource, queryArgs, &resModel)
+		err := client.GetWithModel(resource, queryArgs, nil, &resModel)
 		if err != nil {
 			f(nil, err)
 			break

@@ -78,7 +78,7 @@ func (t *Tenant) Load() error {
 		Tenant *tenantModel `json:"Tenant"`
 	}
 
-	err := t.client.GetWithParseFunc("/tenants", nil, func(res *http.Response) error {
+	err := t.client.GetWithParseFunc("/tenants", nil, nil, func(res *http.Response) error {
 		decoder := json.NewDecoder(res.Body)
 		return errors.WithStack(decoder.Decode(&tenantResponse))
 	})
@@ -141,7 +141,7 @@ func (t *Tenant) GetTenantRolePolicy(roleName string) (string, error) {
 		Policy string `json:"Policy"`
 	}
 
-	err := t.client.GetWithParseFunc(resource, params, func(res *http.Response) error {
+	err := t.client.GetWithParseFunc(resource, params, nil, func(res *http.Response) error {
 		decoder := json.NewDecoder(res.Body)
 		return errors.WithStack(decoder.Decode(&response))
 	})

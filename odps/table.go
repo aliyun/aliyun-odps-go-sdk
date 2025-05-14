@@ -120,7 +120,7 @@ func (t *Table) Load() error {
 		queryArgs.Set("curr_schema", t.SchemaName())
 	}
 
-	err := client.GetWithModel(resource, queryArgs, &t.model)
+	err := client.GetWithModel(resource, queryArgs, nil, &t.model)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -145,7 +145,7 @@ func (t *Table) LoadExtendedInfo() error {
 	}
 
 	var model tableModel
-	err := client.GetWithModel(resource, queryArgs, &model)
+	err := client.GetWithModel(resource, queryArgs, nil, &model)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -576,7 +576,7 @@ func (t *Table) GetPartitionValues() ([]string, error) {
 	}
 
 	var resModel ResModel
-	err := client.GetWithModel(resource, queryArgs, &resModel)
+	err := client.GetWithModel(resource, queryArgs, nil, &resModel)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -661,7 +661,7 @@ func (t *Table) getPartitions(partitionSpec string) ([]Partition, error) {
 	var partitions []Partition
 
 	for {
-		err := client.GetWithModel(resource, queryArgs, &resModel)
+		err := client.GetWithModel(resource, queryArgs, nil, &resModel)
 		if err != nil {
 			return partitions, errors.WithStack(err)
 		}

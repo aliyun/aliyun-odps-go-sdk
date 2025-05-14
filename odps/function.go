@@ -51,7 +51,7 @@ func (f *Function) Load() error {
 	}
 
 	client := f.OdpsIns.restClient
-	err := client.GetWithModel(resource, queryArgs, &f.Model)
+	err := client.GetWithModel(resource, queryArgs, nil, &f.Model)
 	if err != nil {
 		return errors.WithStack(err)
 	}

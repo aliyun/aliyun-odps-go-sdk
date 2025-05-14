@@ -57,7 +57,7 @@ func (ss *Schemas) List(f func(*Schema, error)) error {
 
 	var resModel ResModel
 	for {
-		err := client.GetWithModel(resource, queryArgs, &resModel)
+		err := client.GetWithModel(resource, queryArgs, nil, &resModel)
 		if err != nil {
 			f(nil, err)
 			return err

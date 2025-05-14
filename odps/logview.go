@@ -49,7 +49,7 @@ func (lv *LogView) LogViewHost() string {
 
 	client := lv.odpsIns.RestClient()
 
-	err := client.GetWithParseFunc("/logview/host", nil, func(res *http.Response) error {
+	err := client.GetWithParseFunc("/logview/host", nil, nil, func(res *http.Response) error {
 		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
 		buf, err := ioutil.ReadAll(res.Body)
 		if err != nil {
