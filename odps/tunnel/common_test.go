@@ -3,8 +3,9 @@ package tunnel_test
 import (
 	"testing"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 )
 
 func TestRetry(t *testing.T) {

@@ -6,8 +6,9 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 )
 
 // MockAccount 实现 account.Account 接口

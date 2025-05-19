@@ -4,12 +4,13 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestUploadSession_Overwrite(t *testing.T) {

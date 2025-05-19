@@ -5,8 +5,9 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
 func TestBuildCanonicalString(t *testing.T) {

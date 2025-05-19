@@ -79,6 +79,7 @@ type projectModel struct {
 	Clusters           []Cluster         `xml:"Clusters"`
 	ExtendedProperties []common.Property `xml:"ExtendedProperties>Property"`
 	TenantId           string            `xml:"TenantId"`
+	RegionId           string            `xml:"Region"`
 	// 这三个字段在/projects中和/projects/<ProjectName>接口中返回的未知不一样,
 	// 前者是body的xml数据中，后者在header里
 	Owner            string         `xml:"Owner"`
@@ -227,6 +228,11 @@ func (p *Project) TenantId() string {
 // PropertiesHasBeSet Properties get the properties those have be set for the project
 func (p *Project) PropertiesHasBeSet() common.Properties {
 	return p.model.Properties
+}
+
+// RegionId get project region id
+func (p *Project) RegionId() string {
+	return p.model.RegionId
 }
 
 // GetAllProperties get all the configurable properties of the project, including the

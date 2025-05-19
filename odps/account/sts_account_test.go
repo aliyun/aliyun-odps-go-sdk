@@ -3,8 +3,9 @@ package account_test
 import (
 	"testing"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/credentials-go/credentials"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 )
 
 func TestNewStsAccount(t *testing.T) {
