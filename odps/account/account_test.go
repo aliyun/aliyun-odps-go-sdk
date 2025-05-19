@@ -95,10 +95,10 @@ func TestBuildCanonicalResource(t *testing.T) {
 	}
 }
 
-func TestGenerateSignature(t *testing.T) {
+func TestGenerateSignatureV2(t *testing.T) {
 	acct := NewAliyunAccount("my-access-id", "my-secret-key")
 
-	signature := acct.generateSignature([]byte("testdata"))
+	signature := acct.generateSignatureV2([]byte("testdata"))
 	println(signature)
 	expected := "ODPS my-access-id:iAcVTeAghMtN74BeKwFTj/pgFEA="
 

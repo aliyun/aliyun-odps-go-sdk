@@ -18,14 +18,24 @@ package account
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
+
+var corporation = "aliyun"
+
+func SetCorporation(corp string) {
+	corporation = corp
+}
 
 type AliyunAccount struct {
 	accessId  string
@@ -95,7 +105,12 @@ func (account *AliyunAccount) GetType() Provider {
 func (account *AliyunAccount) SignRequest(req *http.Request, endpoint string) error {
 	canonicalString := account.buildCanonicalString(req, endpoint)
 	// Generate signature
-	signature := account.generateSignature(canonicalString.Bytes())
+	var signature string
+	if account.regionId == "" {
+		signature = account.generateSignatureV2(canonicalString.Bytes())
+	} else {
+		signature = account.generateSignatureV4(canonicalString.Bytes(), account.regionId)
+	}
 	// Set authorization header
 	req.Header.Set(common.HttpHeaderAuthorization, signature)
 	return nil
@@ -186,8 +201,8 @@ func (account *AliyunAccount) buildCanonicalResource(req *http.Request, endpoint
 	return resBuf.String()
 }
 
-// generateSignature creates the final authorization signature
-func (account *AliyunAccount) generateSignature(data []byte) string {
+// generateSignature creates the final authorization signature V2
+func (account *AliyunAccount) generateSignatureV2(data []byte) string {
 	signature := base64HmacSha1([]byte(account.accessKey), data)
 	var authBuf bytes.Buffer
 	authBuf.WriteString("ODPS ")
@@ -195,4 +210,25 @@ func (account *AliyunAccount) generateSignature(data []byte) string {
 	authBuf.WriteByte(':')
 	authBuf.WriteString(signature)
 	return authBuf.String()
+}
+
+// hmacsha256 executes HMAC-SHA256 signatures
+func hmacsha256(key, data []byte) []byte {
+	h := hmac.New(sha256.New, key)
+	h.Write(data)
+	return h.Sum(nil)
+}
+
+// generateSignature creates the final authorization signature V4
+func (account *AliyunAccount) generateSignatureV4(data []byte, regionName string) string {
+	currentDate := time.Now().UTC().Format("20060102")
+	credential := fmt.Sprintf("%s/%s/%s/odps/%s_v4_request", account.accessId, currentDate, regionName, corporation)
+
+	kSecret := []byte(corporation + "_v4" + account.accessKey)
+	kDate := hmacsha256(kSecret, []byte(currentDate))
+	kRegion := hmacsha256(kDate, []byte(regionName))
+	kService := hmacsha256(kRegion, []byte("odps"))
+	signatureKey := hmacsha256(kService, []byte(corporation+"_v4_request"))
+	signature := base64HmacSha1(signatureKey, data)
+	return "ODPS " + credential + ":" + signature
 }
