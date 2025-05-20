@@ -27,7 +27,7 @@ func TestNewAliyunAccount(t *testing.T) {
 }
 
 func TestSignatureV4(t *testing.T) {
-	var ak, sk string
+	var ak, sk, stsToken string
 	if accessId, found := os.LookupEnv("ALIBABA_CLOUD_ACCESS_KEY_ID"); found {
 		ak = accessId
 	}
@@ -35,8 +35,11 @@ func TestSignatureV4(t *testing.T) {
 	if accessKey, found := os.LookupEnv("ALIBABA_CLOUD_ACCESS_KEY_SECRET"); found {
 		sk = accessKey
 	}
+	if token, found := os.LookupEnv("ALIBABA_CLOUD_SECURITY_TOKEN"); found {
+		stsToken = token
+	}
 	endpoint := restclient.LoadEndpointFromEnv()
-	aliyunAccount := account.NewAliyunAccount(ak, sk, "cn-shanghai")
+	aliyunAccount := account.NewStsAccount(ak, sk, stsToken, "cn-shanghai")
 	odpsIns := odps.NewOdps(aliyunAccount, endpoint)
 	odpsIns.SetDefaultProjectName("go_sdk_regression_testing")
 
