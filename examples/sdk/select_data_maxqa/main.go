@@ -29,17 +29,20 @@ func main() {
 
 	instance, err := odpsIns.ExecSQlWithOption(sql, taskOptions)
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	}
 	println(instance.Id())
 
 	err = instance.WaitForSuccess()
 	if err != nil {
-		println(err.Error())
+		log.Fatalf("%+v", err)
 	}
 
 	// Get CSV Result
 	result, err := instance.GetResult()
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
 	println(result[0].Content())
 
 	// Get Result By Instance Tunnel
