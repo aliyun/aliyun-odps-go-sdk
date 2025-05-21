@@ -56,9 +56,9 @@ type Instance struct {
 	taskResults       []TaskResult
 	isSync            bool
 	MaxQA             struct {
-		isMaxQA     bool
-		queryCookie string
-		sessionID   string
+		IsMaxQA     bool
+		QueryCookie string
+		SessionID   string
 	}
 }
 
@@ -112,11 +112,11 @@ func (instance *Instance) Load() error {
 	resource := instance.resourceUrl
 	headers := make(map[string]string)
 	queryArgs := make(url.Values)
-	if instance.MaxQA.isMaxQA {
+	if instance.MaxQA.IsMaxQA {
 		resource = "/mcqa" + resource
-		headers[common.HttpHeaderMaxQASessionID] = instance.MaxQA.sessionID
-		if instance.MaxQA.queryCookie != "" {
-			headers[common.HttpHeaderMaxQAQueryCookie] = instance.MaxQA.queryCookie
+		headers[common.HttpHeaderMaxQASessionID] = instance.MaxQA.SessionID
+		if instance.MaxQA.QueryCookie != "" {
+			headers[common.HttpHeaderMaxQAQueryCookie] = instance.MaxQA.QueryCookie
 		}
 		queryArgs.Set("instancestatus", "")
 	}
@@ -136,6 +136,10 @@ func (instance *Instance) Load() error {
 			instance.taskResults = resModel.Results
 			instance.isSync = true
 		}
+		if header.Get(common.HttpHeaderMaxQAQueryCookie) != "" {
+			instance.MaxQA.IsMaxQA = true
+			instance.MaxQA.QueryCookie = header.Get(common.HttpHeaderMaxQAQueryCookie)
+		}
 		return nil
 	})
 
@@ -152,11 +156,11 @@ func (instance *Instance) Terminate() error {
 	}
 	resource := instance.resourceUrl
 	headers := make(map[string]string)
-	if instance.MaxQA.isMaxQA {
+	if instance.MaxQA.IsMaxQA {
 		resource = "/mcqa" + resource
-		headers[common.HttpHeaderMaxQASessionID] = instance.MaxQA.sessionID
-		if instance.MaxQA.queryCookie != "" {
-			headers[common.HttpHeaderMaxQAQueryCookie] = instance.MaxQA.queryCookie
+		headers[common.HttpHeaderMaxQASessionID] = instance.MaxQA.SessionID
+		if instance.MaxQA.QueryCookie != "" {
+			headers[common.HttpHeaderMaxQAQueryCookie] = instance.MaxQA.QueryCookie
 		}
 	}
 	client := instance.odpsIns.restClient
@@ -200,11 +204,11 @@ func (instance *Instance) GetTaskProgress(taskName string) ([]TaskProgressStage,
 
 	resource := instance.resourceUrl
 	headers := make(map[string]string)
-	if instance.MaxQA.isMaxQA {
+	if instance.MaxQA.IsMaxQA {
 		resource = "/mcqa" + resource
-		headers[common.HttpHeaderMaxQASessionID] = instance.MaxQA.sessionID
-		if instance.MaxQA.queryCookie != "" {
-			headers[common.HttpHeaderMaxQAQueryCookie] = instance.MaxQA.queryCookie
+		headers[common.HttpHeaderMaxQASessionID] = instance.MaxQA.SessionID
+		if instance.MaxQA.QueryCookie != "" {
+			headers[common.HttpHeaderMaxQAQueryCookie] = instance.MaxQA.QueryCookie
 		}
 	}
 	err := client.GetWithModel(resource, queryArgs, headers, &resModel)
@@ -225,11 +229,11 @@ func (instance *Instance) GetTaskDetail(taskName string) ([]byte, error) {
 
 	resource := instance.resourceUrl
 	headers := make(map[string]string)
-	if instance.MaxQA.isMaxQA {
+	if instance.MaxQA.IsMaxQA {
 		resource = "/mcqa" + resource
-		headers[common.HttpHeaderMaxQASessionID] = instance.MaxQA.sessionID
-		if instance.MaxQA.queryCookie != "" {
-			headers[common.HttpHeaderMaxQAQueryCookie] = instance.MaxQA.queryCookie
+		headers[common.HttpHeaderMaxQASessionID] = instance.MaxQA.SessionID
+		if instance.MaxQA.QueryCookie != "" {
+			headers[common.HttpHeaderMaxQAQueryCookie] = instance.MaxQA.QueryCookie
 		}
 	}
 	err := client.GetWithParseFunc(resource, queryArgs, headers, func(res *http.Response) error {
@@ -392,7 +396,7 @@ func (instance *Instance) GetResult() ([]TaskResult, error) {
 	if instance.isSync {
 		return instance.taskResults, nil
 	}
-	if instance.MaxQA.isMaxQA {
+	if instance.MaxQA.IsMaxQA {
 		err := instance.Load()
 		if err != nil {
 			return nil, err

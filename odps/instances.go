@@ -199,9 +199,9 @@ func (instances *Instances) CreateTask(projectName string, task Task, createInst
 		instance.taskResults = resModel.Tasks
 		instance.isSync = resModel.Tasks != nil && len(resModel.Tasks) > 0
 		if maxqaOptions.UseMaxQA {
-			instance.MaxQA.isMaxQA = maxqaOptions.UseMaxQA
-			instance.MaxQA.sessionID = maxqaOptions.SessionID
-			instance.MaxQA.queryCookie = maxqaQueryCookie
+			instance.MaxQA.IsMaxQA = maxqaOptions.UseMaxQA
+			instance.MaxQA.SessionID = maxqaOptions.SessionID
+			instance.MaxQA.QueryCookie = maxqaQueryCookie
 		}
 		return instance, nil
 	}
