@@ -276,12 +276,8 @@ func (u *UploadSession) Commit(blockIds []int) error {
 		if err != nil {
 			return err
 		}
-		if res.StatusCode/100 != 2 {
-			return restclient.NewHttpNotOk(res)
-		} else {
-			if res.Body != nil {
-				_ = res.Body.Close()
-			}
+		if res.Body != nil {
+			_ = res.Body.Close()
 		}
 		return nil
 	})

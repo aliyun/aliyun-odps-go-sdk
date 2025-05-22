@@ -344,10 +344,6 @@ func (sm *Manager) Run(query string, jsonOutput bool, supervisionToken string) (
 	}
 
 	err := client.DoXmlWithParseRes(common.HttpMethod.PostMethod, resource, nil, nil, reqBody, func(res *http.Response) error {
-		if res.StatusCode < 200 || res.StatusCode >= 300 {
-			return errors.WithStack(restclient.NewHttpNotOk(res))
-		}
-
 		isAsync = res.StatusCode != 200
 		decoder := xml.NewDecoder(res.Body)
 		return errors.WithStack(decoder.Decode(&resModel))

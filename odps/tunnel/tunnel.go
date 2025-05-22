@@ -257,10 +257,6 @@ func (t *Tunnel) Preview(table *odps.Table, partitionValue string, limit int64) 
 	if err != nil {
 		return nil, err
 	}
-	if res.StatusCode/100 != 2 {
-		return nil, restclient.NewHttpNotOk(res)
-	}
-
 	contentEncoding := res.Header.Get(common.HttpHeaderContentEncoding)
 	if contentEncoding != "" {
 		res.Body = WrapByCompressor(res.Body, contentEncoding)

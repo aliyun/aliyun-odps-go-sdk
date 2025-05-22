@@ -382,10 +382,6 @@ func (ds *DownloadSession) newDownloadConnection(start, count int, columnNames [
 		return nil, errors.WithStack(err)
 	}
 
-	if res.StatusCode/100 != 2 {
-		return res, restclient.NewHttpNotOk(res)
-	}
-
 	contentEncoding := res.Header.Get("Content-Encoding")
 	if contentEncoding != "" {
 		res.Body = WrapByCompressor(res.Body, contentEncoding)

@@ -373,9 +373,6 @@ func getMaxQASessionID(ins *Odps, quotaName string, projectName string) (string,
 	if err != nil {
 		return "", err
 	}
-	if response.StatusCode/100 != 2 {
-		return "", restclient.NewHttpNotOk(response)
-	}
 	maxqaSessionId := response.Header.Get(common.HttpHeaderMaxQASessionID)
 	return maxqaSessionId, nil
 }

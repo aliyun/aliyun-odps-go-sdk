@@ -185,19 +185,20 @@ func (client *RestClient) Do(req *http.Request) (*http.Response, error) {
 	}
 
 	res, err := client.client().Do(req)
-	return res, errors.WithStack(err)
+	if err != nil {
+		return res, errors.WithStack(err)
+	}
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return res, errors.WithStack(NewHttpNotOk(res))
+	}
+	return res, nil
 }
 
 func (client *RestClient) DoWithParseFunc(req *http.Request, parseFunc func(res *http.Response) error) error {
 	return client.DoWithParseRes(req, func(res *http.Response) error {
-		if res.StatusCode < 200 || res.StatusCode >= 300 {
-			return errors.WithStack(NewHttpNotOk(res))
-		}
-
 		if parseFunc == nil {
 			return nil
 		}
-
 		return errors.WithStack(parseFunc(res))
 	})
 }
