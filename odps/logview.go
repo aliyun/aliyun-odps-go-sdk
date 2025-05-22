@@ -101,8 +101,8 @@ func (lv *LogView) getLogViewHost() *string {
 }
 
 func (lv *LogView) getJobInsightHost() *string {
-	if lv.logViewHost != nil {
-		return lv.logViewHost
+	if lv.jobInsightHost != nil {
+		return lv.jobInsightHost
 	}
 	client := lv.odpsIns.RestClient()
 	err := client.GetWithParseFunc("/webconsole/host", nil, nil, func(res *http.Response) error {
@@ -112,13 +112,13 @@ func (lv *LogView) getJobInsightHost() *string {
 			return errors.WithStack(err)
 		}
 		result := string(buf)
-		lv.logViewHost = &result
+		lv.jobInsightHost = &result
 		return nil
 	})
 	if err != nil {
 		return nil
 	}
-	return lv.logViewHost
+	return lv.jobInsightHost
 }
 
 func (lv *LogView) SetLogViewHost(logViewHost string) {

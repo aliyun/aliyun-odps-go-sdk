@@ -1,6 +1,7 @@
 package odps_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
@@ -31,6 +32,22 @@ func TestLogView_GenerateLogView(t *testing.T) {
 	println(url)
 }
 
+func TestLogView_SetLogViewHost(t *testing.T) {
+	odpsIns.SetDefaultProjectName(defaultProjectName)
+	odpsIns.Options.LogViewVersion = options.LegacyLogView
+	instance := odps.NewInstance(odpsIns, defaultProjectName, "20221027160000000001000001")
+	logView := odps.NewLogView(odpsIns)
+	logView.SetLogViewHost("http://mock.com")
+	url, err := logView.GenerateLogView(instance, 24)
+	if err != nil {
+		t.Error(err)
+	}
+	println(url)
+	if !strings.Contains(url, "mock.com") {
+		t.Errorf("expec contains mock.com, but got %s", url)
+	}
+}
+
 func TestLogView_GenerateJobInsight(t *testing.T) {
 	odpsIns.SetDefaultProjectName(defaultProjectName)
 	odpsIns.Options.LogViewVersion = options.JobInsight
@@ -42,6 +59,23 @@ func TestLogView_GenerateJobInsight(t *testing.T) {
 	}
 	println(url)
 	expect := "https://maxcompute.console.aliyun.com/cn-shanghai/job-insights?h=http%3A%2F%2Fservice.cn-shanghai.maxcompute.aliyun.com%2Fapi&i=20221027160000000001000001&p=go_sdk_regression_testing"
+	if url != expect {
+		t.Errorf("expect %s, but got %s", expect, url)
+	}
+}
+
+func TestLogView_SetJobInsightHost(t *testing.T) {
+	odpsIns.SetDefaultProjectName(defaultProjectName)
+	odpsIns.Options.LogViewVersion = options.JobInsight
+	instance := odps.NewInstance(odpsIns, defaultProjectName, "20221027160000000001000001")
+	logView := odps.NewLogView(odpsIns)
+	logView.SetJobInsightHost("http://mock.com")
+	url, err := logView.GenerateLogView(instance, 24)
+	if err != nil {
+		t.Error(err)
+	}
+	println(url)
+	expect := "http://mock.com/cn-shanghai/job-insights?h=http%3A%2F%2Fservice.cn-shanghai.maxcompute.aliyun.com%2Fapi&i=20221027160000000001000001&p=go_sdk_regression_testing"
 	if url != expect {
 		t.Errorf("expect %s, but got %s", expect, url)
 	}

@@ -46,7 +46,9 @@ func NewOdps(account account2.Account, endpoint string) *Odps {
 		Options:    *options.NewOdpsOptions(),
 	}
 	if aliyunAccount, ok := account.(*account2.AliyunAccount); ok {
-		ins.Options.RegionId = aliyunAccount.RegionId()
+		if aliyunAccount.RegionId() != "" {
+			ins.Options.RegionId = aliyunAccount.RegionId()
+		}
 	}
 	ins.projects = NewProjects(&ins)
 	return &ins
