@@ -24,26 +24,26 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 )
 
-var bufPool = &sync.Pool{
-	New: func() interface{} {
-		v := make([]byte, 0, 10)
-		return &v
-	},
-}
-
-func releaseToPool(b *[]byte) {
-	*b = (*b)[:0]
-	bufPool.Put(b)
-}
-
 type ProtocStreamWriter struct {
-	inner io.Writer
+	inner   io.Writer
+	bufPool sync.Pool
 }
 
 func NewProtocStreamWriter(w io.Writer) *ProtocStreamWriter {
 	return &ProtocStreamWriter{
 		inner: w,
+		bufPool: sync.Pool{
+			New: func() interface{} {
+				v := make([]byte, 0, 10)
+				return &v
+			},
+		},
 	}
+}
+
+func (r *ProtocStreamWriter) releaseToPool(b *[]byte) {
+	*b = (*b)[:0]
+	r.bufPool.Put(b)
 }
 
 func (r *ProtocStreamWriter) WriteTag(num protowire.Number, typ protowire.Type) error {
@@ -51,26 +51,26 @@ func (r *ProtocStreamWriter) WriteTag(num protowire.Number, typ protowire.Type) 
 }
 
 func (r *ProtocStreamWriter) WriteVarint(v uint64) error {
-	b := bufPool.Get().(*[]byte)
+	b := r.bufPool.Get().(*[]byte)
 	*b = protowire.AppendVarint(*b, v)
 	err := writeFull(r.inner, *b)
-	releaseToPool(b)
+	r.releaseToPool(b)
 	return err
 }
 
 func (r *ProtocStreamWriter) WriteFixed32(val uint32) error {
-	b := bufPool.Get().(*[]byte)
+	b := r.bufPool.Get().(*[]byte)
 	*b = protowire.AppendFixed32(*b, val)
 	err := writeFull(r.inner, *b)
-	releaseToPool(b)
+	r.releaseToPool(b)
 	return err
 }
 
 func (r *ProtocStreamWriter) WriteFixed64(val uint64) error {
-	b := bufPool.Get().(*[]byte)
+	b := r.bufPool.Get().(*[]byte)
 	*b = protowire.AppendFixed64(*b, val)
 	err := writeFull(r.inner, *b)
-	releaseToPool(b)
+	r.releaseToPool(b)
 	return err
 }
 
