@@ -39,6 +39,8 @@ const (
 	ManagedTable TableType = iota
 	VirtualView
 	ExternalTable
+	MaterializedView
+	ObjectTable
 	TableTypeUnknown
 )
 
@@ -888,6 +890,10 @@ func TableTypeFromStr(s string) TableType {
 		return VirtualView
 	case "EXTERNAL_TABLE":
 		return ExternalTable
+	case "MATERIALIZED_VIEW":
+		return MaterializedView
+	case "OBJECT_TABLE":
+		return ObjectTable
 	default:
 		return TableTypeUnknown
 	}
@@ -901,6 +907,10 @@ func (t TableType) String() string {
 		return "VIRTUAL_VIEW"
 	case ExternalTable:
 		return "EXTERNAL_TABLE"
+	case MaterializedView:
+		return "MATERIALIZED_VIEW"
+	case ObjectTable:
+		return "OBJECT_TABLE"
 	default:
 		return "Unknown"
 	}
