@@ -3,7 +3,6 @@ module github.com/aliyun/aliyun-odps-go-sdk
 go 1.15
 
 require (
-	github.com/aliyun/credentials-go v1.3.10
 	github.com/golang/protobuf v1.5.3
 	github.com/golang/snappy v0.0.4
 	github.com/google/flatbuffers v23.5.26+incompatible
