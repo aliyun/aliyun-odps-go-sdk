@@ -41,8 +41,8 @@ type TableSchema struct {
 	HubLifecycle                     int
 	IsExternal                       bool
 	IsMaterializedView               bool
-	IsMaterializedViewRewriteEnabled bool
-	IsMaterializedViewOutdated       bool
+	IsMaterializedViewRewriteEnabled bool `json:"-"`
+	IsMaterializedViewOutdated       bool `json:"-"`
 
 	IsVirtualView    bool
 	LastDDLTime      common.GMTTime
@@ -277,8 +277,10 @@ func (builder *SchemaBuilder) Build() TableSchema {
 func (schema *TableSchema) UnmarshalJSON(data []byte) error {
 	type Alias TableSchema
 	tempSchema := &struct {
-		SerDePropertiesString *string `json:"serDeProperties,omitempty"`
-		MvPropertiesString    *string `json:"mvProperties,omitempty"`
+		SerDePropertiesString                  *string `json:"serDeProperties,omitempty"`
+		MvPropertiesString                     *string `json:"mvProperties,omitempty"`
+		IsMaterializedViewRewriteEnabledString *string `json:"isMaterializedViewRewriteEnabled,omitempty"`
+		IsMaterializedViewOutdatedString       *string `json:"isMaterializedViewOutdated,omitempty"`
 		*Alias
 	}{
 		Alias: (*Alias)(schema),
@@ -298,6 +300,13 @@ func (schema *TableSchema) UnmarshalJSON(data []byte) error {
 			return err
 		}
 	}
+	if tempSchema.IsMaterializedViewRewriteEnabledString != nil {
+		schema.IsMaterializedViewRewriteEnabled = common.StringToBool(*tempSchema.IsMaterializedViewRewriteEnabledString)
+	}
+	if tempSchema.IsMaterializedViewOutdatedString != nil {
+		schema.IsMaterializedViewOutdated = common.StringToBool(*tempSchema.IsMaterializedViewOutdatedString)
+	}
+
 	if tempSchema.Reserved != "" {
 		var reservedData reservedJSON
 		err := json.Unmarshal([]byte(tempSchema.Reserved), &reservedData)
