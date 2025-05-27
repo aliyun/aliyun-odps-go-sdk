@@ -149,7 +149,7 @@ func (c *Config) GenAccount() account2.Account {
 	var account account2.Account
 
 	if c.StsToken == "" {
-		account = account2.NewAliyunAccount(c.AccessId, c.AccessKey)
+		account = account2.NewApsaraAccount(c.AccessId, c.AccessKey)
 	} else {
 		account = account2.NewStsAccount(c.AccessId, c.AccessKey, c.StsToken)
 	}

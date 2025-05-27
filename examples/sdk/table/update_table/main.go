@@ -17,7 +17,7 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	aliAccount := account.NewAliyunAccount(conf.AccessId, conf.AccessKey)
+	aliAccount := account.NewApsaraAccount(conf.AccessId, conf.AccessKey)
 	odpsIns := odps.NewOdps(aliAccount, conf.Endpoint)
 	// Set the Default Maxcompute project used By Odps instance
 	odpsIns.SetDefaultProjectName(conf.ProjectName)

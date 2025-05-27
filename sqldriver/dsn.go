@@ -47,7 +47,7 @@ func ParseDSN(dsn string) (*Config, error) {
 
 	accessId := u.User.Username()
 	if accessId == "" {
-		accessId = os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_ID")
+		accessId = os.Getenv("ACCESS_KEY_ID")
 
 		if accessId == "" {
 			return nil, errors.New("AccessId is not set")
@@ -56,7 +56,7 @@ func ParseDSN(dsn string) (*Config, error) {
 
 	accessKey, _ := u.User.Password()
 	if accessKey == "" {
-		accessKey = os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
+		accessKey = os.Getenv("ACCESS_KEY_SECRET")
 
 		if accessKey == "" {
 			return nil, errors.New("AccessKey is not set")
@@ -96,7 +96,7 @@ func ParseDSN(dsn string) (*Config, error) {
 	}
 
 	if config.StsToken == "" {
-		stsTokenFromEnv := os.Getenv("ALIBABA_CLOUD_SECURITY_TOKEN")
+		stsTokenFromEnv := os.Getenv("SECURITY_TOKEN")
 		if stsTokenFromEnv != "" {
 			config.StsToken = stsTokenFromEnv
 		}

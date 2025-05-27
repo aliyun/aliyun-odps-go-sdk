@@ -11,7 +11,7 @@ import (
 )
 
 func TestBuildCanonicalString(t *testing.T) {
-	acct := NewAliyunAccount("id", "secret")
+	acct := NewApsaraAccount("id", "secret")
 
 	req := &http.Request{
 		Method: "GET",
@@ -41,7 +41,7 @@ func TestBuildCanonicalString(t *testing.T) {
 }
 
 func TestBuildCanonicalResource(t *testing.T) {
-	acct := NewAliyunAccount("id", "secret")
+	acct := NewApsaraAccount("id", "secret")
 
 	tests := []struct {
 		name     string
@@ -96,7 +96,7 @@ func TestBuildCanonicalResource(t *testing.T) {
 }
 
 func TestGenerateSignatureV2(t *testing.T) {
-	acct := NewAliyunAccount("my-access-id", "my-secret-key")
+	acct := NewApsaraAccount("my-access-id", "my-secret-key")
 
 	signature := acct.generateSignatureV2([]byte("testdata"))
 	println(signature)
@@ -114,7 +114,7 @@ func TestSignRequest(t *testing.T) {
 		Header: make(http.Header),
 	}
 
-	acct := NewAliyunAccount("id", "secret")
+	acct := NewApsaraAccount("id", "secret")
 
 	err := acct.SignRequest(req, "https://odps.example.com")
 	assert.NoError(t, err)
@@ -122,12 +122,12 @@ func TestSignRequest(t *testing.T) {
 }
 
 func TestEnvironmentCredentials(t *testing.T) {
-	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "env-id")
-	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "env-secret")
-	t.Setenv("ALIBABA_CLOUD_SECURITY_TOKEN", "token")
+	t.Setenv("ACCESS_KEY_ID", "env-id")
+	t.Setenv("ACCESS_KEY_SECRET", "env-secret")
+	t.Setenv("SECURITY_TOKEN", "token")
 
-	t.Run("AliyunAccountFromEnv", func(t *testing.T) {
-		acct := AliyunAccountFromEnv()
+	t.Run("ApsaraAccountFromEnv", func(t *testing.T) {
+		acct := ApsaraAccountFromEnv()
 		assert.Equal(t, "env-id", acct.AccessId())
 		assert.Equal(t, "env-secret", acct.AccessKey())
 	})
@@ -136,10 +136,8 @@ func TestEnvironmentCredentials(t *testing.T) {
 		acct := AccountFromEnv()
 		stsAcct, ok := acct.(*StsAccount)
 		assert.True(t, ok)
-		credential, err := stsAcct.Credential()
-		assert.NoError(t, err)
-		assert.Equal(t, "env-id", *credential.AccessKeyId)
-		assert.Equal(t, "token", *credential.SecurityToken)
+		assert.Equal(t, "env-id", stsAcct.AccessId())
+		assert.Equal(t, "token", stsAcct.StsToken())
 	})
 }
 
@@ -151,7 +149,7 @@ func TestCanonicalHeaders(t *testing.T) {
 		"Ignored-Header": []string{"value"},
 	}
 
-	acct := NewAliyunAccount("", "")
+	acct := NewApsaraAccount("", "")
 	canonical := acct.buildCanonicalHeaders(headers)
 
 	expected := "x-odps-another:valueA\n" +

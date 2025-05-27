@@ -17,7 +17,7 @@ func main() {
 	}
 
 	// Initialize Odps
-	aliAccount := account.NewAliyunAccount(conf.AccessId, conf.AccessKey)
+	aliAccount := account.NewApsaraAccount(conf.AccessId, conf.AccessKey)
 	odpsIns := odps.NewOdps(aliAccount, conf.Endpoint)
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
 	project := odpsIns.DefaultProject()

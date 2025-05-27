@@ -37,16 +37,12 @@ func Example() {
 
 	if account.GetType() == account2.STS {
 		stsAccount, _ := account.(*account2.StsAccount)
-		credential, err := stsAccount.Credential()
-		if err != nil {
-			log.Fatalf("%+v", err)
-		}
-		config.AccessId = *credential.AccessKeyId
-		config.AccessKey = *credential.AccessKeySecret
-		config.StsToken = *credential.SecurityToken
+		config.AccessId = stsAccount.AccessId()
+		config.AccessKey = stsAccount.AccessKey()
+		config.StsToken = stsAccount.StsToken()
 
 	} else if account.GetType() == account2.Aliyun {
-		akAccount, _ := account.(*account2.AliyunAccount)
+		akAccount, _ := account.(*account2.ApsaraAccount)
 		config.AccessId = akAccount.AccessId()
 		config.AccessKey = akAccount.AccessKey()
 	} else {
@@ -98,15 +94,11 @@ func ExampleStructField() {
 	config.Endpoint = endpoint
 	if account.GetType() == account2.STS {
 		stsAccount, _ := account.(*account2.StsAccount)
-		credential, err := stsAccount.Credential()
-		if err != nil {
-			log.Fatalf("%+v", err)
-		}
-		config.AccessId = *credential.AccessKeyId
-		config.AccessKey = *credential.AccessKeySecret
-		config.StsToken = *credential.SecurityToken
+		config.AccessId = stsAccount.AccessId()
+		config.AccessKey = stsAccount.AccessKey()
+		config.StsToken = stsAccount.StsToken()
 	} else if account.GetType() == account2.Aliyun {
-		akAccount, _ := account.(*account2.AliyunAccount)
+		akAccount, _ := account.(*account2.ApsaraAccount)
 		config.AccessId = akAccount.AccessId()
 		config.AccessKey = akAccount.AccessKey()
 	} else {
@@ -145,15 +137,11 @@ func ExampleInsert() {
 	config.Endpoint = endpoint
 	if account.GetType() == account2.STS {
 		stsAccount, _ := account.(*account2.StsAccount)
-		credential, err := stsAccount.Credential()
-		if err != nil {
-			log.Fatalf("%+v", err)
-		}
-		config.AccessId = *credential.AccessKeyId
-		config.AccessKey = *credential.AccessKeySecret
-		config.StsToken = *credential.SecurityToken
+		config.AccessId = stsAccount.AccessId()
+		config.AccessKey = stsAccount.AccessKey()
+		config.StsToken = stsAccount.StsToken()
 	} else if account.GetType() == account2.Aliyun {
-		akAccount, _ := account.(*account2.AliyunAccount)
+		akAccount, _ := account.(*account2.ApsaraAccount)
 		config.AccessId = akAccount.AccessId()
 		config.AccessKey = akAccount.AccessKey()
 	} else {
@@ -205,15 +193,11 @@ func ExampleCreateTable() {
 	config.Endpoint = endpoint
 	if account.GetType() == account2.STS {
 		stsAccount, _ := account.(*account2.StsAccount)
-		credential, err := stsAccount.Credential()
-		if err != nil {
-			log.Fatalf("%+v", err)
-		}
-		config.AccessId = *credential.AccessKeyId
-		config.AccessKey = *credential.AccessKeySecret
-		config.StsToken = *credential.SecurityToken
+		config.AccessId = stsAccount.AccessId()
+		config.AccessKey = stsAccount.AccessKey()
+		config.StsToken = stsAccount.StsToken()
 	} else if account.GetType() == account2.Aliyun {
-		akAccount, _ := account.(*account2.AliyunAccount)
+		akAccount, _ := account.(*account2.ApsaraAccount)
 		config.AccessId = akAccount.AccessId()
 		config.AccessKey = akAccount.AccessKey()
 	} else {

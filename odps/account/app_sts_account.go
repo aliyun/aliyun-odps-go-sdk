@@ -26,13 +26,13 @@ import (
 
 type AppStsAccount struct {
 	stsToken string
-	AliyunAccount
+	ApsaraAccount
 }
 
 func NewAppStsAccount(accessId, accessKey, stsToken string) *AppStsAccount {
 	return &AppStsAccount{
 		stsToken: stsToken,
-		AliyunAccount: AliyunAccount{
+		ApsaraAccount: ApsaraAccount{
 			accessKey: accessKey,
 			accessId:  accessId,
 		},
@@ -40,7 +40,7 @@ func NewAppStsAccount(accessId, accessKey, stsToken string) *AppStsAccount {
 }
 
 func (account *AppStsAccount) SignRequest(req *http.Request, endpoint string) error {
-	err := account.AliyunAccount.SignRequest(req, endpoint)
+	err := account.ApsaraAccount.SignRequest(req, endpoint)
 	if err != nil {
 		return err
 	}

@@ -24,11 +24,11 @@ import (
 
 type StsAccount struct {
 	stsToken string
-	AliyunAccount
+	ApsaraAccount
 }
 
 func (sp *StsAccount) _signRequest(req *http.Request, endpoint string) error {
-	err := sp.AliyunAccount.SignRequest(req, endpoint)
+	err := sp.ApsaraAccount.SignRequest(req, endpoint)
 	if err != nil {
 		return err
 	}
@@ -38,16 +38,16 @@ func (sp *StsAccount) _signRequest(req *http.Request, endpoint string) error {
 }
 
 func NewStsAccount(accessId, accessKey, securityToken string, regionId ...string) *StsAccount {
-	var aliyunAccount *AliyunAccount
+	var aliyunAccount *ApsaraAccount
 	if len(regionId) > 0 {
-		aliyunAccount = NewAliyunAccount(accessId, accessKey, regionId[0])
+		aliyunAccount = NewApsaraAccount(accessId, accessKey, regionId[0])
 	} else {
-		aliyunAccount = NewAliyunAccount(accessId, accessKey)
+		aliyunAccount = NewApsaraAccount(accessId, accessKey)
 	}
 
 	sp := &StsAccount{
 		stsToken:      securityToken,
-		AliyunAccount: *aliyunAccount,
+		ApsaraAccount: *aliyunAccount,
 	}
 
 	return sp
@@ -59,4 +59,8 @@ func (account *StsAccount) GetType() Provider {
 
 func (account *StsAccount) SignRequest(req *http.Request, endpoint string) error {
 	return account._signRequest(req, endpoint)
+}
+
+func (account *StsAccount) StsToken() string {
+	return account.stsToken
 }

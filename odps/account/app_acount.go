@@ -25,12 +25,12 @@ import (
 )
 
 type AppAccount struct {
-	AliyunAccount
+	ApsaraAccount
 }
 
 func NewAppAccount(accessId string, accessKey string) *AppAccount {
 	return &AppAccount{
-		AliyunAccount{
+		ApsaraAccount{
 			accessId:  accessId,
 			accessKey: accessKey,
 		},
@@ -38,7 +38,7 @@ func NewAppAccount(accessId string, accessKey string) *AppAccount {
 }
 
 func (account *AppAccount) SignRequest(req *http.Request, endpoint string) error {
-	err := account.AliyunAccount.SignRequest(req, endpoint)
+	err := account.ApsaraAccount.SignRequest(req, endpoint)
 	if err != nil {
 		return err
 	}
