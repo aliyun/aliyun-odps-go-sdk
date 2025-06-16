@@ -13,17 +13,17 @@ import (
 )
 
 func TestNewAliyunAccount(t *testing.T) {
-	aliyunAccount := account.NewApsaraAccount("ak", "sk")
-	t.Log(aliyunAccount.AccessId())
-	t.Log(aliyunAccount.AccessKey())
-	t.Log(aliyunAccount.RegionId())
-	t.Log(aliyunAccount.GetType())
+	apsaraAccount := account.NewApsaraAccount("ak", "sk")
+	t.Log(apsaraAccount.AccessId())
+	t.Log(apsaraAccount.AccessKey())
+	t.Log(apsaraAccount.RegionId())
+	t.Log(apsaraAccount.GetType())
 
-	aliyunAccount = account.NewApsaraAccount("ak", "sk", "regionId")
-	t.Log(aliyunAccount.AccessId())
-	t.Log(aliyunAccount.AccessKey())
-	t.Log(aliyunAccount.RegionId())
-	t.Log(aliyunAccount.GetType())
+	apsaraAccount = account.NewApsaraAccount("ak", "sk", "regionId")
+	t.Log(apsaraAccount.AccessId())
+	t.Log(apsaraAccount.AccessKey())
+	t.Log(apsaraAccount.RegionId())
+	t.Log(apsaraAccount.GetType())
 }
 
 func TestSignatureV4(t *testing.T) {
@@ -39,8 +39,8 @@ func TestSignatureV4(t *testing.T) {
 		stsToken = token
 	}
 	endpoint := restclient.LoadEndpointFromEnv()
-	aliyunAccount := account.NewStsAccount(ak, sk, stsToken, "cn-shanghai")
-	odpsIns := odps.NewOdps(aliyunAccount, endpoint)
+	apsaraAccount := account.NewStsAccount(ak, sk, stsToken, "cn-shanghai")
+	odpsIns := odps.NewOdps(apsaraAccount, endpoint)
 	odpsIns.SetDefaultProjectName("go_sdk_regression_testing")
 
 	// ignore AkV4 Test because unrelated env is not ready
@@ -52,8 +52,8 @@ func TestSignatureV4(t *testing.T) {
 }
 
 func TestRegionId(t *testing.T) {
-	aliyunAccount := account.NewApsaraAccount("ak", "sk", "cn-shanghai")
-	odpsIns := odps.NewOdps(aliyunAccount, "endpoint")
+	apsaraAccount := account.NewApsaraAccount("ak", "sk", "cn-shanghai")
+	odpsIns := odps.NewOdps(apsaraAccount, "endpoint")
 
 	region := odpsIns.RegionId()
 	t.Log(region)
@@ -64,14 +64,14 @@ func TestRegionId(t *testing.T) {
 }
 
 func TestCorporation(t *testing.T) {
-	aliyunAccount := account.NewApsaraAccount("ak", "sk", "cn-shanghai")
+	apsaraAccount := account.NewApsaraAccount("ak", "sk", "cn-shanghai")
 	account.SetCorporation("apsara")
 
 	request, err := http.NewRequest("GET", "http://www.mock.com", nil)
 	if err != nil {
 		t.Error(err)
 	}
-	err = aliyunAccount.SignRequest(request, "http://www.mock.com")
+	err = apsaraAccount.SignRequest(request, "http://www.mock.com")
 	if err != nil {
 		t.Error(err)
 	}

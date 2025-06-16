@@ -38,16 +38,16 @@ func (sp *StsAccount) _signRequest(req *http.Request, endpoint string) error {
 }
 
 func NewStsAccount(accessId, accessKey, securityToken string, regionId ...string) *StsAccount {
-	var aliyunAccount *ApsaraAccount
+	var apsaraAccount *ApsaraAccount
 	if len(regionId) > 0 {
-		aliyunAccount = NewApsaraAccount(accessId, accessKey, regionId[0])
+		apsaraAccount = NewApsaraAccount(accessId, accessKey, regionId[0])
 	} else {
-		aliyunAccount = NewApsaraAccount(accessId, accessKey)
+		apsaraAccount = NewApsaraAccount(accessId, accessKey)
 	}
 
 	sp := &StsAccount{
 		stsToken:      securityToken,
-		ApsaraAccount: *aliyunAccount,
+		ApsaraAccount: *apsaraAccount,
 	}
 
 	return sp

@@ -45,9 +45,9 @@ func NewOdps(account account2.Account, endpoint string) *Odps {
 		restClient: restclient.NewOdpsRestClient(account, endpoint),
 		Options:    *options.NewOdpsOptions(),
 	}
-	if aliyunAccount, ok := account.(*account2.ApsaraAccount); ok {
-		if aliyunAccount.RegionId() != "" {
-			ins.Options.RegionId = aliyunAccount.RegionId()
+	if apsaraAccount, ok := account.(*account2.ApsaraAccount); ok {
+		if apsaraAccount.RegionId() != "" {
+			ins.Options.RegionId = apsaraAccount.RegionId()
 		}
 	}
 	ins.projects = NewProjects(&ins)
