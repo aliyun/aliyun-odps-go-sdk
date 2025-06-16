@@ -255,6 +255,27 @@ func (ts *Tables) CreateView(schema tableschema.TableSchema,
 	return errors.WithStack(i.WaitForSuccess())
 }
 
+func (ts *Tables) CreateViewWithHints(schema tableschema.TableSchema,
+	orReplace,
+	createIfNotExists,
+	buildDeferred bool,
+	hints map[string]string,
+) error {
+	sql, err := schema.ToViewSQLString(ts.projectName, ts.schemaName, orReplace, createIfNotExists, buildDeferred)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	task := NewSqlTask("SQLCreateViewTask", sql, hints)
+	instances := NewInstances(ts.odpsIns, ts.projectName)
+
+	i, err := instances.CreateTask(ts.projectName, &task)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	return errors.WithStack(i.WaitForSuccess())
+}
+
 func (ts *Tables) CreateWithDataHub(
 	schema tableschema.TableSchema,
 	createIfNotExists bool,
