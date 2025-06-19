@@ -130,7 +130,7 @@ func (odps *Odps) Instance(instanceId string) *Instance {
 }
 
 func (odps *Odps) LogView() *LogView {
-	return &LogView{odpsIns: odps}
+	return NewLogView(odps)
 }
 
 func (odps *Odps) Tenant() *Tenant {
