@@ -22,6 +22,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/pkg/errors"
 
@@ -112,6 +113,9 @@ func (lv *LogView) getJobInsightHost() *string {
 			return errors.WithStack(err)
 		}
 		result := string(buf)
+		if strings.TrimSpace(result) == "" {
+			return nil
+		}
 		lv.jobInsightHost = &result
 		return nil
 	})
