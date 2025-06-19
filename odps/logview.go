@@ -91,6 +91,9 @@ func (lv *LogView) getLogViewHost() *string {
 			return errors.WithStack(err)
 		}
 		result := string(buf)
+		if strings.TrimSpace(result) == "" {
+			return nil
+		}
 		lv.logViewHost = &result
 		return nil
 	})
