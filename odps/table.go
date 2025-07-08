@@ -333,6 +333,10 @@ func (t *Table) Exists() (bool, error) {
 		return false, err
 	}
 
+	if err != nil {
+		return false, errors.WithStack(err)
+	}
+
 	return true, nil
 }
 
