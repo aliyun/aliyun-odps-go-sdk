@@ -37,7 +37,7 @@ import (
 
 // Todo 请求方法需要重构，加入header参数
 const (
-	DefaultHttpTimeout          = 30
+	DefaultHttpTimeout          = 60
 	DefaultTcpConnectionTimeout = 30
 )
 
