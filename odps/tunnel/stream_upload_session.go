@@ -358,6 +358,9 @@ func (su *StreamUploadSession) newUploadConnection(reader io.ReadCloser, writer 
 	resource := su.ResourceUrl()
 	req, err := su.RestClient.NewRequestWithParamsAndHeaders(common.HttpMethod.PutMethod, resource, reader, queryArgs, headers)
 	if err != nil {
+		// Close the pipe resources if request creation fails to prevent resource leak
+		_ = reader.Close()
+		_ = writer.Close()
 		return nil, errors.WithStack(err)
 	}
 

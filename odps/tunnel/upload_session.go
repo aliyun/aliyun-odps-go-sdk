@@ -403,13 +403,12 @@ func (u *UploadSession) newUploadConnection(blockId int, useArrow bool) (*httpCo
 		queryArgs.Set("partition", u.partitionKey)
 	}
 
-	var reader io.ReadCloser
-	var writer io.WriteCloser
-	reader, writer = io.Pipe()
-
+	reader, writer := io.Pipe()
 	resource := u.ResourceUrl()
 	req, err := u.RestClient.NewRequestWithParamsAndHeaders(common.HttpMethod.PutMethod, resource, reader, queryArgs, headers)
 	if err != nil {
+		// Close the pipe writer if request creation fails to prevent resource leak
+		_ = writer.CloseWithError(err)
 		return nil, errors.WithStack(err)
 	}
 	req.Header.Set(common.HttpHeaderContentType, "application/octet-stream")
@@ -421,6 +420,7 @@ func (u *UploadSession) newUploadConnection(blockId int, useArrow bool) (*httpCo
 	resChan := make(chan resOrErr)
 
 	go func() {
+		defer reader.Close()
 		res, err := u.RestClient.Do(req)
 		resChan <- resOrErr{err: err, res: res}
 	}()
