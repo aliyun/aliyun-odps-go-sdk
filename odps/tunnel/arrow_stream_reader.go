@@ -24,13 +24,6 @@ import (
 
 var ArrowCrcErr = errors.New("crc value error when get a tunnel arrow stream")
 
-type arrowHttpReaderStatus int
-
-const (
-	readToChunkStatus = iota
-	readFromChunkStatus
-)
-
 type ArrowStreamReader struct {
 	inner     io.ReadCloser
 	chunkCrc  Crc32CheckSum
@@ -39,7 +32,6 @@ type ArrowStreamReader struct {
 	chunk     *chunk
 	firstRead bool
 	eof       bool
-	status    arrowHttpReaderStatus
 }
 
 func NewArrowStreamReader(rc io.ReadCloser) *ArrowStreamReader {
@@ -48,13 +40,10 @@ func NewArrowStreamReader(rc io.ReadCloser) *ArrowStreamReader {
 		chunkCrc:  NewCrc32CheckSum(),
 		globalCrc: NewCrc32CheckSum(),
 		firstRead: true,
-		status:    readToChunkStatus,
 	}
 }
 
 func (ar *ArrowStreamReader) ReadChunk() error {
-	ar.status = readFromChunkStatus
-
 	// read chunk size from the first 4 bytes
 	if ar.firstRead {
 		chunkSize, err := ar.readUint32()
@@ -69,6 +58,7 @@ func (ar *ArrowStreamReader) ReadChunk() error {
 
 	// read chunkSize bytes or read to end of inner reader
 	ar.chunk.reset()
+	ar.chunkCrc.Reset()
 	n, err := io.ReadFull(ar.inner, ar.chunk.buf)
 
 	switch err {
@@ -115,27 +105,60 @@ func (ar *ArrowStreamReader) ReadChunk() error {
 	return errors.WithStack(err)
 }
 
+// Read implements the io.Reader interface.
+// It reads data from the underlying stream, which is formatted into custom chunks,
+// and presents it as a single, continuous stream to the caller.
 func (ar *ArrowStreamReader) Read(dst []byte) (int, error) {
-	// read chunkSize bytes or read to end of inner reader
-	if ar.status == readToChunkStatus {
-		err := ar.ReadChunk()
-		if err != nil {
-			return 0, errors.WithStack(err)
+	var totalBytesRead int
+
+	// Loop until the destination buffer 'dst' is full, or the underlying stream is exhausted.
+	for totalBytesRead < len(dst) {
+		// 1. If the internal chunk buffer is empty, try to load the next one.
+		if ar.chunk == nil || ar.chunk.length() == 0 {
+			// If the stream is already marked as finished, we can't load more data.
+			if ar.eof {
+				break
+			}
+
+			// Load the next chunk from the underlying reader.
+			err := ar.ReadChunk()
+			if err != nil {
+				// ReadChunk returns io.EOF to signal it has processed the *last* chunk.
+				// We must still drain this final chunk, so we don't treat io.EOF as an
+				// immediate error here. Any other error, however, is a real failure.
+				if err != io.EOF {
+					// Return bytes read so far along with the terminal error.
+					return totalBytesRead, errors.WithStack(err)
+				}
+			}
 		}
+
+		// 2. Read from the internal chunk buffer into the destination slice.
+		n, err := ar.chunk.Read(dst[totalBytesRead:])
+		// A simple buffer read should not fail, but we handle it just in case.
+		if err != nil && err != io.EOF {
+			return totalBytesRead, errors.WithStack(err)
+		}
+
+		if n > 0 {
+			totalBytesRead += n
+		}
+
+		// If the internal chunk was exhausted (err == io.EOF from ar.chunk.Read),
+		// the loop will continue and trigger the loading of the next chunk at the top.
 	}
 
-	n, err := io.ReadFull(ar.chunk, dst)
-	if err == io.EOF {
-		ar.status = readToChunkStatus
-	} else if err != nil {
-		return n, errors.WithStack(err)
+	// 3. Determine the final return value for this Read call.
+
+	// Only return io.EOF when the stream is fully exhausted (ar.eof is true)
+	// AND this specific Read call cannot provide any new bytes.
+	if ar.eof && totalBytesRead == 0 {
+		return 0, io.EOF
 	}
 
-	if ar.chunk.length() == 0 && ar.eof {
-		return n, io.EOF
-	}
-
-	return n, nil
+	// Otherwise, return the number of bytes read. The caller is expected to
+	// call Read again if it needs more data.
+	return totalBytesRead, nil
 }
 
 func (ar *ArrowStreamReader) Close() error {
