@@ -30,6 +30,18 @@ func TestSchemas_List(t *testing.T) {
 	})
 }
 
+func TestSchemas_ListWithFilter(t *testing.T) {
+	schemas := odps.NewSchemas(odpsIns, defaultProjectName)
+
+	schemas.ListWithFilter(func(schema *odps.Schema, err error) {
+		if err != nil {
+			t.Logf("Error (may be expected): %+v", err)
+			return
+		}
+		t.Logf("Schema name: %s", schema.Name())
+	}, odps.SchemaFilter.NamePrefix("new"))
+}
+
 func TestSchemas_GetSchema(t *testing.T) {
 	schema := odps.NewSchema(odpsIns, defaultProjectName, "exist_schema")
 	err := schema.Load()
