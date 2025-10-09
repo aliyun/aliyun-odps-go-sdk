@@ -36,10 +36,10 @@ go sql/driver 接口的odps实现
 <p>[x] instance</p>
 <p>[x] tunnel</p>
 <p>[x] table tunnel</p>
-<p>    [x] table protoc tunnel</p>
-<p>    [x] table stream tunnel</p>
-<p>[ ] resource</p>
-<p>[ ] function</p>
+<p>[x] table protoc tunnel</p>
+<p>[x] table stream tunnel</p>
+<p>[x] resource</p>
+<p>[x] function</p>
 
 # Examples
 

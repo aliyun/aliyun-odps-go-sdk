@@ -85,7 +85,7 @@ func (sc *Config) Load() error {
 		queryArgs.Set("security_configuration_without_exception_policy", "")
 	}
 
-	err := client.GetWithModel(resource, queryArgs, &sc.model)
+	err := client.GetWithModel(resource, queryArgs, nil, &sc.model)
 	if err != nil {
 		sc.beLoaded = true
 	}

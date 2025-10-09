@@ -32,6 +32,7 @@ type Odps struct {
 	defaultProject string
 	currentSchema  string
 
+	Options    options.OdpsOptions
 	account    account2.Account
 	restClient restclient.RestClient
 	rb         common.ResourceBuilder
@@ -42,10 +43,14 @@ func NewOdps(account account2.Account, endpoint string) *Odps {
 	ins := Odps{
 		account:    account,
 		restClient: restclient.NewOdpsRestClient(account, endpoint),
+		Options:    *options.NewOdpsOptions(),
 	}
-
+	if aliyunAccount, ok := account.(*account2.AliyunAccount); ok {
+		if aliyunAccount.RegionId() != "" {
+			ins.Options.RegionId = aliyunAccount.RegionId()
+		}
+	}
 	ins.projects = NewProjects(&ins)
-
 	return &ins
 }
 
@@ -125,7 +130,22 @@ func (odps *Odps) Instance(instanceId string) *Instance {
 }
 
 func (odps *Odps) LogView() *LogView {
-	return &LogView{odpsIns: odps}
+	return NewLogView(odps)
+}
+
+func (odps *Odps) Tenant() *Tenant {
+	return NewTenant(odps)
+}
+
+func (odps *Odps) RegionId() string {
+	if odps.Options.RegionId == "cn" {
+		defaultProject := odps.DefaultProject()
+		err := defaultProject.Load()
+		if err == nil {
+			odps.Options.RegionId = defaultProject.RegionId()
+		}
+	}
+	return odps.Options.RegionId
 }
 
 func (odps *Odps) ExecSQlWithHints(sql string, hints map[string]string) (*Instance, error) {

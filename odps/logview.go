@@ -22,67 +22,141 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/pkg/errors"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/options"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/security"
 )
 
 const (
-	HostDefault = "https://logview.alibaba-inc.com"
+	LogViewHostDefault    = "https://logview.alibaba-inc.com"
+	JobInsightHostDefault = "https://maxcompute.console.aliyun.com"
 )
 
 type LogView struct {
-	odpsIns     *Odps
-	logViewHost string
+	odpsIns        *Odps
+	logViewHost    *string
+	jobInsightHost *string
+	version        int
 }
 
 func NewLogView(odpsIns *Odps) *LogView {
-	return &LogView{odpsIns: odpsIns}
+	var version int
+	if odpsIns.Options.LogViewVersion == options.Auto {
+		tempIns := &LogView{odpsIns: odpsIns}
+		jobInsightHost := tempIns.getJobInsightHost()
+		if jobInsightHost == nil {
+			version = 1
+		} else {
+			version = 2
+		}
+	} else {
+		version = int(odpsIns.Options.LogViewVersion)
+	}
+	return &LogView{odpsIns: odpsIns, version: version}
 }
 
 func (lv *LogView) LogViewHost() string {
-	if lv.logViewHost != "" {
+	if lv.version == 1 {
+		logViewHost := lv.getLogViewHost()
+		if logViewHost == nil {
+			return LogViewHostDefault
+		} else {
+			return *logViewHost
+		}
+	} else if lv.version == 2 {
+		jobInsightHost := lv.getJobInsightHost()
+		if jobInsightHost == nil {
+			return JobInsightHostDefault
+		} else {
+			return *jobInsightHost
+		}
+	} else {
+		return "Unknown LogView Version " + fmt.Sprint(lv.version)
+	}
+}
+
+func (lv *LogView) getLogViewHost() *string {
+	if lv.logViewHost != nil {
 		return lv.logViewHost
 	}
-
 	client := lv.odpsIns.RestClient()
-
-	err := client.GetWithParseFunc("/logview/host", nil, func(res *http.Response) error {
+	err := client.GetWithParseFunc("/logview/host", nil, nil, func(res *http.Response) error {
 		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
 		buf, err := ioutil.ReadAll(res.Body)
 		if err != nil {
 			return errors.WithStack(err)
 		}
-
-		lv.logViewHost = string(buf)
-
+		result := string(buf)
+		if strings.TrimSpace(result) == "" {
+			return nil
+		}
+		lv.logViewHost = &result
 		return nil
 	})
 	if err != nil {
 		log.Printf("get logview err, %v", err)
-		return HostDefault
+		return nil
 	}
-
-	if lv.logViewHost == "" {
-		return HostDefault
-	}
-
 	return lv.logViewHost
 }
 
+func (lv *LogView) getJobInsightHost() *string {
+	if lv.jobInsightHost != nil {
+		return lv.jobInsightHost
+	}
+	client := lv.odpsIns.RestClient()
+	err := client.GetWithParseFunc("/webconsole/host", nil, nil, func(res *http.Response) error {
+		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
+		buf, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		result := string(buf)
+		if strings.TrimSpace(result) == "" {
+			return nil
+		}
+		lv.jobInsightHost = &result
+		return nil
+	})
+	if err != nil {
+		return nil
+	}
+	return lv.jobInsightHost
+}
+
 func (lv *LogView) SetLogViewHost(logViewHost string) {
-	lv.logViewHost = logViewHost
+	lv.logViewHost = &logViewHost
+}
+
+func (lv *LogView) SetJobInsightHost(jobInsightHost string) {
+	lv.jobInsightHost = &jobInsightHost
 }
 
 func (lv *LogView) GenerateLogView(instance *Instance, hours int) (string, error) {
+	if lv.version == 2 {
+		return lv.generateJobInsight(instance)
+	} else if lv.version == 1 {
+		return lv.generateLogView(instance, hours)
+	} else {
+		return "", errors.New("Unknown LogView Version " + fmt.Sprint(lv.version))
+	}
+}
+
+func (lv *LogView) generateLogView(instance *Instance, hours int) (string, error) {
 	token, err := lv.generateInstanceToken(instance, hours)
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
-
-	logViewHost := lv.LogViewHost()
-
+	var logViewHost string
+	if lv.getLogViewHost() == nil {
+		logViewHost = LogViewHostDefault
+	} else {
+		logViewHost = *lv.getLogViewHost()
+	}
 	logViewUrl, err := url.Parse(logViewHost)
 	if err != nil {
 		return "", errors.WithStack(err)
@@ -98,6 +172,42 @@ func (lv *LogView) GenerateLogView(instance *Instance, hours int) (string, error
 
 	logViewUrl.RawQuery = queryArgs.Encode()
 	return logViewUrl.String(), nil
+}
+
+func (lv *LogView) generateJobInsight(instance *Instance) (string, error) {
+	client := lv.odpsIns.RestClient()
+	var jobInsightHost string
+	if lv.getJobInsightHost() == nil {
+		jobInsightHost = JobInsightHostDefault
+	} else {
+		jobInsightHost = *lv.getJobInsightHost()
+	}
+
+	jobInsightUrl, err := url.Parse(jobInsightHost)
+	if err != nil {
+		return "", errors.WithStack(err)
+	}
+
+	jobInsightUrl.Path = fmt.Sprintf("%s/job-insights", lv.odpsIns.RegionId())
+	queryArgs := jobInsightUrl.Query()
+	queryArgs.Set("h", client.Endpoint())
+	queryArgs.Set("p", instance.ProjectName())
+	queryArgs.Set("i", instance.Id())
+
+	jobInsightUrl.RawQuery = queryArgs.Encode()
+	return jobInsightUrl.String(), nil
+}
+
+// Deprecated: As of Go SDK 0.4.9, this function simply calls [odps.GenerateLogView].
+func (lv *LogView) GenerateLogViewV2(instance *Instance, regionID string) (string, error) {
+	client := lv.odpsIns.RestClient()
+	return fmt.Sprintf("%s/%s/job-insights?h=%s&p=%s&i=%s",
+		JobInsightHostDefault,
+		regionID,
+		client.Endpoint(),
+		instance.ProjectName(),
+		instance.Id(),
+	), nil
 }
 
 func (lv *LogView) generateInstanceToken(instance *Instance, hours int) (string, error) {

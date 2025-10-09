@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/golang/snappy"
+	"github.com/klauspost/compress/zstd"
 	"github.com/pkg/errors"
 )
 
@@ -48,11 +49,24 @@ type snappyWrapper struct {
 	reader *snappy.Reader
 }
 
+type zstdReaderWrapper struct {
+	reader *zstd.Decoder
+}
+
 func (s snappyWrapper) Read(p []byte) (int, error) {
 	return s.reader.Read(p)
 }
 
 func (s snappyWrapper) Close() error {
+	return nil
+}
+
+func (z *zstdReaderWrapper) Read(p []byte) (int, error) {
+	return z.reader.Read(p)
+}
+
+func (z *zstdReaderWrapper) Close() error {
+	z.reader.Close()
 	return nil
 }
 
@@ -70,8 +84,38 @@ func (s SnappyFramed) NewWriter(wc io.WriteCloser) io.WriteCloser {
 	}
 }
 
-type Deflate struct {
-	level int
+type Zstd struct {
+	level zstd.EncoderLevel
+}
+
+const ZstdName = "zstd"
+
+func (z Zstd) Name() string {
+	return ZstdName
+}
+
+func newZstd(level zstd.EncoderLevel) Zstd {
+	return Zstd{level: level}
+}
+
+func defaultZstd() Zstd {
+	return Zstd{level: zstd.SpeedDefault}
+}
+
+func (z Zstd) NewReader(rc io.ReadCloser) io.ReadCloser {
+	reader, _ := zstd.NewReader(rc)
+	return readCloser{
+		readCloser: &zstdReaderWrapper{reader: reader},
+		closer:     rc,
+	}
+}
+
+func (z Zstd) NewWriter(wc io.WriteCloser) io.WriteCloser {
+	writer, _ := zstd.NewWriter(wc, zstd.WithEncoderLevel(z.level))
+	return writeCloser{
+		writeCloser: writer,
+		closer:      wc,
+	}
 }
 
 var DeflateLevel = struct {
@@ -89,6 +133,10 @@ var DeflateLevel = struct {
 }
 
 const DeflateName = "deflate"
+
+type Deflate struct {
+	level int
+}
 
 func (d Deflate) Name() string {
 	return DeflateName
@@ -166,6 +214,8 @@ func WrapByCompressor(rc io.ReadCloser, contentEncoding string) io.ReadCloser {
 		return defaultDeflate().NewReader(rc)
 	case strings.Contains(contentEncoding, SnappyFramedName):
 		return newSnappyFramed().NewReader(rc)
+	case strings.Contains(contentEncoding, ZstdName):
+		return defaultZstd().NewReader(rc)
 	}
 
 	return rc

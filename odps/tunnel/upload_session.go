@@ -72,9 +72,10 @@ type UploadSession struct {
 	Id          string
 	ProjectName string
 	// TODO use schema to get the resource url of a table
-	SchemaName string
-	TableName  string
-	QuotaName  string
+	SchemaName      string
+	TableName       string
+	QuotaName       string
+	CreatePartition bool
 	// The partition keys used by a session can not contain "'", for example, "region=hangzhou" is a
 	// positive case, and "region='hangzhou'" is a negative case. But the partition keys like "region='hangzhou'" are more
 	// common, to avoid the users use the error format, the partitionKey of UploadSession is private, it can be set when
@@ -120,14 +121,15 @@ func CreateUploadSession(
 	cfg := newSessionConfig(opts...)
 
 	session := UploadSession{
-		ProjectName:  projectName,
-		SchemaName:   cfg.SchemaName,
-		TableName:    tableName,
-		QuotaName:    quotaName,
-		partitionKey: cfg.PartitionKey,
-		RestClient:   restClient,
-		Overwrite:    cfg.Overwrite,
-		Compressor:   cfg.Compressor,
+		ProjectName:     projectName,
+		SchemaName:      cfg.SchemaName,
+		TableName:       tableName,
+		QuotaName:       quotaName,
+		partitionKey:    cfg.PartitionKey,
+		RestClient:      restClient,
+		Overwrite:       cfg.Overwrite,
+		Compressor:      cfg.Compressor,
+		CreatePartition: cfg.CreatePartition,
 	}
 
 	req, err := session.newInitiationRequest()
@@ -269,12 +271,15 @@ func (u *UploadSession) Commit(blockIds []int) error {
 		return errors.WithStack(err)
 	}
 
-	Retry(func() error {
+	err = Retry(func() error {
 		res, err := u.RestClient.Do(req)
-		if err == nil {
+		if err != nil {
+			return err
+		}
+		if res.Body != nil {
 			_ = res.Body.Close()
 		}
-		return errors.WithStack(err)
+		return nil
 	})
 
 	return errors.WithStack(err)
@@ -348,8 +353,12 @@ func (u *UploadSession) newInitiationRequest() (*http.Request, error) {
 		queryArgs.Set("partition", u.partitionKey)
 	}
 
+	if u.CreatePartition {
+		queryArgs.Set("create_partition", "true")
+	}
+
 	if u.Overwrite {
-		queryArgs.Set("override", "true")
+		queryArgs.Set("overwrite", "true")
 	}
 
 	if u.QuotaName != "" {
@@ -394,13 +403,12 @@ func (u *UploadSession) newUploadConnection(blockId int, useArrow bool) (*httpCo
 		queryArgs.Set("partition", u.partitionKey)
 	}
 
-	var reader io.ReadCloser
-	var writer io.WriteCloser
-	reader, writer = io.Pipe()
-
+	reader, writer := io.Pipe()
 	resource := u.ResourceUrl()
 	req, err := u.RestClient.NewRequestWithParamsAndHeaders(common.HttpMethod.PutMethod, resource, reader, queryArgs, headers)
 	if err != nil {
+		// Close the pipe writer if request creation fails to prevent resource leak
+		_ = writer.CloseWithError(err)
 		return nil, errors.WithStack(err)
 	}
 	req.Header.Set(common.HttpHeaderContentType, "application/octet-stream")
@@ -412,6 +420,7 @@ func (u *UploadSession) newUploadConnection(blockId int, useArrow bool) (*httpCo
 	resChan := make(chan resOrErr)
 
 	go func() {
+		defer reader.Close()
 		res, err := u.RestClient.Do(req)
 		resChan <- resOrErr{err: err, res: res}
 	}()

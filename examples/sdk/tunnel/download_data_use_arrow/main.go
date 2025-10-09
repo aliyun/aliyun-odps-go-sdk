@@ -44,18 +44,39 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	n := 0
+	totalRows := 0
 	reader.Iterator(func(rec array.Record, err error) {
 		if err != nil {
-			log.Fatalf("%+v", err)
+			log.Fatalf("Read Record Failed: %v", err)
 		}
+		defer rec.Release()
 
-		for i, col := range rec.Columns() {
-			println(fmt.Sprintf("rec[%d][%d]: %v", n, i, col))
+		numRows := int(rec.NumRows())
+		for row := 0; row < numRows; row++ {
+			for colIdx, col := range rec.Columns() {
+				if col.IsNull(row) {
+					fmt.Printf("Row %d, Column %d: NULL\n", row, colIdx)
+				} else {
+					var value interface{}
+					switch arr := col.(type) {
+					case *array.Int32:
+						value = arr.Value(row)
+					case *array.Int64:
+						value = arr.Value(row)
+					case *array.String:
+						value = arr.Value(row)
+					case *array.Boolean:
+						value = arr.Value(row)
+					case *array.Float64:
+						value = arr.Value(row)
+					default:
+						value = "Other Type, Not Implemented in this example."
+					}
+					fmt.Printf("Row %d, Column %d: %v\n", row, colIdx, value)
+				}
+			}
 		}
-
-		rec.Release()
-		n++
+		totalRows += numRows
 	})
 
 	err = reader.Close()

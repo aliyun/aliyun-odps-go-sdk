@@ -39,10 +39,44 @@ func NewSchemas(odpsIns *Odps, projectName string) *Schemas {
 	}
 }
 
+// SchemaFilterFunc is a function that modifies query arguments for filtering
+type SchemaFilterFunc func(url.Values)
+
+// SchemaFilter provides functions for filtering schemas
+var SchemaFilter = struct {
+	// NamePrefix filters schemas with name prefix
+	NamePrefix func(string) SchemaFilterFunc
+	// Owner filters schemas with owner name
+	Owner func(string) SchemaFilterFunc
+}{
+	NamePrefix: func(name string) SchemaFilterFunc {
+		return func(values url.Values) {
+			values.Set("name", name)
+		}
+	},
+	Owner: func(owner string) SchemaFilterFunc {
+		return func(values url.Values) {
+			values.Set("owner", owner)
+		}
+	},
+}
+
 // List get all the schemas
 func (ss *Schemas) List(f func(*Schema, error)) error {
+	return ss.ListWithFilter(f)
+}
+
+// ListWithFilter get all the schemas with filter support
+func (ss *Schemas) ListWithFilter(f func(*Schema, error), filters ...SchemaFilterFunc) error {
 	queryArgs := make(url.Values, 4)
 	queryArgs.Set("expectmarker", "true")
+
+	// Apply filters
+	for _, filter := range filters {
+		if filter != nil {
+			filter(queryArgs)
+		}
+	}
 
 	rb := common.ResourceBuilder{ProjectName: ss.projectName}
 	resource := rb.Schemas()
@@ -57,7 +91,7 @@ func (ss *Schemas) List(f func(*Schema, error)) error {
 
 	var resModel ResModel
 	for {
-		err := client.GetWithModel(resource, queryArgs, &resModel)
+		err := client.GetWithModel(resource, queryArgs, nil, &resModel)
 		if err != nil {
 			f(nil, err)
 			return err

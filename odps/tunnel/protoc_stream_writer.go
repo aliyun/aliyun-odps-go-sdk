@@ -17,21 +17,33 @@
 package tunnel
 
 import (
-	"bytes"
 	"io"
 	"math"
+	"sync"
 
 	"google.golang.org/protobuf/encoding/protowire"
 )
 
 type ProtocStreamWriter struct {
-	inner io.Writer
+	inner   io.Writer
+	bufPool sync.Pool
 }
 
 func NewProtocStreamWriter(w io.Writer) *ProtocStreamWriter {
 	return &ProtocStreamWriter{
 		inner: w,
+		bufPool: sync.Pool{
+			New: func() interface{} {
+				v := make([]byte, 0, 10)
+				return &v
+			},
+		},
 	}
+}
+
+func (r *ProtocStreamWriter) releaseToPool(b *[]byte) {
+	*b = (*b)[:0]
+	r.bufPool.Put(b)
 }
 
 func (r *ProtocStreamWriter) WriteTag(num protowire.Number, typ protowire.Type) error {
@@ -39,34 +51,46 @@ func (r *ProtocStreamWriter) WriteTag(num protowire.Number, typ protowire.Type) 
 }
 
 func (r *ProtocStreamWriter) WriteVarint(v uint64) error {
-	b := make([]byte, 0, 1)
-	b = protowire.AppendVarint(b, v)
-	_, err := io.Copy(r.inner, bytes.NewReader(b))
+	b := r.bufPool.Get().(*[]byte)
+	*b = protowire.AppendVarint(*b, v)
+	err := writeFull(r.inner, *b)
+	r.releaseToPool(b)
 	return err
 }
 
 func (r *ProtocStreamWriter) WriteFixed32(val uint32) error {
-	b := make([]byte, 0, 4)
-	b = protowire.AppendFixed32(b, val)
-	_, err := io.Copy(r.inner, bytes.NewReader(b))
+	b := r.bufPool.Get().(*[]byte)
+	*b = protowire.AppendFixed32(*b, val)
+	err := writeFull(r.inner, *b)
+	r.releaseToPool(b)
 	return err
 }
 
 func (r *ProtocStreamWriter) WriteFixed64(val uint64) error {
-	b := make([]byte, 0, 8)
-	b = protowire.AppendFixed64(b, val)
-	_, err := io.Copy(r.inner, bytes.NewReader(b))
+	b := r.bufPool.Get().(*[]byte)
+	*b = protowire.AppendFixed64(*b, val)
+	err := writeFull(r.inner, *b)
+	r.releaseToPool(b)
 	return err
 }
 
-func (r *ProtocStreamWriter) WriteBytes(b []byte) error {
-	err := r.WriteVarint(uint64(len(b)))
-	if err != nil {
+func (r *ProtocStreamWriter) WriteBytes(data []byte) error {
+	if err := r.WriteVarint(uint64(len(data))); err != nil {
 		return err
 	}
-
-	_, err = io.Copy(r.inner, bytes.NewReader(b))
+	err := writeFull(r.inner, data)
 	return err
+}
+
+func writeFull(w io.Writer, data []byte) error {
+	for len(data) > 0 {
+		n, err := w.Write(data)
+		if err != nil {
+			return err
+		}
+		data = data[n:]
+	}
+	return nil
 }
 
 func (r *ProtocStreamWriter) WriteBool(val bool) error {

@@ -130,7 +130,7 @@ func (r *Resource) Load() error {
 		queryArgs.Set("curr_schema", r.SchemaName())
 	}
 	queryArgs.Set("meta", "")
-	err := client.GetWithParseFunc(resource, queryArgs, func(res *http.Response) error {
+	err := client.GetWithParseFunc(resource, queryArgs, nil, func(res *http.Response) error {
 		header := res.Header
 		r.Model.SchemaName = header.Get(common.HttpHeaderOdpsSchemaName)
 		r.Model.Name = header.Get(common.HttpHeaderOdpsResourceName)

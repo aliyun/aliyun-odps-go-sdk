@@ -155,7 +155,7 @@ func (s *Schema) Load() error {
 
 		return errors.WithStack(err)
 	}
-	err := client.GetWithParseFunc(resource, nil, parseFunc)
+	err := client.GetWithParseFunc(resource, nil, nil, parseFunc)
 	return errors.WithStack(err)
 }
 

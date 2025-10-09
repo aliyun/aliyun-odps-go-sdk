@@ -32,6 +32,7 @@ var (
 	tunnelIns   *tunnel.Tunnel
 	odpsIns     *odps.Odps
 	ProjectName = "go_sdk_regression_testing"
+	SchemaName  = "tunnel"
 )
 
 func init() {

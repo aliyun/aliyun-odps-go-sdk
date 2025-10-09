@@ -113,7 +113,7 @@ func (sm *Manager) CheckPermissionV0(
 	}
 
 	var resModel ResModel
-	err := client.GetWithModel(resource, queryArgs, &resModel)
+	err := client.GetWithModel(resource, queryArgs, nil, &resModel)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -127,7 +127,7 @@ func (sm *Manager) getPolicy(resource, policyType string) ([]byte, error) {
 	client := sm.restClient
 	var body []byte
 
-	err := client.GetWithParseFunc(resource, queryArgs, func(res *http.Response) error {
+	err := client.GetWithParseFunc(resource, queryArgs, nil, func(res *http.Response) error {
 		var err error
 		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
 		body, err = ioutil.ReadAll(res.Body)
@@ -195,7 +195,7 @@ func (sm *Manager) ListUsers() ([]User, error) {
 
 	var resModel ResModel
 
-	err := client.GetWithModel(resource, nil, &resModel)
+	err := client.GetWithModel(resource, nil, nil, &resModel)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -222,7 +222,7 @@ func (sm *Manager) ListRoles() ([]Role, error) {
 
 	var resModel ResModel
 
-	err := client.GetWithModel(resource, nil, &resModel)
+	err := client.GetWithModel(resource, nil, nil, &resModel)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -254,7 +254,7 @@ func (sm *Manager) listRolesForUser(userIdOrName, _type string) ([]Role, error) 
 
 	var resModel ResModel
 
-	err := client.GetWithModel(resource, nil, &resModel)
+	err := client.GetWithModel(resource, nil, nil, &resModel)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -292,7 +292,7 @@ func (sm *Manager) ListUsersForRole(roleName string) ([]User, error) {
 
 	var resModel ResModel
 
-	err := client.GetWithModel(resource, queryArgs, &resModel)
+	err := client.GetWithModel(resource, queryArgs, nil, &resModel)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -344,10 +344,6 @@ func (sm *Manager) Run(query string, jsonOutput bool, supervisionToken string) (
 	}
 
 	err := client.DoXmlWithParseRes(common.HttpMethod.PostMethod, resource, nil, nil, reqBody, func(res *http.Response) error {
-		if res.StatusCode < 200 || res.StatusCode >= 300 {
-			return errors.WithStack(restclient.NewHttpNotOk(res))
-		}
-
 		isAsync = res.StatusCode != 200
 		decoder := xml.NewDecoder(res.Body)
 		return errors.WithStack(decoder.Decode(&resModel))

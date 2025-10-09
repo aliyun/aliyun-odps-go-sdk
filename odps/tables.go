@@ -77,7 +77,7 @@ func (ts *Tables) List(f func(*Table, error), filters ...TFilterFunc) {
 
 	var resModel ResModel
 	for {
-		err := client.GetWithModel(resource, queryArgs, &resModel)
+		err := client.GetWithModel(resource, queryArgs, nil, &resModel)
 		if err != nil {
 			f(nil, err)
 			break
@@ -246,6 +246,27 @@ func (ts *Tables) CreateView(schema tableschema.TableSchema,
 	}
 
 	task := NewSqlTask("SQLCreateViewTask", sql, nil)
+	instances := NewInstances(ts.odpsIns, ts.projectName)
+
+	i, err := instances.CreateTask(ts.projectName, &task)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	return errors.WithStack(i.WaitForSuccess())
+}
+
+func (ts *Tables) CreateViewWithHints(schema tableschema.TableSchema,
+	orReplace,
+	createIfNotExists,
+	buildDeferred bool,
+	hints map[string]string,
+) error {
+	sql, err := schema.ToViewSQLString(ts.projectName, ts.schemaName, orReplace, createIfNotExists, buildDeferred)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	task := NewSqlTask("SQLCreateViewTask", sql, hints)
 	instances := NewInstances(ts.odpsIns, ts.projectName)
 
 	i, err := instances.CreateTask(ts.projectName, &task)

@@ -18,24 +18,43 @@ package account
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
+var corporation = "aliyun"
+
+func SetCorporation(corp string) {
+	corporation = corp
+}
+
 type AliyunAccount struct {
 	accessId  string
 	accessKey string
+	regionId  string
 }
 
-func NewAliyunAccount(accessId string, accessKey string) *AliyunAccount {
-	return &AliyunAccount{
-		accessId:  accessId,
-		accessKey: accessKey,
+func NewAliyunAccount(accessId string, accessKey string, regionId ...string) *AliyunAccount {
+	if len(regionId) > 0 {
+		return &AliyunAccount{
+			accessId:  accessId,
+			accessKey: accessKey,
+			regionId:  regionId[0],
+		}
+	} else {
+		return &AliyunAccount{
+			accessId:  accessId,
+			accessKey: accessKey,
+		}
 	}
 }
 
@@ -75,18 +94,37 @@ func (account *AliyunAccount) AccessKey() string {
 	return account.accessKey
 }
 
+func (account *AliyunAccount) RegionId() string {
+	return account.regionId
+}
+
 func (account *AliyunAccount) GetType() Provider {
 	return Aliyun
 }
 
 func (account *AliyunAccount) SignRequest(req *http.Request, endpoint string) error {
+	canonicalString := account.buildCanonicalString(req, endpoint)
+	// Generate signature
+	var signature string
+	if account.regionId == "" {
+		signature = account.generateSignatureV2(canonicalString.Bytes())
+	} else {
+		signature = account.generateSignatureV4(canonicalString.Bytes(), account.regionId)
+	}
+	// Set authorization header
+	req.Header.Set(common.HttpHeaderAuthorization, signature)
+	return nil
+}
+
+// buildCanonicalString constructs canonical string for ODPS signature
+func (account *AliyunAccount) buildCanonicalString(req *http.Request, endpoint string) bytes.Buffer {
 	var msg bytes.Buffer
 
-	// write verb
+	// Write HTTP method
 	msg.WriteString(req.Method)
 	msg.WriteByte('\n')
 
-	// write common header
+	// Write standard headers
 	msg.WriteString(req.Header.Get(common.HttpHeaderContentMD5))
 	msg.WriteByte('\n')
 	msg.WriteString(req.Header.Get(common.HttpHeaderContentType))
@@ -94,72 +132,103 @@ func (account *AliyunAccount) SignRequest(req *http.Request, endpoint string) er
 	msg.WriteString(req.Header.Get(common.HttpHeaderDate))
 	msg.WriteByte('\n')
 
-	// build canonical header
+	// Write canonical headers
+	msg.WriteString(account.buildCanonicalHeaders(req.Header))
+
+	// Write canonical resource
+	msg.WriteString(account.buildCanonicalResource(req, endpoint))
+	return msg
+}
+
+// buildCanonicalHeaders constructs canonical headers for ODPS signature
+func (account *AliyunAccount) buildCanonicalHeaders(headers http.Header) string {
+	var headerBuf bytes.Buffer
 	var canonicalHeaderKeys []string
 
-	for key := range req.Header {
-		if strings.HasPrefix(strings.ToLower(key), common.HttpHeaderOdpsPrefix) {
-			canonicalHeaderKeys = append(canonicalHeaderKeys, key)
+	// Collect ODPS-specific headers
+	for key := range headers {
+		lowerKey := strings.ToLower(key)
+		if strings.HasPrefix(lowerKey, common.HttpHeaderOdpsPrefix) {
+			canonicalHeaderKeys = append(canonicalHeaderKeys, lowerKey)
 		}
 	}
-
+	// Sort and write headers
 	sort.Strings(canonicalHeaderKeys)
-
 	for _, key := range canonicalHeaderKeys {
-		msg.WriteString(strings.ToLower(key))
-		msg.WriteByte(':')
-		msg.WriteString(strings.Join(req.Header[key], ","))
-		msg.WriteByte('\n')
+		headerBuf.WriteString(key)
+		headerBuf.WriteByte(':')
+		headerBuf.WriteString(strings.Join(headers.Values(key), ","))
+		headerBuf.WriteByte('\n')
 	}
+	return headerBuf.String()
+}
 
-	// build canonical resource
-	var canonicalResource bytes.Buffer
-	endpointSeg, _ := url.Parse(endpoint)
-	basePath := endpointSeg.Path
+// buildCanonicalResource constructs canonical resource path for ODPS signature
+func (account *AliyunAccount) buildCanonicalResource(req *http.Request, endpoint string) string {
+	var resBuf bytes.Buffer
+	parsedEndpoint, _ := url.Parse(endpoint)
+	basePath := parsedEndpoint.Path
+
+	// Handle path normalization
 	if strings.HasPrefix(req.URL.Path, basePath) {
-		canonicalResource.WriteString(req.URL.Path[len(endpointSeg.Path):])
+		resBuf.WriteString(req.URL.Path[len(basePath):])
 	} else {
-		canonicalResource.WriteString(req.URL.Path)
+		resBuf.WriteString(req.URL.Path)
 	}
 
-	if urlParams := req.URL.Query(); len(urlParams) > 0 {
-		canonicalResource.WriteByte('?')
-
-		var paramKeys []string
-
-		for k := range urlParams {
+	// Handle query parameters
+	queryParams := req.URL.Query()
+	if len(queryParams) > 0 {
+		resBuf.WriteByte('?')
+		paramKeys := make([]string, 0, len(queryParams))
+		for k := range queryParams {
 			paramKeys = append(paramKeys, k)
 		}
-
 		sort.Strings(paramKeys)
 
-		for i, k := range paramKeys {
+		for i, key := range paramKeys {
 			if i > 0 {
-				canonicalResource.WriteByte('&')
+				resBuf.WriteByte('&')
 			}
-
-			canonicalResource.WriteString(k)
-
-			if v := urlParams.Get(k); v != "" {
-				canonicalResource.WriteByte('=')
-				canonicalResource.WriteString(v)
+			resBuf.WriteString(key)
+			if value := queryParams.Get(key); value != "" {
+				resBuf.WriteByte('=')
+				resBuf.WriteString(value)
 			}
 		}
 	}
 
-	msg.Write(canonicalResource.Bytes())
+	return resBuf.String()
+}
 
-	// signature = base64(HMacSha1(msg))
-	_signature := base64HmacSha1([]byte(account.accessKey), msg.Bytes())
+// generateSignature creates the final authorization signature V2
+func (account *AliyunAccount) generateSignatureV2(data []byte) string {
+	signature := base64HmacSha1([]byte(account.accessKey), data)
+	var authBuf bytes.Buffer
+	authBuf.WriteString("ODPS ")
+	authBuf.WriteString(account.accessId)
+	authBuf.WriteByte(':')
+	authBuf.WriteString(signature)
+	return authBuf.String()
+}
 
-	// Set header: "Authorization: ODPS" + AccessID + ":" + Signature
-	var signature bytes.Buffer
-	signature.WriteString("ODPS ")
-	signature.WriteString(account.accessId)
-	signature.WriteByte(':')
-	signature.WriteString(_signature)
+// hmacsha256 executes HMAC-SHA256 signatures
+func hmacsha256(key, data []byte) []byte {
+	h := hmac.New(sha256.New, key)
+	h.Write(data)
+	return h.Sum(nil)
+}
 
-	req.Header.Set(common.HttpHeaderAuthorization, signature.String())
+// generateSignature creates the final authorization signature V4
+func (account *AliyunAccount) generateSignatureV4(data []byte, regionName string) string {
+	currentDate := time.Now().UTC().Format("20060102")
+	credential := fmt.Sprintf("%s/%s/%s/odps/%s_v4_request", account.accessId, currentDate, regionName, corporation)
 
-	return nil
+	kSecret := []byte(corporation + "_v4" + account.accessKey)
+	kDate := hmacsha256(kSecret, []byte(currentDate))
+	kRegion := hmacsha256(kDate, []byte(regionName))
+	kService := hmacsha256(kRegion, []byte("odps"))
+	signatureKey := hmacsha256(kService, []byte(corporation+"_v4_request"))
+	signature := base64HmacSha1(signatureKey, data)
+	return "ODPS " + credential + ":" + signature
 }

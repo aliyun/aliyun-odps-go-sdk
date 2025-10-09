@@ -16,12 +16,29 @@
 
 package common
 
-import "time"
+import (
+	"fmt"
+	"runtime"
+	"strings"
+	"time"
+)
 
 const (
-	UserAgentValue       = "odps-go-sdk/0.0.1 Go/1.17.2"
 	HttpHeaderOdpsPrefix = "x-odps-"
 )
+
+var SDKVersion = "0.4.x"
+
+func init() {
+	UserAgentValue = fmt.Sprintf("odps-go-sdk/%s Go/%s (%s; %s)",
+		SDKVersion,
+		strings.TrimPrefix(runtime.Version(), "go"),
+		runtime.GOOS,
+		runtime.GOARCH,
+	)
+}
+
+var UserAgentValue string
 
 var HttpMethod = struct {
 	GetMethod    string
@@ -40,7 +57,7 @@ var GMT, _ = time.LoadLocation("GMT")
 const (
 	HttpHeaderDate                          = "Date"
 	HttpHeaderContentType                   = "Content-Type"
-	HttpHeaderContentMD5                    = "Content-MD5"
+	HttpHeaderContentMD5                    = "Content-Md5"
 	HttpHeaderContentDisposition            = "Content-Disposition"
 	HttpHeaderContentLength                 = "Content-Length"
 	HttpHeaderContentEncoding               = "Content-Encoding"
@@ -79,6 +96,8 @@ const (
 	HttpHeaderOdpsCopyFileSource            = "x-odps-copy-file-source"
 	HttpHeaderOdpsResourceIsTemp            = "x-odps-resource-istemp"
 	HttpHeaderOdpsResourceMergeTotalBytes   = "x-odps-resource-merge-total-bytes"
+	HttpHeaderMaxQAQueryCookie              = "x-odps-mcqa-query-cookie"
+	HttpHeaderMaxQASessionID                = "x-odps-mcqa-conn"
 
 	XMLContentType = "application/xml"
 )

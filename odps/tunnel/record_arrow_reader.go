@@ -70,6 +70,9 @@ func (r *RecordArrowReader) Iterator(f func(array.Record, error)) {
 
 func (r *RecordArrowReader) Read() (array.Record, error) {
 	record, err := r.recordBatchReader.Read()
+	if err == io.EOF {
+		return nil, err
+	}
 	return record, errors.WithStack(err)
 }
 

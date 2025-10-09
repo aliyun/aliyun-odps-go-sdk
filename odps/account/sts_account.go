@@ -63,6 +63,7 @@ func (sp *stsStringProvider) Credential() (*credentials.CredentialModel, error) 
 
 type stsAliyunCredentialProvider struct {
 	aliyunCredential credentials.Credential
+	regionId         string
 }
 
 func (sp *stsAliyunCredentialProvider) _signRequest(req *http.Request, endpoint string) error {
@@ -71,7 +72,7 @@ func (sp *stsAliyunCredentialProvider) _signRequest(req *http.Request, endpoint 
 		return err
 	}
 
-	aliyunAccount := NewAliyunAccount(*cred.AccessKeyId, *cred.AccessKeySecret)
+	aliyunAccount := NewAliyunAccount(*cred.AccessKeyId, *cred.AccessKeySecret, sp.regionId)
 	err = aliyunAccount.SignRequest(req, endpoint)
 	if err != nil {
 		return err
@@ -88,6 +89,7 @@ func (sp *stsAliyunCredentialProvider) Credential() (*credentials.CredentialMode
 
 type stsCustomCredentialProvider struct {
 	provider CredentialProvider
+	regionId string
 }
 
 func (sp *stsCustomCredentialProvider) _signRequest(req *http.Request, endpoint string) error {
@@ -96,7 +98,7 @@ func (sp *stsCustomCredentialProvider) _signRequest(req *http.Request, endpoint 
 		return err
 	}
 
-	aliyunAccount := NewAliyunAccount(*cred.AccessKeyId, *cred.AccessKeySecret)
+	aliyunAccount := NewAliyunAccount(*cred.AccessKeyId, *cred.AccessKeySecret, sp.regionId)
 	err = aliyunAccount.SignRequest(req, endpoint)
 	if err != nil {
 		return err
@@ -111,13 +113,17 @@ func (sp *stsCustomCredentialProvider) Credential() (*credentials.CredentialMode
 	return sp.provider.GetCredential()
 }
 
-func NewStsAccount(accessId, accessKey, securityToken string) *StsAccount {
+func NewStsAccount(accessId, accessKey, securityToken string, regionId ...string) *StsAccount {
+	var aliyunAccount *AliyunAccount
+	if len(regionId) > 0 {
+		aliyunAccount = NewAliyunAccount(accessId, accessKey, regionId[0])
+	} else {
+		aliyunAccount = NewAliyunAccount(accessId, accessKey)
+	}
+
 	sp := &stsStringProvider{
-		stsToken: securityToken,
-		AliyunAccount: AliyunAccount{
-			accessKey: accessKey,
-			accessId:  accessId,
-		},
+		stsToken:      securityToken,
+		AliyunAccount: *aliyunAccount,
 	}
 
 	return &StsAccount{
@@ -125,21 +131,35 @@ func NewStsAccount(accessId, accessKey, securityToken string) *StsAccount {
 	}
 }
 
-func NewStsAccountWithCredential(aliyunCredential credentials.Credential) *StsAccount {
-	sp := &stsAliyunCredentialProvider{
-		aliyunCredential: aliyunCredential,
+func NewStsAccountWithCredential(aliyunCredential credentials.Credential, regionId ...string) *StsAccount {
+	var sp *stsAliyunCredentialProvider
+	if len(regionId) > 0 {
+		sp = &stsAliyunCredentialProvider{
+			aliyunCredential: aliyunCredential,
+			regionId:         regionId[0],
+		}
+	} else {
+		sp = &stsAliyunCredentialProvider{
+			aliyunCredential: aliyunCredential,
+		}
 	}
-
 	return &StsAccount{
 		sp: sp,
 	}
 }
 
-func NewStsAccountWithProvider(provider CredentialProvider) *StsAccount {
-	sp := &stsCustomCredentialProvider{
-		provider: provider,
+func NewStsAccountWithProvider(provider CredentialProvider, regionId ...string) *StsAccount {
+	var sp *stsCustomCredentialProvider
+	if len(regionId) > 0 {
+		sp = &stsCustomCredentialProvider{
+			provider: provider,
+			regionId: regionId[0],
+		}
+	} else {
+		sp = &stsCustomCredentialProvider{
+			provider: provider,
+		}
 	}
-
 	return &StsAccount{
 		sp: sp,
 	}

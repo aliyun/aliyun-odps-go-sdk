@@ -51,7 +51,7 @@ func (ai *AuthQueryInstance) WaitForSuccess() (string, error) {
 	var resModel ResModel
 
 	for {
-		err := client.GetWithModel(authResource, nil, &resModel)
+		err := client.GetWithModel(authResource, nil, nil, &resModel)
 		if err != nil {
 			return "", err
 		}

@@ -148,7 +148,7 @@ func (p *Partition) Load() error {
 	}
 
 	var resModel ResModel
-	err := client.GetWithModel(resource, queryArgs, &resModel)
+	err := client.GetWithModel(resource, queryArgs, nil, &resModel)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -188,7 +188,7 @@ func (p *Partition) LoadExtended() error {
 	}
 
 	var resModel ResModel
-	err := client.GetWithModel(resource, queryArgs, &resModel)
+	err := client.GetWithModel(resource, queryArgs, nil, &resModel)
 	if err != nil {
 		return errors.WithStack(err)
 	}

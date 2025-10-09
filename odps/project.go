@@ -78,6 +78,8 @@ type projectModel struct {
 	DefaultCluster     string            `xml:"DefaultCluster"`
 	Clusters           []Cluster         `xml:"Clusters"`
 	ExtendedProperties []common.Property `xml:"ExtendedProperties>Property"`
+	TenantId           string            `xml:"TenantId"`
+	RegionId           string            `xml:"Region"`
 	// 这三个字段在/projects中和/projects/<ProjectName>接口中返回的未知不一样,
 	// 前者是body的xml数据中，后者在header里
 	Owner            string         `xml:"Owner"`
@@ -146,23 +148,27 @@ func (p *Project) _loadFromOdps(params optionalParams) (*projectModel, error) {
 		header := res.Header
 		model.Owner = header.Get(common.HttpHeaderOdpsOwner)
 
-		creationTime, err := common.ParseRFC1123Date(header.Get(common.HttpHeaderOdpsCreationTime))
-		if err != nil {
-			log.Printf("/project get creation time error, %v", err)
+		createTimeStr := header.Get(common.HttpHeaderOdpsCreationTime)
+		if createTimeStr != "" {
+			creationTime, err := common.ParseRFC1123Date(createTimeStr)
+			if err != nil {
+				log.Printf("/project get creation time error, %v", err)
+			}
+			model.CreationTime = common.GMTTime(creationTime)
 		}
 
-		lastModifiedTime, _ := common.ParseRFC1123Date(header.Get(common.HttpHeaderLastModified))
-		if err != nil {
-			log.Printf("/project get last modified time error, %v", err)
+		lastModifiedTimeStr := header.Get(common.HttpHeaderLastModified)
+		if lastModifiedTimeStr != "" {
+			lastModifiedTime, err := common.ParseRFC1123Date(lastModifiedTimeStr)
+			if err != nil {
+				log.Printf("/project get last modified time error, %v", err)
+			}
+			model.LastModifiedTime = common.GMTTime(lastModifiedTime)
 		}
-
-		model.CreationTime = common.GMTTime(creationTime)
-		model.LastModifiedTime = common.GMTTime(lastModifiedTime)
-
 		return nil
 	}
 
-	if err := client.GetWithParseFunc(resource, urlQuery, parseFunc); err != nil {
+	if err := client.GetWithParseFunc(resource, urlQuery, nil, parseFunc); err != nil {
 		return nil, errors.WithStack(err)
 	}
 
@@ -214,9 +220,19 @@ func (p *Project) ProjectGroupName() string {
 	return p.model.ProjectGroupName
 }
 
+// TenantId get project owner's tenant id
+func (p *Project) TenantId() string {
+	return p.model.TenantId
+}
+
 // PropertiesHasBeSet Properties get the properties those have be set for the project
 func (p *Project) PropertiesHasBeSet() common.Properties {
 	return p.model.Properties
+}
+
+// RegionId get project region id
+func (p *Project) RegionId() string {
+	return p.model.RegionId
 }
 
 // GetAllProperties get all the configurable properties of the project, including the

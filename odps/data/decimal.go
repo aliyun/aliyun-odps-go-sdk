@@ -99,8 +99,8 @@ func DecimalFromStr(value string) (*Decimal, error) {
 		d.scale = len(parts[1])
 	}
 
-	if d.scale > 18 {
-		return nil, errors.New("fractional is too long, which is longer than 18")
+	if d.scale > 38 {
+		return nil, errors.New("fractional is too long, which is longer than 38")
 	}
 
 	d.value = value

@@ -136,13 +136,11 @@ func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error) {
 	case datatype.DATE:
 		return arrow.FixedWidthTypes.Date32, nil
 	case datatype.DATETIME:
-		return arrow.FixedWidthTypes.Timestamp_ns, nil
-		// return &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "UTC"}, nil
+		return arrow.FixedWidthTypes.Timestamp_ms, nil
 	case datatype.TIMESTAMP:
 		return arrow.FixedWidthTypes.Timestamp_ns, nil
 	case datatype.TIMESTAMP_NTZ:
 		return arrow.FixedWidthTypes.Timestamp_ns, nil
-		// return &arrow.TimestampType{Unit: arrow.Millisecond, TimeZone: "UTC"}, nil
 	case datatype.IntervalDayTime:
 		return arrow.FixedWidthTypes.DayTimeInterval, nil
 	case datatype.IntervalYearMonth:

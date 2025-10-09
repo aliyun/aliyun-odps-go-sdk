@@ -22,6 +22,8 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 )
@@ -32,6 +34,7 @@ type RecordPackStreamWriter struct {
 	flushing     bool
 	buffer       *bytes.Buffer
 	recordCount  int64
+	appendErr    error
 }
 
 func newRecordStreamHttpWriter(session *StreamUploadSession) RecordPackStreamWriter {
@@ -46,17 +49,21 @@ func newRecordStreamHttpWriter(session *StreamUploadSession) RecordPackStreamWri
 
 func (rsw *RecordPackStreamWriter) Append(record data.Record) error {
 	if rsw.flushing {
-		return errors.New("There's an unsuccessful flush called, you should call flush to retry or call reset to drop the data")
+		rsw.appendErr = errors.New("There's an unsuccessful flush called, you should call flush to retry or call reset to drop the data")
+		return rsw.appendErr
 	}
 	if !rsw.session.allowSchemaMismatch {
 		err := checkIfRecordSchemaMatchSessionSchema(&record, rsw.session.schema.Columns)
 		if err != nil {
+			rsw.appendErr = err
 			return errors.WithStack(err)
 		}
 	}
 	err := rsw.protocWriter.Write(record)
 	if err == nil {
 		rsw.recordCount += 1
+	} else {
+		rsw.appendErr = err
 	}
 
 	return errors.WithStack(err)
@@ -69,7 +76,7 @@ func checkIfRecordSchemaMatchSessionSchema(record *data.Record, schema []tablesc
 	}
 	for index, recordData := range *record {
 		colType := schema[index].Type.ID()
-		if recordData != nil && recordData.Type().ID() != colType {
+		if recordData != nil && recordData.Type() != datatype.NullType && recordData.Type().ID() != colType {
 			return errors.Errorf("Record schema not match session schema, index: %d, record type: %s, session schema type: %s",
 				index, recordData.Type().Name(), schema[index].Type.Name())
 		}
@@ -80,6 +87,10 @@ func checkIfRecordSchemaMatchSessionSchema(record *data.Record, schema []tablesc
 // Flush send all buffered data to server. return (traceId, recordCount, recordBytes, error)
 // `recordCount` and `recordBytes` is the count and bytes count of the records uploaded
 func (rsw *RecordPackStreamWriter) Flush(timeout_ ...time.Duration) (string, int64, int64, error) {
+	if rsw.appendErr != nil {
+		return "", 0, 0, errors.New("There's an unsuccessful append called before, you should call reset to drop the data and re-append the data.")
+	}
+
 	timeout := time.Duration(0)
 	if len(timeout_) > 0 {
 		timeout = timeout_[0]
@@ -125,4 +136,5 @@ func (rsw *RecordPackStreamWriter) reset() {
 	rsw.buffer.Reset()
 	rsw.protocWriter = newRecordProtocWriter(&bufWriter{rsw.buffer}, rsw.session.schema.Columns, false)
 	rsw.recordCount = 0
+	rsw.appendErr = nil
 }

@@ -49,7 +49,7 @@ func (user *User) Load() error {
 	resource := rb.User(user.model.ID)
 	client := user.restClient
 
-	return client.GetWithModel(resource, nil, &user.model)
+	return client.GetWithModel(resource, nil, nil, &user.model)
 }
 
 func (user *User) ID() string {

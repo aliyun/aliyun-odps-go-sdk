@@ -61,6 +61,12 @@ func main() {
 	fmt.Println(sql)
 
 	err = tablesIns.CreateView(schema, true, true, false)
+
+	// if you need set any hints, like odps.namespace.schema=false, call CreateViewWithHints
+	yourHints := map[string]string{
+		"odps.namespace.schema": "false",
+	}
+	err = tablesIns.CreateViewWithHints(schema, true, true, false, yourHints)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

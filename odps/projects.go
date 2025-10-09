@@ -58,7 +58,7 @@ func (p *Projects) List(filters ...PFilterFunc) ([]*Project, error) {
 	var projects []*Project
 
 	for {
-		err := client.GetWithModel(resource, queryArgs, &resModel)
+		err := client.GetWithModel(resource, queryArgs, nil, &resModel)
 		if err != nil {
 			return projects, errors.WithStack(err)
 		}

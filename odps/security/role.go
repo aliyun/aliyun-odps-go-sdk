@@ -50,7 +50,7 @@ func (role *Role) Load() error {
 	resource := rb.Role(role.model.Name)
 	client := role.restClient
 
-	return errors.WithStack(client.GetWithModel(resource, nil, &role.model))
+	return errors.WithStack(client.GetWithModel(resource, nil, nil, &role.model))
 }
 
 func (role *Role) Name() string {

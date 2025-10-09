@@ -53,10 +53,9 @@ const (
 type DownloadSession struct {
 	Id          string
 	ProjectName string
-	// TODO use schema to get the resource url of a table
-	SchemaName string
-	TableName  string
-	QuotaName  string
+	SchemaName  string
+	TableName   string
+	QuotaName   string
 	// The partition keys used by a session can not contain "'", for example, "region=hangzhou" is a
 	// positive case, and "region='hangzhou'" is a negative case. But the partition keys like "region='hangzhou'" are more
 	// common, to avoid the users use the error format, the partitionKey of UploadSession is private, it can be set when
@@ -380,10 +379,6 @@ func (ds *DownloadSession) newDownloadConnection(start, count int, columnNames [
 	res, err := ds.RestClient.Do(req)
 	if err != nil {
 		return nil, errors.WithStack(err)
-	}
-
-	if res.StatusCode/100 != 2 {
-		return res, restclient.NewHttpNotOk(res)
 	}
 
 	contentEncoding := res.Header.Get("Content-Encoding")

@@ -302,19 +302,13 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 
 	var res *http.Response
 
-	Retry(func() error {
+	err = Retry(func() error {
 		res, err = is.RestClient.Do(req)
 		return errors.WithStack(err)
 	})
-
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-
-	if res.StatusCode/100 != 2 {
-		return res, errors.WithStack(restclient.NewHttpNotOk(res))
-	}
-
 	contentEncoding := res.Header.Get("Content-Encoding")
 	if contentEncoding != "" {
 		res.Body = WrapByCompressor(res.Body, contentEncoding)
