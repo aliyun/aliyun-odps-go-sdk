@@ -18,6 +18,8 @@ package tunnel
 
 import (
 	"strings"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 type sessionConfig struct {
@@ -88,6 +90,18 @@ func withSnappyFramedCompressor() Option {
 	}
 }
 
+func withDefaultZstdCompressor() Option {
+	return func(cfg *sessionConfig) {
+		cfg.Compressor = defaultZstd()
+	}
+}
+
+func withZstdCompressor(level zstd.EncoderLevel) Option {
+	return func(cfg *sessionConfig) {
+		cfg.Compressor = newZstd(level)
+	}
+}
+
 func overWrite() Option {
 	return func(cfg *sessionConfig) {
 		cfg.Overwrite = true
@@ -142,6 +156,8 @@ var SessionCfg = struct {
 	WithDefaultDeflateCompressor func() Option
 	WithDeflateCompressor        func(int) Option
 	WithSnappyFramedCompressor   func() Option
+	WithDefaultZstdCompressor    func() Option
+	WithZstdCompressor           func(zstd.EncoderLevel) Option
 	Overwrite                    func() Option
 	WithShardId                  func(int) Option
 	Async                        func() Option
@@ -156,6 +172,8 @@ var SessionCfg = struct {
 	WithDefaultDeflateCompressor: withDefaultDeflateCompressor,
 	WithDeflateCompressor:        withDeflateCompressor,
 	WithSnappyFramedCompressor:   withSnappyFramedCompressor,
+	WithDefaultZstdCompressor:    withDefaultZstdCompressor,
+	WithZstdCompressor:           withZstdCompressor,
 	Overwrite:                    overWrite,
 	WithShardId:                  withShardId,
 	Async:                        async,

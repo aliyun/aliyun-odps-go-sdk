@@ -230,7 +230,10 @@ func Example_tunnel_download_arrow_with_partition() {
 }
 
 func ExampleTunnel_UploadInSpecificSchema() {
-	session, err := tunnelIns.CreateUploadSession(ProjectName, "test", tunnel2.SessionCfg.WithSchemaName("new_Schema"))
+	session, err := tunnelIns.CreateUploadSession(ProjectName, "test",
+		tunnel2.SessionCfg.WithSchemaName("new_Schema"),
+		tunnel2.SessionCfg.WithDefaultZstdCompressor(),
+	)
 	println(session.Id)
 	if err != nil {
 		log.Fatalf("%+v", err)
