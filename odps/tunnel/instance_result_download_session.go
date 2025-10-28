@@ -265,6 +265,9 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 	if is.LimitEnabled {
 		queryArgs.Set("instance_tunnel_limit_enabled", "")
 	}
+	if is.QuotaName != "" {
+		queryArgs.Set("quotaName", is.QuotaName)
+	}
 
 	queryArgs.Set("data", "")
 	if is.IsLongPolling {

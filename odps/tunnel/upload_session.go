@@ -264,6 +264,9 @@ func (u *UploadSession) Commit(blockIds []int) error {
 	if u.partitionKey != "" {
 		queryArgs.Set("partition", u.partitionKey)
 	}
+	if u.QuotaName != "" {
+		queryArgs.Set("quotaName", u.QuotaName)
+	}
 	headers := getCommonHeaders()
 
 	req, err := u.RestClient.NewRequestWithParamsAndHeaders(common.HttpMethod.PostMethod, u.ResourceUrl(), nil, queryArgs, headers)
@@ -379,6 +382,9 @@ func (u *UploadSession) newLoadRequest() (*http.Request, error) {
 	if u.partitionKey != "" {
 		queryArgs.Set("partition", u.partitionKey)
 	}
+	if u.QuotaName != "" {
+		queryArgs.Set("quotaName", u.QuotaName)
+	}
 
 	req, err := u.RestClient.NewRequestWithUrlQuery(common.HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
@@ -401,6 +407,9 @@ func (u *UploadSession) newUploadConnection(blockId int, useArrow bool) (*httpCo
 
 	if u.partitionKey != "" {
 		queryArgs.Set("partition", u.partitionKey)
+	}
+	if u.QuotaName != "" {
+		queryArgs.Set("quotaName", u.QuotaName)
 	}
 
 	reader, writer := io.Pipe()

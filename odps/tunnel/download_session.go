@@ -294,6 +294,9 @@ func (ds *DownloadSession) newLoadRequest() (*http.Request, error) {
 	if ds.ShardId != 0 {
 		queryArgs.Set("shard", strconv.Itoa(ds.ShardId))
 	}
+	if ds.QuotaName != "" {
+		queryArgs.Set("quotaName", ds.QuotaName)
+	}
 	req, err := ds.RestClient.NewRequestWithUrlQuery(common.HttpMethod.GetMethod, resource, nil, queryArgs)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -346,6 +349,9 @@ func (ds *DownloadSession) newDownloadConnection(start, count int, columnNames [
 
 	if len(columnNames) > 0 {
 		queryArgs.Set("columns", strings.Join(columnNames, ","))
+	}
+	if ds.QuotaName != "" {
+		queryArgs.Set("quotaName", ds.QuotaName)
 	}
 
 	queryArgs.Set("downloadid", ds.Id)
