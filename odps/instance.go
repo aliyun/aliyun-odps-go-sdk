@@ -344,6 +344,9 @@ func (instance *Instance) TaskResults() []TaskResult {
 }
 
 func (instance *Instance) WaitForSuccess() error {
+	if instance.isSync {
+		return nil
+	}
 	for {
 		err := instance.Load()
 		if err != nil {
