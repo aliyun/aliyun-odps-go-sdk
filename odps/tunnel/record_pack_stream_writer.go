@@ -49,7 +49,7 @@ func newRecordStreamHttpWriter(session *StreamUploadSession) RecordPackStreamWri
 
 func (rsw *RecordPackStreamWriter) Append(record data.Record) error {
 	if rsw.flushing {
-		rsw.appendErr = errors.New("There's an unsuccessful flush called, you should call flush to retry or call reset to drop the data")
+		rsw.appendErr = errors.New("There's an unsuccessful flush called, you should call flush to retry or call Reset to drop the data")
 		return rsw.appendErr
 	}
 	if !rsw.session.allowSchemaMismatch {
@@ -88,7 +88,7 @@ func checkIfRecordSchemaMatchSessionSchema(record *data.Record, schema []tablesc
 // `recordCount` and `recordBytes` is the count and bytes count of the records uploaded
 func (rsw *RecordPackStreamWriter) Flush(timeout_ ...time.Duration) (string, int64, int64, error) {
 	if rsw.appendErr != nil {
-		return "", 0, 0, errors.New("There's an unsuccessful append called before, you should call reset to drop the data and re-append the data.")
+		return "", 0, 0, errors.New("There's an unsuccessful append called before, you should call Reset to drop the data and re-append the data.")
 	}
 
 	timeout := time.Duration(0)
@@ -117,7 +117,7 @@ func (rsw *RecordPackStreamWriter) Flush(timeout_ ...time.Duration) (string, int
 
 	recordCount := rsw.recordCount
 	rsw.flushing = false
-	rsw.reset()
+	rsw.Reset()
 
 	return reqId, recordCount, int64(bytesSend), nil
 }
@@ -132,7 +132,7 @@ func (rsw *RecordPackStreamWriter) DataSize() int64 {
 	return int64(rsw.buffer.Len())
 }
 
-func (rsw *RecordPackStreamWriter) reset() {
+func (rsw *RecordPackStreamWriter) Reset() {
 	rsw.buffer.Reset()
 	rsw.protocWriter = newRecordProtocWriter(&bufWriter{rsw.buffer}, rsw.session.schema.Columns, false)
 	rsw.recordCount = 0
