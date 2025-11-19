@@ -77,9 +77,9 @@ func (sp *stsAliyunCredentialProvider) _signRequest(req *http.Request, endpoint 
 	if err != nil {
 		return err
 	}
-
-	req.Header.Set(common.HttpHeaderAuthorizationSTSToken, *cred.BearerToken)
-
+	if cred.SecurityToken != nil {
+		req.Header.Set(common.HttpHeaderAuthorizationSTSToken, *cred.SecurityToken)
+	}
 	return nil
 }
 
