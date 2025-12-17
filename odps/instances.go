@@ -203,6 +203,26 @@ func (instances *Instances) CreateTask(projectName string, task Task, createInst
 			instance.MaxQA.SessionID = maxqaOptions.SessionID
 			instance.MaxQA.QueryCookie = maxqaQueryCookie
 		}
+
+		if instance.isSync {
+			for _, task := range resModel.Tasks {
+				switch task.Status {
+				case TaskFailed, TaskCancelled, TaskSuspended:
+					results, err := instance.GetResult()
+					if err != nil {
+						return instance, errors.Wrapf(err, "get task %s with status %s", task.Name, task.Status)
+					}
+
+					if len(results) <= 0 {
+						return instance, errors.Errorf("get task %s with status %s", task.Name, task.Status)
+					}
+
+					return instance, errors.New(results[0].Content())
+				case TaskSuccess:
+					continue
+				}
+			}
+		}
 		return instance, nil
 	}
 }
