@@ -1,5 +1,7 @@
 # Note
-Please note that this is far from production ready, it is still under active development
+此分支额外支持了 MCQA 模式。实际上这个功能已废弃，应当使用 MaxQA 替代，因此该功能不会合并到主干分支。
+
+
 
 # Install
 required >= go1.15

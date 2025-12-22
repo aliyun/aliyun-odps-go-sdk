@@ -19,7 +19,7 @@ func main() {
 	aliAccount := account.NewAliyunAccount(conf.AccessId, conf.AccessKey)
 	odpsIns := odps.NewOdps(aliAccount, conf.Endpoint)
 	odpsIns.SetDefaultProjectName(conf.ProjectName)
-	sql := `select * from all_types_demo_no_parition;`
+	sql := `select 1;`
 	//
 	paramInfo := sqa.SQLExecutorQueryParam{
 		OdpsIns:        odpsIns,
