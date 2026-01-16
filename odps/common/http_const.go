@@ -98,6 +98,7 @@ const (
 	HttpHeaderOdpsResourceMergeTotalBytes   = "x-odps-resource-merge-total-bytes"
 	HttpHeaderMaxQAQueryCookie              = "x-odps-mcqa-query-cookie"
 	HttpHeaderMaxQASessionID                = "x-odps-mcqa-conn"
+	HttpHeaderODPSFallbackInfos             = "x-odps-fallback-infos"
 
 	XMLContentType = "application/xml"
 )

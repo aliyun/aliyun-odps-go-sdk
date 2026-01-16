@@ -17,6 +17,7 @@
 package odps
 
 import (
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"net/http"
@@ -131,18 +132,22 @@ func (instances *Instances) CreateTask(projectName string, task Task, createInst
 
 	maxqaOptions := instanceOptions.MaxQAOptions
 	if maxqaOptions.UseMaxQA {
-		if maxqaOptions.SessionID == "" && maxqaOptions.QuotaName == "" {
-			return nil, errors.New("The MaxQA job must provide a SessionID or QuotaName.")
-		}
 		if maxqaOptions.SessionID == "" {
-			id, err := getMaxQASessionID(instances.odpsIns, maxqaOptions.QuotaName, projectName)
+			connInfo, err := getMaxQAConnInfo(instances.odpsIns, maxqaOptions.QuotaName, projectName, maxqaOptions.FallbackInfo)
 			if err != nil {
 				return nil, err
 			}
-			maxqaOptions.SessionID = id
+			maxqaOptions.SessionID = connInfo.ConnInfo
 		}
 		resource = "/mcqa" + resource
 		headers[common.HttpHeaderMaxQASessionID] = maxqaOptions.SessionID
+		if maxqaOptions.FallbackInfo != nil {
+			fallbackInfoBytes, err := json.Marshal(maxqaOptions.FallbackInfo)
+			if err != nil {
+				return nil, err
+			}
+			headers[common.HttpHeaderODPSFallbackInfos] = string(fallbackInfoBytes)
+		}
 	}
 	var maxqaQueryCookie string
 
@@ -395,4 +400,44 @@ func getMaxQASessionID(ins *Odps, quotaName string, projectName string) (string,
 	}
 	maxqaSessionId := response.Header.Get(common.HttpHeaderMaxQASessionID)
 	return maxqaSessionId, nil
+}
+
+type MaxQAConnInfo struct {
+	QuotaName string `json:"quotaNickName"`
+	ConnInfo  string `json:"connInfo"`
+	RegionID  string `json:"regionId"`
+}
+
+func getMaxQAConnInfo(ins *Odps, quotaName string, projectName string, fallbackInfo *options.FallbackInfo) (*MaxQAConnInfo, error) {
+	resource := "/connection/mcqa"
+	queryArgs := make(url.Values, 3)
+	queryArgs.Set("project", projectName)
+	if quotaName != "" {
+		queryArgs.Set("quota", quotaName)
+	}
+	if fallbackInfo != nil {
+		if fallbackInfo.FallbackQuota != "" {
+			queryArgs.Set("fallbackQuota", fallbackInfo.FallbackQuota)
+		}
+		if fallbackInfo.Fallback != "" {
+			queryArgs.Set("fallback", fallbackInfo.Fallback)
+		}
+	}
+
+	request, err := ins.restClient.NewRequestWithUrlQuery(common.HttpMethod.GetMethod, resource, nil, queryArgs)
+	if err != nil {
+		return nil, err
+	}
+	response, err := ins.restClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = response.Body.Close() }()
+
+	var connInfo MaxQAConnInfo
+	if err := json.NewDecoder(response.Body).Decode(&connInfo); err != nil {
+		return nil, err
+	}
+
+	return &connInfo, nil
 }

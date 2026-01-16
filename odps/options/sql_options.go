@@ -1,16 +1,26 @@
 package options
 
+type FallbackInfo struct {
+	FallbackQuota string
+	Fallback      string
+}
+
+type MaxQAOptions struct {
+	UseMaxQA     bool
+	QuotaName    string
+	SessionID    string
+	FallbackInfo *FallbackInfo
+}
+
+type MaxQAOption func(*MaxQAOptions)
+
 // CreateInstanceOptions holds the configuration for creating an instance.
 type CreateInstanceOptions struct {
 	Priority         int
 	JobName          string // Job name
 	TryWait          bool   // Try wait flag
 	UniqueIdentifyID string // Unique identification ID
-	MaxQAOptions     struct {
-		UseMaxQA  bool
-		QuotaName string
-		SessionID string
-	}
+	MaxQAOptions     MaxQAOptions
 }
 
 type CreateInstanceOption func(*CreateInstanceOptions)
@@ -48,11 +58,38 @@ func WithTryWait(tryWait bool) CreateInstanceOption {
 	}
 }
 
-func WithMaxQAOptions(sessionID string, quotaName string) CreateInstanceOption {
+func WithMaxQAOptions(opts ...MaxQAOption) CreateInstanceOption {
 	return func(o *CreateInstanceOptions) {
 		o.MaxQAOptions.UseMaxQA = true
-		o.MaxQAOptions.QuotaName = quotaName
-		o.MaxQAOptions.SessionID = sessionID
+		for _, opt := range opts {
+			opt(&o.MaxQAOptions)
+		}
+	}
+}
+
+func WithMaxQASessionID(sessionID string) MaxQAOption {
+	return func(o *MaxQAOptions) {
+		o.SessionID = sessionID
+	}
+}
+
+func WithMaxQAQuotaName(quotaName string) MaxQAOption {
+	return func(o *MaxQAOptions) {
+		o.QuotaName = quotaName
+	}
+}
+
+func WithMaxQAFallback(fallbackQuota string, enabled bool) MaxQAOption {
+	return func(o *MaxQAOptions) {
+		if o.FallbackInfo == nil {
+			o.FallbackInfo = &FallbackInfo{}
+		}
+		o.FallbackInfo.FallbackQuota = fallbackQuota
+		if enabled {
+			o.FallbackInfo.Fallback = "true"
+		} else {
+			o.FallbackInfo.Fallback = "false"
+		}
 	}
 }
 
