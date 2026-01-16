@@ -24,8 +24,9 @@ func main() {
 
 	maxqaQuotaName := "maxqa_quota_nick"
 	sql := "select 1;"
+
 	taskOptions := options.NewSQLTaskOptions(
-		options.WithInstanceOption(options.WithMaxQAOptions("", maxqaQuotaName)))
+		options.WithInstanceOption(options.WithMaxQAOptions(options.WithMaxQAQuotaName(maxqaQuotaName))))
 
 	instance, err := odpsIns.ExecSQlWithOption(sql, taskOptions)
 	if err != nil {
@@ -38,12 +39,31 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	// Get CSV Result
 	result, err := instance.GetResult()
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
 	println(result[0].Content())
+
+	taskOptionsWithoutQuota := options.NewSQLTaskOptions(
+		options.WithInstanceOption(options.WithMaxQAOptions()))
+
+	instance2, err := odpsIns.ExecSQlWithOption(sql, taskOptionsWithoutQuota)
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+	println(instance2.Id())
+
+	err = instance2.WaitForSuccess()
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+
+	result2, err := instance2.GetResult()
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+	println(result2[0].Content())
 
 	// Get Result By Instance Tunnel
 	tunnelIns := tunnel.NewTunnel(odpsIns)
