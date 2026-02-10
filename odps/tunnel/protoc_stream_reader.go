@@ -17,6 +17,7 @@
 package tunnel
 
 import (
+	"bufio"
 	"io"
 	"math"
 
@@ -25,12 +26,12 @@ import (
 )
 
 type ProtocStreamReader struct {
-	inner io.Reader
+	inner *bufio.Reader
 }
 
 func NewProtocStreamReader(r io.Reader) *ProtocStreamReader {
 	return &ProtocStreamReader{
-		inner: r,
+		inner: bufio.NewReader(r),
 	}
 }
 
