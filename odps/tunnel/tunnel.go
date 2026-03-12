@@ -257,6 +257,8 @@ func (t *Tunnel) Preview(table *odps.Table, partitionValue string, limit int64) 
 	if err != nil {
 		return nil, err
 	}
+	defer res.Body.Close()
+
 	contentEncoding := res.Header.Get(common.HttpHeaderContentEncoding)
 	if contentEncoding != "" {
 		res.Body = WrapByCompressor(res.Body, contentEncoding)
@@ -264,29 +266,47 @@ func (t *Tunnel) Preview(table *odps.Table, partitionValue string, limit int64) 
 
 	reader, err := ipc.NewReader(res.Body)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to create Arrow IPC reader")
 	}
+
 	columns := table.Schema().Columns
 	partitionColumns := table.Schema().PartitionColumns
 	allColumns := append(columns, partitionColumns...)
 
 	var results []data.Record
+	var parseErr error
 
-	for {
-		arrowRecord, err := reader.Read()
-		isEOF := errors.Is(err, io.EOF)
-		if isEOF {
-			break
+	// Use defer/recover to catch any panic during Arrow data parsing
+	// This can happen when server returns corrupted Arrow IPC data
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				parseErr = errors.Errorf("panic during Arrow data parsing: %v", r)
+			}
+		}()
+
+		for {
+			arrowRecord, err := reader.Read()
+			isEOF := errors.Is(err, io.EOF)
+			if isEOF {
+				break
+			}
+			if err != nil {
+				parseErr = err
+				return
+			}
+			records, err := tableschema.ToMaxComputeRecords(arrowRecord, allColumns, tableschema.ArrowOptionConfig.WithExtendedMode())
+			if err != nil {
+				parseErr = err
+				return
+			}
+			results = append(results, records...)
+			arrowRecord.Retain()
 		}
-		if err != nil {
-			return nil, err
-		}
-		records, err := tableschema.ToMaxComputeRecords(arrowRecord, allColumns, tableschema.ArrowOptionConfig.WithExtendedMode())
-		if err != nil {
-			return nil, err
-		}
-		results = append(results, records...)
-		arrowRecord.Retain()
+	}()
+
+	if parseErr != nil {
+		return nil, parseErr
 	}
 	return results, nil
 }
