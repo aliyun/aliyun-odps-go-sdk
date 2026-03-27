@@ -21,6 +21,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
@@ -418,6 +419,7 @@ type arrayLoaderContext struct {
 	ifield  int
 	ibuffer int
 	max     int
+	path    []string // Track nested field path for better error messages
 }
 
 func (ctx *arrayLoaderContext) field() *flatbuf.FieldNode {
@@ -503,6 +505,26 @@ func (ctx *arrayLoaderContext) loadChild(dt arrow.DataType) array.Interface {
 	return sub
 }
 
+// pathString returns the current nested path as a string
+func (ctx *arrayLoaderContext) pathString() string {
+	if len(ctx.path) == 0 {
+		return ""
+	}
+	return strings.Join(ctx.path, ".")
+}
+
+// pushPath adds a field name to the path
+func (ctx *arrayLoaderContext) pushPath(name string) {
+	ctx.path = append(ctx.path, name)
+}
+
+// popPath removes the last field name from the path
+func (ctx *arrayLoaderContext) popPath() {
+	if len(ctx.path) > 0 {
+		ctx.path = ctx.path[:len(ctx.path)-1]
+	}
+}
+
 func (ctx *arrayLoaderContext) loadNull() array.Interface {
 	field := ctx.field()
 	data := array.NewData(arrow.Null, int(field.Length()), nil, nil, int(field.NullCount()), 0)
@@ -557,7 +579,17 @@ func (ctx *arrayLoaderContext) loadMap(dt *arrow.MapType) array.Interface {
 	buffers = append(buffers, ctx.buffer())
 	defer releaseBuffers(buffers)
 
-	sub := ctx.loadChild(dt.ValueType())
+	ctx.pushPath("[key:value]")
+	var sub array.Interface
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				panic(fmt.Sprintf("in map entry '%s': %v", ctx.pathString(), r))
+			}
+		}()
+		sub = ctx.loadChild(dt.ValueType())
+	}()
+	ctx.popPath()
 	defer sub.Release()
 
 	data := array.NewData(dt, int(field.Length()), buffers, []*array.Data{sub.Data()}, int(field.NullCount()), 0)
@@ -571,7 +603,17 @@ func (ctx *arrayLoaderContext) loadList(dt *arrow.ListType) array.Interface {
 	buffers = append(buffers, ctx.buffer())
 	defer releaseBuffers(buffers)
 
-	sub := ctx.loadChild(dt.Elem())
+	ctx.pushPath("[*]")
+	var sub array.Interface
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				panic(fmt.Sprintf("in list element '%s': %v", ctx.pathString(), r))
+			}
+		}()
+		sub = ctx.loadChild(dt.Elem())
+	}()
+	ctx.popPath()
 	defer sub.Release()
 
 	data := array.NewData(dt, int(field.Length()), buffers, []*array.Data{sub.Data()}, int(field.NullCount()), 0)
@@ -584,7 +626,17 @@ func (ctx *arrayLoaderContext) loadFixedSizeList(dt *arrow.FixedSizeListType) ar
 	field, buffers := ctx.loadCommon(1)
 	defer releaseBuffers(buffers)
 
-	sub := ctx.loadChild(dt.Elem())
+	ctx.pushPath("[*]")
+	var sub array.Interface
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				panic(fmt.Sprintf("in list element '%s': %v", ctx.pathString(), r))
+			}
+		}()
+		sub = ctx.loadChild(dt.Elem())
+	}()
+	ctx.popPath()
 	defer sub.Release()
 
 	data := array.NewData(dt, int(field.Length()), buffers, []*array.Data{sub.Data()}, int(field.NullCount()), 0)
@@ -600,8 +652,18 @@ func (ctx *arrayLoaderContext) loadStruct(dt *arrow.StructType) array.Interface 
 	arrs := make([]array.Interface, len(dt.Fields()))
 	subs := make([]*array.Data, len(dt.Fields()))
 	for i, f := range dt.Fields() {
-		arrs[i] = ctx.loadChild(f.Type)
-		subs[i] = arrs[i].Data()
+		// Track nested field path for better error messages
+		ctx.pushPath(f.Name)
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					panic(fmt.Sprintf("in struct field '%s': %v", ctx.pathString(), r))
+				}
+			}()
+			arrs[i] = ctx.loadChild(f.Type)
+			subs[i] = arrs[i].Data()
+		}()
+		ctx.popPath()
 	}
 	defer func() {
 		for i := range arrs {
