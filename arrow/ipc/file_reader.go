@@ -19,6 +19,7 @@ package ipc
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
@@ -339,7 +340,15 @@ func newRecord(schema *arrow.Schema, meta *memory.Buffer, body ReadAtSeeker, mem
 
 	cols := make([]array.Interface, len(schema.Fields()))
 	for i, field := range schema.Fields() {
-		cols[i] = ctx.loadArray(field.Type)
+		// Wrap loadArray to add column info to panic message
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					panic(fmt.Sprintf("error loading column %d (%s): %v", i, field.Name, r))
+				}
+			}()
+			cols[i] = ctx.loadArray(field.Type)
+		}()
 		defer cols[i].Release()
 	}
 

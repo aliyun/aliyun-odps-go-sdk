@@ -405,22 +405,42 @@ func toMaxComputeData(vector array.Interface, index int, typeInfo datatype.DataT
 }
 
 // ToMaxComputeRecords 将 Arrow Record Batch 转换为 ODPS Record 列表
-func ToMaxComputeRecords(arrowBatch array.Record, columns []Column, opt ...ArrowOptions) ([]data.Record, error) {
+func ToMaxComputeRecords(arrowBatch array.Record, columns []Column, opt ...ArrowOptions) (records []data.Record, err error) {
 	cfg := newTypeConvertConfig(opt...)
 	odpsRecords := make([]data.Record, 0, int(arrowBatch.NumRows()))
+
+	// Track current position for better error reporting
+	var currentRow, currentCol int
+	var currentColName string
+
+	// Recover from panic and report row/column info
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic at row %d, column %d (%s): %v", currentRow, currentCol, currentColName, r)
+		}
+	}()
+
 	// 迭代每一行
 	for i := 0; i < int(arrowBatch.NumRows()); i++ {
+		currentRow = i
 		// 创建 ODPS Record
 		odpsRecord := make([]data.Data, 0, int(arrowBatch.NumCols()))
 
 		// 遍历 Arrow Record 中的所有列
 		for j := 0; j < int(arrowBatch.NumCols()); j++ {
+			currentCol = j
+			if j < len(columns) {
+				currentColName = columns[j].Name
+			} else {
+				currentColName = "unknown"
+			}
+
 			col := arrowBatch.Column(j)
 
 			if col.IsValid(i) {
 				odpsData, err := toMaxComputeData(col, i, columns[j].Type, cfg)
 				if err != nil {
-					return nil, err
+					return nil, fmt.Errorf("error at row %d, column %d (%s): %w", i, j, currentColName, err)
 				}
 				odpsRecord = append(odpsRecord, odpsData)
 			} else {

@@ -17,6 +17,7 @@
 package tunnel
 
 import (
+	"fmt"
 	"io"
 	"net/url"
 	"strconv"
@@ -275,13 +276,15 @@ func (t *Tunnel) Preview(table *odps.Table, partitionValue string, limit int64) 
 
 	var results []data.Record
 	var parseErr error
+	var batchNum int
+	var rowStart int64 // Track starting row of current batch
 
 	// Use defer/recover to catch any panic during Arrow data parsing
 	// This can happen when server returns corrupted Arrow IPC data
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				parseErr = errors.Errorf("panic during Arrow data parsing: %v", r)
+				parseErr = errors.Errorf("panic during Arrow data parsing at batch %d (rows %d-): %v", batchNum, rowStart, r)
 			}
 		}()
 
@@ -292,16 +295,36 @@ func (t *Tunnel) Preview(table *odps.Table, partitionValue string, limit int64) 
 				break
 			}
 			if err != nil {
-				parseErr = err
+				parseErr = errors.Wrapf(err, "failed to read Arrow record at batch %d (rows %d-)", batchNum, rowStart)
 				return
 			}
-			records, err := tableschema.ToMaxComputeRecords(arrowRecord, allColumns, tableschema.ArrowOptionConfig.WithExtendedMode())
-			if err != nil {
-				parseErr = err
+			
+			numRows := arrowRecord.NumRows()
+			rowEnd := rowStart + numRows - 1
+			
+			// Update error context with actual row range now that we know numRows
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						panic(fmt.Sprintf("at batch %d (rows %d-%d): %v", batchNum, rowStart, rowEnd, r))
+					}
+				}()
+				
+				records, err := tableschema.ToMaxComputeRecords(arrowRecord, allColumns, tableschema.ArrowOptionConfig.WithExtendedMode())
+				if err != nil {
+					parseErr = errors.Wrapf(err, "failed to convert Arrow record at batch %d (rows %d-%d)", batchNum, rowStart, rowEnd)
+					return
+				}
+				results = append(results, records...)
+			}()
+			
+			if parseErr != nil {
 				return
 			}
-			results = append(results, records...)
+			
 			arrowRecord.Retain()
+			rowStart += numRows
+			batchNum++
 		}
 	}()
 
