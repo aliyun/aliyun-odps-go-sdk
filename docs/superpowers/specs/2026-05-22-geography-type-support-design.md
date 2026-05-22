@@ -19,7 +19,6 @@ Java SDK (`com.aliyun.odps.data.GeographyObject`) 已支持 MaxCompute 的 `GEOG
 - 新增 `datatype.GEOGRAPHY` TypeID 与 `GeographyType` 单例
 - 新增 `data.Geography`（基于 `[]byte`，承载 WKB）实现 `data.Data` 接口
 - protobuf tunnel reader / writer 支持读写 GEOGRAPHY 列
-- `data_conversion.go` 加入 Geography 转换分支
 - 单元测试：`data` 包内 round-trip、tunnel protobuf round-trip
 
 **Out of scope**
@@ -97,9 +96,11 @@ func (g *Geography) Scan(value interface{}) error {
 - **`String()` 用 `unhex('...')`**：调试输出与 `Binary` 一致，便于直接复制到 SQL。
 - **`Sql()` 用 `ST_GEOGFROMWKB`**：让 Geography 可作为参数拼入 `INSERT INTO ... VALUES (..., {geo}.Sql(), ...)`，与 Java SDK 测试中的 `ST_GEOGFROMTEXT` 思路一致。
 
-`odps/data/data_conversion.go`：
+**类型转换**：`tryConvertType` 在 `odps/data/util.go`（不是 `data_conversion.go`），基于 `reflect.AssignableTo` 通用实现。`Geography` 与 `[]byte` 底层类型相同，`Geography.Scan([]byte{...})` 走通用路径即可，**无需新增分支**（与 `Binary.Scan` 同模式）。
 
-- 在已有的 `tryConvertType` 路径中加入 `Geography` 分支：从 `[]byte` 或 `Binary` 转为 `Geography`，从 `Geography` 转为 `[]byte` / `Binary`。具体形态参考现有 `Binary` 的实现。
+`odps/data/data_conversion.go` 中 `TryConvertGoToOdpsData` 已把 `[]byte` 默认映射为 `data.Binary`，本设计**不动**该映射；用户若希望 `[]byte` 写为 GEOGRAPHY 列，需自行构造 `data.Geography{...}`。这与 Java SDK 的行为对等（Java 用户也要显式构造 `JtsGeographyObject` / `RawGeographyObject`）。
+
+`Binary ↔ Geography` 互转（两者都是 named type，`AssignableTo` 不成立）不在本设计范围；用户可显式 `data.Geography(b)` / `data.Binary(g)` 完成。
 
 ### 3. `tunnel` 包
 
