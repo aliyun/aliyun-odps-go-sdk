@@ -347,6 +347,13 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 			Data:  string(v),
 			Valid: true,
 		}
+	case datatype.GEOGRAPHY:
+		v, err := r.protocReader.ReadBytes()
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		r.recordCrc.Update(v)
+		fieldValue = data.Geography(v)
 	}
 
 	return fieldValue, nil
