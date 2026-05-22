@@ -262,3 +262,25 @@ func TestDataTyeName(t *testing.T) {
 		}
 	}
 }
+
+func TestGeographyTypeIDRoundTrip(t *testing.T) {
+	got := TypeCodeFromStr("GEOGRAPHY")
+	if got != GEOGRAPHY {
+		t.Fatalf("TypeCodeFromStr(\"GEOGRAPHY\") = %v, want GEOGRAPHY", got)
+	}
+	if got.String() != "GEOGRAPHY" {
+		t.Fatalf("GEOGRAPHY.String() = %q, want \"GEOGRAPHY\"", got.String())
+	}
+	if TypeCodeFromStr("geography") != GEOGRAPHY {
+		t.Fatal("TypeCodeFromStr should be case-insensitive for GEOGRAPHY")
+	}
+}
+
+func TestGeographyTypeSingleton(t *testing.T) {
+	if GeographyType.ID() != GEOGRAPHY {
+		t.Fatalf("GeographyType.ID() = %v, want GEOGRAPHY", GeographyType.ID())
+	}
+	if GeographyType.Name() != "GEOGRAPHY" {
+		t.Fatalf("GeographyType.Name() = %q, want \"GEOGRAPHY\"", GeographyType.Name())
+	}
+}
