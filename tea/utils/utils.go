@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"fmt"
-	"net/url"
 	"reflect"
 	"sort"
 	"strconv"
@@ -107,9 +106,9 @@ func buildCanonicalResource(resource *string, params map[string]*string) string 
 			if i > 0 {
 				builder.WriteString("&")
 			}
-			builder.WriteString(url.QueryEscape(key))
+			builder.WriteString(key)
 			if value, exists := params[key]; exists && *value != "" {
-				builder.WriteString("=" + url.QueryEscape(*value))
+				builder.WriteString("=" + *value)
 			}
 		}
 	}
