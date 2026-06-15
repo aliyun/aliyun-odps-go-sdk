@@ -54,6 +54,7 @@ const (
 	IntervalYearMonth
 	STRUCT
 	JSON
+	GEOGRAPHY
 	TypeUnknown
 )
 
@@ -105,6 +106,8 @@ func TypeCodeFromStr(s string) TypeID {
 		return STRUCT
 	case "JSON":
 		return JSON
+	case "GEOGRAPHY":
+		return GEOGRAPHY
 	default:
 		return TypeUnknown
 	}
@@ -169,6 +172,8 @@ func (t TypeID) String() string {
 		return "STRUCT"
 	case JSON:
 		return "JSON"
+	case GEOGRAPHY:
+		return "GEOGRAPHY"
 	default:
 		return "TYPE_UNKNOWN"
 	}
@@ -475,6 +480,7 @@ var (
 	BinaryType            = PrimitiveType{BINARY}
 	IntervalDayTimeType   = PrimitiveType{IntervalDayTime}
 	IntervalYearMonthType = PrimitiveType{IntervalYearMonth}
+	GeographyType         = PrimitiveType{GEOGRAPHY}
 	NullType              = PrimitiveType{NULL}
 )
 

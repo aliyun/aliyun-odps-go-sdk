@@ -262,3 +262,39 @@ func TestDataTyeName(t *testing.T) {
 		}
 	}
 }
+
+func TestGeographyTypeIDRoundTrip(t *testing.T) {
+	got := TypeCodeFromStr("GEOGRAPHY")
+	if got != GEOGRAPHY {
+		t.Fatalf("TypeCodeFromStr(\"GEOGRAPHY\") = %v, want GEOGRAPHY", got)
+	}
+	if got.String() != "GEOGRAPHY" {
+		t.Fatalf("GEOGRAPHY.String() = %q, want \"GEOGRAPHY\"", got.String())
+	}
+	if TypeCodeFromStr("geography") != GEOGRAPHY {
+		t.Fatal("TypeCodeFromStr should be case-insensitive for GEOGRAPHY")
+	}
+}
+
+func TestGeographyTypeSingleton(t *testing.T) {
+	if GeographyType.ID() != GEOGRAPHY {
+		t.Fatalf("GeographyType.ID() = %v, want GEOGRAPHY", GeographyType.ID())
+	}
+	if GeographyType.Name() != "GEOGRAPHY" {
+		t.Fatalf("GeographyType.Name() = %q, want \"GEOGRAPHY\"", GeographyType.Name())
+	}
+}
+
+func TestParseGeography(t *testing.T) {
+	dt, err := ParseDataType("GEOGRAPHY")
+	if err != nil {
+		t.Fatalf("ParseDataType(\"GEOGRAPHY\") err = %v", err)
+	}
+	if dt.ID() != GEOGRAPHY {
+		t.Fatalf("ParseDataType(\"GEOGRAPHY\").ID() = %v, want GEOGRAPHY", dt.ID())
+	}
+	// Case-insensitive variant
+	if _, err := ParseDataType("geography"); err != nil {
+		t.Fatalf("ParseDataType(\"geography\") err = %v", err)
+	}
+}

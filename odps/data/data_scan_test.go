@@ -47,6 +47,7 @@ func TestDataScan(t *testing.T) {
 		{st, new(Struct)},
 		{d, new(Date)},
 		{Binary([]byte{1, 2, 3}), new(Binary)},
+		{Geography([]byte{0xAB, 0xCD}), new(Geography)},
 	}
 
 	for _, value := range values {

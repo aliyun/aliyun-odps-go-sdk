@@ -19,6 +19,8 @@ package tunnel
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"net/http"
 	"reflect"
 	"testing"
 
@@ -252,5 +254,61 @@ func TestEncodeProtocComplexType(t *testing.T) {
 	bytesGot := bw.buf.Bytes()
 	if !reflect.DeepEqual(bytesGot, complexTypeProtocEncodedData) {
 		t.Fatal("protoc writer cannot serialize right data")
+	}
+}
+
+func TestProtocGeographyRoundTrip(t *testing.T) {
+	bw := &bufWriter{bytes.NewBuffer(nil)}
+
+	columns := []tableschema.Column{
+		{Name: "desc", Type: datatype.StringType},
+		{Name: "geo", Type: datatype.GeographyType},
+	}
+
+	pw := newRecordProtocWriter(bw, columns, false)
+
+	desc := data.String("Point")
+	// POINT(10 20) in little-endian WKB. Treated here as opaque bytes —
+	// the test does not need a real geometry parser.
+	wkb := []byte{
+		0x01, 0x01, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x24, 0x40,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x34, 0x40,
+	}
+	geo := data.Geography(wkb)
+
+	record := []data.Data{&desc, geo}
+
+	if err := pw.Write(record); err != nil {
+		t.Fatalf("Write err = %v", err)
+	}
+	if err := pw.Close(); err != nil {
+		t.Fatalf("Close err = %v", err)
+	}
+
+	fakeRes := &http.Response{
+		Body: io.NopCloser(bytes.NewReader(bw.buf.Bytes())),
+	}
+	pr := newRecordProtocReader(fakeRes, columns, false)
+
+	gotRecord, err := pr.Read()
+	if err != nil {
+		t.Fatalf("Read err = %v", err)
+	}
+
+	gotDesc, ok := gotRecord.Get(0).(data.String)
+	if !ok {
+		t.Fatalf("desc column type = %T, want data.String", gotRecord.Get(0))
+	}
+	if string(gotDesc) != "Point" {
+		t.Fatalf("desc round-trip: got %q, want \"Point\"", string(gotDesc))
+	}
+
+	gotGeo, ok := gotRecord.Get(1).(data.Geography)
+	if !ok {
+		t.Fatalf("geo column type = %T, want data.Geography", gotRecord.Get(1))
+	}
+	if !bytes.Equal(gotGeo, wkb) {
+		t.Fatalf("geo bytes mismatch: got %x, want %x", []byte(gotGeo), wkb)
 	}
 }
