@@ -39,6 +39,9 @@ func newSlot(id string, server string) (slot, error) {
 	}
 
 	ip := parts[0]
+	if ip == "" {
+		return slot{}, errors.Errorf("empty server ip: %s", server)
+	}
 	port, err := strconv.Atoi(parts[1])
 	if err != nil {
 		return slot{}, errors.WithStack(err)
@@ -58,6 +61,10 @@ func (s *slot) SetServer(server string) error {
 
 	if len(parts) != 2 {
 		return errors.Errorf("invalid slot format: %s", server)
+	}
+
+	if parts[0] == "" {
+		return errors.Errorf("empty server ip: %s", server)
 	}
 
 	s.ip = parts[0]
