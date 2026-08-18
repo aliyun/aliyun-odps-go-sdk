@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -50,10 +51,17 @@ type StreamUploadSession struct {
 	CreatePartition     bool
 	QuotaName           string
 	SlotNum             int
-	slotSelector        slotSelector
+	slotSelector        *slotSelector
 	schema              tableschema.TableSchema
 	schemaVersion       int
 	allowSchemaMismatch bool
+
+	// slotsStale is set when a flush fails in a way that says the cached slot
+	// routing information is out of date: the tunnel server a slot points at is
+	// gone, or the slot has been rescheduled. The next flush reloads the slots
+	// before sending, so that a retry does not keep hitting the same dead server.
+	slotsStaleMu sync.Mutex
+	slotsStale   bool
 }
 
 func (su *StreamUploadSession) ResourceUrl() string {
@@ -92,6 +100,9 @@ func CreateStreamUploadSession(
 		SlotNum:             cfg.SlotNum,
 		schemaVersion:       cfg.SchemaVersion,
 		allowSchemaMismatch: cfg.AllowSchemaMismatch,
+		// created up front and never replaced afterwards, only its content is, so
+		// that goroutines sharing the session never race on the field itself
+		slotSelector: newSlotSelect(nil),
 	}
 
 	req, err := session.newInitiationRequest()
@@ -235,16 +246,35 @@ func (su *StreamUploadSession) loadInformation(req *http.Request, inited bool) e
 		}
 	}
 
-	su.slotSelector = newSlotSelect(slots)
+	// a session without any slot can never flush, fail fast instead of panicking on
+	// the first flush. On a reload an empty list is tolerated: Reset keeps the slots
+	// already loaded, which are still the best routing information available.
+	if inited && len(slots) == 0 {
+		return errors.Errorf(
+			"No slot is returned when creating the stream upload session. RequestId:%s Session ID:%s",
+			requestId, resModel.SessionName,
+		)
+	}
+
+	su.slotSelector.Reset(slots)
 
 	return nil
 }
 
 func (su *StreamUploadSession) flushStream(streamWriter *RecordPackStreamWriter, timeout time.Duration) (string, int, error) {
+	// a previous flush failed in a way that says the cached routing information is
+	// out of date, refresh it before picking a slot so this attempt does not go to
+	// the same dead server again
+	su.reloadSlotsIfStale()
+
+	currentSlot, err := su.slotSelector.NextSlot()
+	if err != nil {
+		return "", 0, errors.WithStack(err)
+	}
+
 	var reader io.ReadCloser
 	var writer io.WriteCloser
 	reader, writer = io.Pipe()
-	currentSlot := su.slotSelector.NextSlot()
 
 	conn, err := su.newUploadConnection(reader, writer, currentSlot, streamWriter.DataSize(), streamWriter.RecordCount(), timeout)
 	if err != nil {
@@ -261,62 +291,157 @@ func (su *StreamUploadSession) flushStream(streamWriter *RecordPackStreamWriter,
 		// 显示关闭打开的连接，并在http返回非200状态时，获取实际的http错误
 		closeError := conn.closeRes()
 		if closeError != nil {
-			return "", 0, errors.WithStack(closeError)
+			return "", 0, su.flushFailed(closeError)
 		}
 
-		return "", 0, errors.WithStack(err)
+		return "", 0, su.flushFailed(err)
 	}
 	// close http writer
 	err = conn.Writer.Close()
 	if err != nil {
 		closeError := conn.closeRes()
 		if closeError != nil {
-			return "", 0, errors.WithStack(closeError)
+			return "", 0, su.flushFailed(closeError)
 		}
 
-		return "", 0, errors.WithStack(err)
+		return "", 0, su.flushFailed(err)
 	}
 
 	// get and close response
 	rOrE := <-conn.resChan
 
 	if rOrE.err != nil {
-		return "", 0, errors.WithStack(rOrE.err)
+		return "", 0, su.flushFailed(rOrE.err)
 	}
 
 	res := rOrE.res
 
 	if res.StatusCode/100 != 2 {
-		return "", 0, errors.WithStack(restclient.NewHttpNotOk(res))
+		return "", 0, su.flushFailed(restclient.NewHttpNotOk(res))
 	}
 
-	err = res.Body.Close()
-	if err != nil {
-		return "", 0, errors.WithStack(err)
+	// The server has committed the data by now. Everything below only affects the
+	// routing information used by the *next* flush, so none of it may be reported
+	// as a flush failure: the caller would retry and write the same data twice.
+	requestId := res.Header.Get(common.HttpHeaderOdpsRequestId)
+	bytesSent := conn.bytesCount()
+	_ = res.Body.Close()
+
+	su.refreshSlotRouting(
+		currentSlot,
+		res.Header.Get(common.HttpHeaderOdpsSlotNum),
+		res.Header.Get(common.HttpHeaderRoutedServer),
+	)
+
+	return requestId, bytesSent, nil
+}
+
+// flushFailed marks the slot routing information stale when err says the tunnel
+// server behind the slot is gone, and hands err back to the caller unchanged.
+func (su *StreamUploadSession) flushFailed(err error) error {
+	if slotRoutingIsStale(err) {
+		su.markSlotsStale()
 	}
 
-	slotNumStr := res.Header.Get(common.HttpHeaderOdpsSlotNum)
-	newSlotServer := res.Header.Get(common.HttpHeaderRoutedServer)
+	return errors.WithStack(err)
+}
+
+// slotRoutingIsStale reports whether err means the routing information the flush
+// used is out of date, so the next flush should reload the slots instead of
+// sending to the same server again.
+//
+// The classification follows the java sdk: it reloads the slots on 502 and 504,
+// treats 308 as the slot having been rescheduled, and considers 429 (flow
+// exceeded) and every other 4xx a problem that changing server cannot fix.
+// Transport level failures never carry a status code and are read as the server
+// having gone away.
+func slotRoutingIsStale(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var httpErr restclient.HttpError
+	if errors.As(err, &httpErr) {
+		switch httpErr.StatusCode {
+		case http.StatusPermanentRedirect, http.StatusBadGateway, http.StatusGatewayTimeout:
+			return true
+		default:
+			return false
+		}
+	}
+
+	return true
+}
+
+// refreshSlotRouting applies the routing information the tunnel returns with a
+// successful flush. Every failure here is swallowed on purpose, see flushStream:
+// the data is already committed, and routing that stays stale is picked up by the
+// stale mark and reloaded before the next flush.
+func (su *StreamUploadSession) refreshSlotRouting(currentSlot slot, slotNumStr, newSlotServer string) {
 	newSlotNum, err := strconv.Atoi(slotNumStr)
 	if err != nil {
-		return "", 0, errors.WithMessage(err, "invalid slot num get from http odps-tunnel-slot-num header")
+		// without a usable odps-tunnel-slot-num header there is no way to tell
+		// whether the slot map changed, so reload before the next flush
+		su.markSlotsStale()
+		return
 	}
 
 	if newSlotNum != su.slotSelector.SlotNum() {
-		err = su.reloadSlotNum()
-		if err != nil {
-			return "", 0, errors.WithStack(err)
+		if err := su.reloadSlotNum(); err != nil {
+			su.markSlotsStale()
 		}
-	} else if newSlotServer != currentSlot.Server() {
-		err := currentSlot.SetServer(newSlotServer)
-		if err != nil {
-			return "", 0, errors.WithStack(err)
-		}
+
+		return
 	}
-	return res.Header.Get(common.HttpHeaderOdpsRequestId), conn.bytesCount(), nil
+
+	// an absent odps-tunnel-routed-server header means the tunnel did not reschedule
+	// the slot, keep using the server we already have
+	if newSlotServer == "" || newSlotServer == currentSlot.Server() {
+		return
+	}
+
+	if err := su.slotSelector.UpdateServer(currentSlot.id, newSlotServer); err != nil {
+		su.markSlotsStale()
+	}
 }
 
-func (su *StreamUploadSession) newUploadConnection(reader io.ReadCloser, writer io.WriteCloser, currentSlot *slot, dataSize int64, recordCount int64, timeout time.Duration) (*httpConnection, error) {
+func (su *StreamUploadSession) markSlotsStale() {
+	su.slotsStaleMu.Lock()
+	defer su.slotsStaleMu.Unlock()
+
+	su.slotsStale = true
+}
+
+// takeSlotsStale clears the stale mark and reports whether it was set, so that
+// concurrent flushes of a shared session send a single reload between them.
+func (su *StreamUploadSession) takeSlotsStale() bool {
+	su.slotsStaleMu.Lock()
+	defer su.slotsStaleMu.Unlock()
+
+	stale := su.slotsStale
+	su.slotsStale = false
+
+	return stale
+}
+
+// reloadSlotsIfStale reloads the slots when a previous flush found the routing
+// information out of date. The reload is best effort: when it fails the mark is
+// put back, and the flush goes on with the slots at hand. Failing the flush here
+// instead would turn one unreachable tunnel server into a session that cannot
+// write at all, even though the other slots may well be healthy.
+func (su *StreamUploadSession) reloadSlotsIfStale() {
+	if !su.takeSlotsStale() {
+		return
+	}
+
+	if err := su.reloadSlotNum(); err != nil {
+		su.markSlotsStale()
+	}
+}
+
+// newUploadConnection takes currentSlot by value: the goroutine below reads its
+// server while another flush may be rewriting the slot the copy was taken from.
+func (su *StreamUploadSession) newUploadConnection(reader io.ReadCloser, writer io.WriteCloser, currentSlot slot, dataSize int64, recordCount int64, timeout time.Duration) (*httpConnection, error) {
 	queryArgs := make(url.Values, 5)
 	queryArgs.Set("uploadid", su.id)
 	queryArgs.Set("slotid", currentSlot.id)
