@@ -35,6 +35,57 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/options"
 )
 
+const (
+	// instanceCreateMaxRetryDuration bounds the wall time CreateTask spends
+	// re-issuing a create request after the service answered 409.
+	instanceCreateMaxRetryDuration = 180 * time.Second
+	// instanceCreateDefaultRetryDelay is waited when the service sends no
+	// Retry-After header, or sends a value the client cannot use.
+	instanceCreateDefaultRetryDelay = 5 * time.Second
+)
+
+// instanceCreateSleep / instanceCreateNow are seams: the create loop waits and
+// measures its retry budget through them, so backoff behaviour can be asserted
+// in tests without burning real wall-clock time.
+var (
+	instanceCreateSleep = time.Sleep
+	instanceCreateNow   = time.Now
+)
+
+// instanceCreateRetryDelay decides how long CreateTask waits before re-issuing
+// a create request that the service rejected with 409.
+//
+// Retry-After is server controlled, so the value is clamped to what the client
+// is willing to block for:
+//   - missing, unparsable (e.g. an HTTP date), zero or negative values fall
+//     back to instanceCreateDefaultRetryDelay. A zero/negative value would
+//     otherwise make the loop re-send immediately, i.e. hammer the service for
+//     the whole retry budget;
+//   - a value larger than the remaining retry budget is cut down to that
+//     budget. The budget is only checked before waiting, so without this clamp
+//     a single "Retry-After: 86400" would keep the call blocked for a day after
+//     the point where the loop is meant to give up.
+func instanceCreateRetryDelay(header http.Header, remaining time.Duration) time.Duration {
+	delay := instanceCreateDefaultRetryDelay
+
+	if header != nil {
+		if raw := header.Get("Retry-After"); raw != "" {
+			if seconds, err := strconv.Atoi(raw); err == nil && seconds > 0 {
+				delay = time.Duration(seconds) * time.Second
+			}
+		}
+	}
+
+	if remaining <= 0 {
+		return 0
+	}
+	if delay > remaining {
+		return remaining
+	}
+
+	return delay
+}
+
 // Instances is used to get or create instance(s)
 type Instances struct {
 	projectName string
@@ -151,8 +202,7 @@ func (instances *Instances) CreateTask(projectName string, task Task, createInst
 	}
 	var maxqaQueryCookie string
 
-	startTime := time.Now()
-	maxRetryDuration := 180 * time.Second
+	startTime := instanceCreateNow()
 
 	// 循环，直到达到最大重试时间
 	for {
@@ -180,21 +230,23 @@ func (instances *Instances) CreateTask(projectName string, task Task, createInst
 			return errors.WithStack(decoder.Decode(&resModel))
 		})
 		if err != nil {
-			if time.Since(startTime) >= maxRetryDuration {
+			// Only a 409 is retried here. Every other failure - transport
+			// error, timeout, 4xx/5xx that is not 409, a response the parse
+			// func could not read - returns to the caller without a second
+			// POST, which is what keeps this retry from duplicating an
+			// instance that the service may already have created.
+			elapsed := instanceCreateNow().Sub(startTime)
+			if elapsed >= instanceCreateMaxRetryDuration {
 				return nil, err
 			}
 			var httpErr restclient.HttpError
-			if errors.As(err, &httpErr) && httpErr.Response.StatusCode == 409 {
-				retryAfter := httpErr.Response.Header.Get("Retry-After")
-				if retryAfter != "" {
-					retryAfterInt, ioErr := strconv.Atoi(retryAfter)
-					if ioErr != nil {
-						retryAfterInt = 5
-					}
-					time.Sleep(time.Second * time.Duration(retryAfterInt))
-				} else {
-					time.Sleep(time.Second * 5)
+			if errors.As(err, &httpErr) && httpErr.StatusCode == 409 {
+				var header http.Header
+				if httpErr.Response != nil {
+					header = httpErr.Response.Header
 				}
+				instanceCreateSleep(instanceCreateRetryDelay(
+					header, instanceCreateMaxRetryDuration-elapsed))
 				continue
 			}
 			return nil, err
