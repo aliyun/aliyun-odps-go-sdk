@@ -71,8 +71,23 @@ type RestClient struct {
 // The mutex lives here rather than on RestClient so copying the struct never
 // copies a lock.
 type clientSlot struct {
-	mu     sync.Mutex
-	client *http.Client
+	mu    sync.Mutex
+	built bool
+	// settings is the snapshot the current client was built from, so a caller
+	// that changes a timeout on a live RestClient still gets it applied instead
+	// of silently keeping the client built by an earlier request.
+	settings clientSettings
+	client   *http.Client
+}
+
+// clientSettings are the fields that decide how the http.Client is built.
+type clientSettings struct {
+	endpoint             string
+	httpTimeout          time.Duration
+	tcpConnectionTimeout time.Duration
+	dnsCacheExpireTime   time.Duration
+	disableCompression   bool
+	disableKeepAlives    bool
 }
 
 func NewOdpsRestClient(a account.Account, endpoint string) RestClient {
@@ -146,19 +161,27 @@ func (client *RestClient) client() *http.Client {
 	}
 
 	slot := client._slot
+	want := client.settings()
+
 	slot.mu.Lock()
 	defer slot.mu.Unlock()
 
-	if slot.client != nil {
+	if slot.built && slot.settings == want {
 		return slot.client
 	}
 
-	resolver := NewResolver(int64(client.DnsCacheExpireTime) / int64(time.Second))
+	if slot.client != nil {
+		// Settings changed on a live client: drop the old connection pool so it
+		// does not linger behind the replacement.
+		slot.client.CloseIdleConnections()
+	}
+
+	resolver := NewResolver(int64(want.dnsCacheExpireTime) / int64(time.Second))
 
 	dialer := Dialer{
 		Resolver: resolver,
 		Dialer: net.Dialer{
-			Timeout:   client.TcpConnectionTimeout,
+			Timeout:   want.tcpConnectionTimeout,
 			KeepAlive: 30 * time.Second,
 		},
 	}
@@ -167,16 +190,32 @@ func (client *RestClient) client() *http.Client {
 		Proxy:              http.ProxyFromEnvironment,
 		DialContext:        dialer.DialContext,
 		ForceAttemptHTTP2:  false,
-		DisableCompression: client.DisableCompression,
-		DisableKeepAlives:  client.DisableKeepAlives,
+		DisableCompression: want.disableCompression,
+		DisableKeepAlives:  want.disableKeepAlives,
 	}
 
 	slot.client = &http.Client{
 		Transport: &transport,
-		Timeout:   client.HttpTimeout,
+		Timeout:   want.httpTimeout,
 	}
+	slot.settings = want
+	slot.built = true
 
 	return slot.client
+}
+
+// settings snapshots everything that influences the http.Client. It is a value
+// type on purpose: comparing it tells client() whether the pooled transport is
+// still the one the caller asked for.
+func (client *RestClient) settings() clientSettings {
+	return clientSettings{
+		endpoint:             client.endpoint,
+		httpTimeout:          client.HttpTimeout,
+		tcpConnectionTimeout: client.TcpConnectionTimeout,
+		dnsCacheExpireTime:   client.DnsCacheExpireTime,
+		disableCompression:   client.DisableCompression,
+		disableKeepAlives:    client.DisableKeepAlives,
+	}
 }
 
 func (client *RestClient) NewRequest(method, resource string, body io.Reader) (*http.Request, error) {

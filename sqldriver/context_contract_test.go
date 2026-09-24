@@ -783,6 +783,64 @@ func runSuccessfulQueries(t *testing.T, db *sql.DB, n int) {
 	}
 }
 
+// --- 取消错误的可用性与 Exec 的返回契约 ---
+
+// TestCanceledErrorCarriesInstanceIdForCancel：调用方不用解析错误文本就能拿到
+// instance id，同时 errors.Is 对 context 错误的判断保持不变。
+func TestCanceledErrorCarriesInstanceIdForCancel(t *testing.T) {
+	f := newFakeService(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	_, err := f.newConnection().QueryContext(ctx, "select 'x';", nil)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("errors.Is must still see the context error, got %v", err)
+	}
+
+	var canceledErr *CanceledError
+	if !errors.As(err, &canceledErr) {
+		t.Fatalf("expect a *sqldriver.CanceledError, got %T: %v", err, err)
+	}
+	if canceledErr.InstanceID != fakeInstanceId {
+		t.Fatalf("expect instance id %s, got %q", fakeInstanceId, canceledErr.InstanceID)
+	}
+	if !errors.Is(canceledErr, context.DeadlineExceeded) {
+		t.Fatal("CanceledError must unwrap to the context error")
+	}
+}
+
+// TestExecContextReturnsUsableResult：ExecContext 成功时不能给 nil driver.Result。
+// 修复前 database/sql 把 nil 原样交给调用方，res.RowsAffected() 直接 panic。
+func TestExecContextReturnsUsableResult(t *testing.T) {
+	f := newFakeService(t)
+	f.succeedAfterPolls = 1
+
+	db, err := sql.Open("odps", f.dsn())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	res, err := db.ExecContext(ctx, "create table if not exists t(a string);")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res == nil {
+		t.Fatal("ExecContext must not hand back a nil sql.Result")
+	}
+
+	// 这两行在修复前会 panic（nil interface 上调方法）。
+	if _, err := res.RowsAffected(); !errors.Is(err, ErrNoRowsAffectedInfo) {
+		t.Fatalf("expect the documented ErrNoRowsAffectedInfo, got %v", err)
+	}
+	if _, err := res.LastInsertId(); !errors.Is(err, ErrNoLastInsertIdInfo) {
+		t.Fatalf("expect the documented ErrNoLastInsertIdInfo, got %v", err)
+	}
+}
+
 // --- helpers ---
 
 type fakeRecordReader struct {

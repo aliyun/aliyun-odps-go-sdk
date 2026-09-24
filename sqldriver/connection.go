@@ -209,11 +209,7 @@ func contextCancellation(err error) error {
 }
 
 func canceledWaitingInstance(ins *odps.Instance, ctxErr error) error {
-	return errors.Wrapf(
-		ctxErr,
-		"canceled while waiting for MaxCompute instance %s; the instance keeps running on the server, "+
-			"use odps.Instance.Terminate to stop it if it is no longer needed",
-		ins.Id())
+	return &CanceledError{InstanceID: ins.Id(), Err: ctxErr}
 }
 
 // ExecContext sql/driver.ExecerContext接口实现，ctx 语义与 QueryContext 一致：
@@ -252,7 +248,9 @@ func (c *connection) execContext(ctx context.Context, query string) (driver.Resu
 		return nil, waitError(ins, err)
 	}
 
-	return nil, nil
+	// odps 不报告受影响行数，但也不能返回 nil：database/sql 会把它原样交给调用方，
+	// res.RowsAffected() 就 panic 在 nil interface 上。
+	return NoResult{}, nil
 }
 
 func namedArgQueryToSql(query string, args []driver.NamedValue) (string, error) {
