@@ -17,6 +17,7 @@
 package account
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/aliyun/credentials-go/credentials"
@@ -61,6 +62,58 @@ func (sp *stsStringProvider) Credential() (*credentials.CredentialModel, error) 
 	}, nil
 }
 
+// errIncompleteCredential is returned when a credential provider hands the
+// account an unusable credential. It deliberately carries no credential value,
+// so an error message can be logged or shown without leaking a secret.
+var errIncompleteCredential = errors.New("odps account: credential provider returned an incomplete credential (access key id and secret are required)")
+
+// signWithCredential signs req with the access key pair from cred.
+//
+// A provider is called per request, so a rotated temporary credential is picked
+// up by the next signing. An empty/nil pair or a nil credential is reported as
+// an error instead of being dereferenced (the previous code dereferenced
+// cred.AccessKeyId / cred.AccessKeySecret unguarded, so one bad provider reply
+// killed the process).
+func signWithCredential(cred *credentials.CredentialModel, regionId, endpoint string, req *http.Request) error {
+	if cred == nil {
+		return errIncompleteCredential
+	}
+	if cred.AccessKeyId == nil || *cred.AccessKeyId == "" ||
+		cred.AccessKeySecret == nil || *cred.AccessKeySecret == "" {
+		return errIncompleteCredential
+	}
+
+	aliyunAccount := NewAliyunAccount(*cred.AccessKeyId, *cred.AccessKeySecret, regionId)
+	if err := aliyunAccount.SignRequest(req, endpoint); err != nil {
+		return err
+	}
+
+	if token, ok := stsTokenHeaderValue(cred); ok {
+		req.Header.Set(common.HttpHeaderAuthorizationSTSToken, token)
+	}
+
+	return nil
+}
+
+// stsTokenHeaderValue picks the value for the authorization-sts-token header.
+//
+// SecurityToken is what a temporary-credential provider fills, so it wins.
+// BearerToken is only a fallback, kept so a provider that has always put its
+// token there keeps working; a credential with neither sends no token header.
+func stsTokenHeaderValue(cred *credentials.CredentialModel) (string, bool) {
+	if cred == nil {
+		return "", false
+	}
+	if cred.SecurityToken != nil {
+		return *cred.SecurityToken, true
+	}
+	if cred.BearerToken != nil {
+		return *cred.BearerToken, true
+	}
+
+	return "", false
+}
+
 type stsAliyunCredentialProvider struct {
 	aliyunCredential credentials.Credential
 	regionId         string
@@ -72,15 +125,7 @@ func (sp *stsAliyunCredentialProvider) _signRequest(req *http.Request, endpoint 
 		return err
 	}
 
-	aliyunAccount := NewAliyunAccount(*cred.AccessKeyId, *cred.AccessKeySecret, sp.regionId)
-	err = aliyunAccount.SignRequest(req, endpoint)
-	if err != nil {
-		return err
-	}
-	if cred.SecurityToken != nil {
-		req.Header.Set(common.HttpHeaderAuthorizationSTSToken, *cred.SecurityToken)
-	}
-	return nil
+	return signWithCredential(cred, sp.regionId, endpoint, req)
 }
 
 func (sp *stsAliyunCredentialProvider) Credential() (*credentials.CredentialModel, error) {
@@ -98,15 +143,7 @@ func (sp *stsCustomCredentialProvider) _signRequest(req *http.Request, endpoint 
 		return err
 	}
 
-	aliyunAccount := NewAliyunAccount(*cred.AccessKeyId, *cred.AccessKeySecret, sp.regionId)
-	err = aliyunAccount.SignRequest(req, endpoint)
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set(common.HttpHeaderAuthorizationSTSToken, *cred.BearerToken)
-
-	return nil
+	return signWithCredential(cred, sp.regionId, endpoint, req)
 }
 
 func (sp *stsCustomCredentialProvider) Credential() (*credentials.CredentialModel, error) {
