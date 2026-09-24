@@ -96,6 +96,9 @@ func (s *schemaResModel) toTableSchema(tableName string) (tableschema.TableSchem
 	return tableSchema, nil
 }
 
+// maxRetryAttempts is how many times tunnel.Retry runs its closure.
+const maxRetryAttempts = 3
+
 func min(x, y int) int {
 	if x <= y {
 		return x
@@ -103,18 +106,36 @@ func min(x, y int) int {
 	return y
 }
 
+// retrySleep is a seam: Retry waits through it so tests can observe the backoff
+// without burning real wall-clock time.
+var retrySleep = time.Sleep
+
+// Retry calls f up to maxRetryAttempts times, waiting 1s and then 2s between
+// the attempts, and returns the error of the last attempt (or nil). Before, the
+// loop also waited 8s after the final failure - 11s of blocking on a request
+// that had already failed three times.
+//
+// It does not look at the error: every failure is retried, including a 4xx that
+// a service will answer the same way on the next attempt. Callers that must not
+// re-send a request on some failures have to check the error themselves.
 func Retry(f func() error) error {
 	// TODO: use tunnel retry strategy and add retry logger
 	sleepTime := int64(1)
 	var err error
-	for i := 0; i < 3; i++ {
+	for i := 0; i < maxRetryAttempts; i++ {
 		err = f()
 		if err == nil {
 			break
 		}
 
+		if i == maxRetryAttempts-1 {
+			// The loop is over: waiting now would only delay the error the
+			// caller is about to receive.
+			break
+		}
+
 		sleepTime *= 1 << i
-		time.Sleep(time.Duration(sleepTime) * time.Second)
+		retrySleep(time.Duration(sleepTime) * time.Second)
 	}
 	return err
 }
