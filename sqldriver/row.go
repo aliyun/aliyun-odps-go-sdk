@@ -17,9 +17,12 @@
 package sqldriver
 
 import (
+	"context"
 	"database/sql/driver"
 	"io"
 	"reflect"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -27,12 +30,78 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 )
+
+// recordReader 是 rowsReader 需要的结果读取能力，*tunnel.RecordProtocReader 是它的
+// 真实实现。用接口的目的有两个：sqldriver 不再依赖 tunnel 的具体类型，以及回归测试
+// 可以塞进一个可控的假 reader（阻塞在 Read 上、统计 Close 次数）。
+type recordReader interface {
+	Read() (data.Record, error)
+	Close() error
+}
 
 type rowsReader struct {
 	columns []tableschema.Column
-	inner   *tunnel.RecordProtocReader
+	inner   recordReader
+	// ctx 是查询提交时拿到的 context，用于在两行之间发现取消。
+	ctx context.Context
+	// closed 用 atomic 而不是 mutex：Close 可能来自取消监听 goroutine，
+	// 与正在进行中的 Read 并发，加锁会把两者串起来。
+	closed int32
+	// stopWatch 由 startCancelWatch 写入一次，Close 通过 watchOnce 关掉它。
+	stopWatch chan struct{}
+	watchOnce sync.Once
+	// releaseIdleConns 关掉这一次结果下载用完的 keep-alive 连接。tunnel 每建一个
+	// session 都会新起一个 http.Transport，不释放的话它的连接和喂它的 goroutine
+	// 会随查询次数线性堆积。
+	releaseIdleConns func()
+}
+
+// isClosed 报告结果集是否已经关闭。
+func (rr *rowsReader) isClosed() bool {
+	return atomic.LoadInt32(&rr.closed) == 1
+}
+
+// contextErr 返回 ctx 的取消原因，没有 ctx 或未取消时返回 nil。
+func (rr *rowsReader) contextErr() error {
+	if rr.ctx == nil {
+		return nil
+	}
+
+	return rr.ctx.Err()
+}
+
+// startCancelWatch 在 ctx 取消时主动关闭结果流。这一步必须由 driver 来做：
+// database/sql 在 ctx 取消时想关掉 Rows，需要拿到 Next 正持有着的锁，
+// 而 Read 卡在网络上的 Next 永远不会放锁 —— 也就是说光靠 database/sql
+// 取消不掉一个卡住的读。有了这个 goroutine，阻塞中的 Read 会因为响应体被
+// 关闭而返回错误，Next 随即把 ctx.Err() 报给调用方。
+// 不可取消的 context（Done() 为 nil）不会起 goroutine。
+func (rr *rowsReader) startCancelWatch() {
+	if rr.ctx == nil || rr.ctx.Done() == nil {
+		return
+	}
+
+	stop := make(chan struct{})
+	rr.stopWatch = stop
+
+	go func() {
+		select {
+		case <-rr.ctx.Done():
+			_ = rr.Close()
+		case <-stop:
+		}
+	}()
+}
+
+// stopCancelWatch 结束取消监听：Rows 已经关了，再监听没有意义，
+// 否则每查一次就漏一个 goroutine。
+func (rr *rowsReader) stopCancelWatch() {
+	rr.watchOnce.Do(func() {
+		if rr.stopWatch != nil {
+			close(rr.stopWatch)
+		}
+	})
 }
 
 func (rr *rowsReader) Columns() []string {
@@ -45,11 +114,40 @@ func (rr *rowsReader) Columns() []string {
 	return columns
 }
 
+// Close 关闭底层结果流。重复 Close 返回 nil：database/sql 在 ctx 取消时会自己关掉
+// Rows，调用方随后再 Close(rows.Close/defer) 是正常写法，不应该报错；底层响应体
+// 也只应被关闭一次。
 func (rr *rowsReader) Close() error {
-	return errors.WithStack(rr.inner.Close())
+	if !atomic.CompareAndSwapInt32(&rr.closed, 0, 1) {
+		return nil
+	}
+
+	rr.stopCancelWatch()
+
+	var err error
+	if rr.inner != nil {
+		err = errors.WithStack(rr.inner.Close())
+	}
+
+	if rr.releaseIdleConns != nil {
+		rr.releaseIdleConns()
+	}
+
+	return err
 }
 
 func (rr *rowsReader) Next(dst []driver.Value) error {
+	// 取消必须报成错误而不是 io.EOF：截断的结果集不能看起来像读完了。
+	if err := rr.contextErr(); err != nil {
+		return errors.WithStack(err)
+	}
+
+	// 已关闭的 Rows 上没有更多数据。返回 io.EOF 而不是 panic 或底层错误，
+	// 这是 database/sql 认定“读完了”的信号。
+	if rr.isClosed() || rr.inner == nil {
+		return io.EOF
+	}
+
 	record, err := rr.inner.Read()
 
 	if errors.Is(err, io.EOF) {
@@ -57,6 +155,11 @@ func (rr *rowsReader) Next(dst []driver.Value) error {
 	}
 
 	if err != nil {
+		// 取消时关流会让进行中的 Read 报错，这里把真实原因换成 ctx 的错误。
+		if ctxErr := rr.contextErr(); ctxErr != nil {
+			return errors.WithStack(ctxErr)
+		}
+
 		return errors.WithStack(err)
 	}
 

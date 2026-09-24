@@ -50,19 +50,33 @@ func (c *connection) Prepare(string) (driver.Stmt, error) {
 	return nil, nil
 }
 
-// Close sql/driver.Conn接口实现，由于odps通过rest接口获取数据, 一个rest连接只会用一次，所以无需关闭
+// Close sql/driver.Conn接口实现。odps 的 REST 调用本身没有服务端会话状态要清理，
+// 但 RestClient 的 transport 会留着 keep-alive 连接和喂它们的 goroutine：
+// database/sql 丢掉这条连接时把它们关掉。
 func (c *connection) Close() error {
+	restClient := c.odpsIns.RestClient()
+	restClient.CloseIdleConnections()
+
 	return nil
 }
 
 // QueryContext sql/driver.QueryerContext接口实现
+//
+// ctx 控制客户端的等待与资源：提交前已取消则不去创建远端 instance；等待期间
+// 取消/超时会尽快返回 ctx.Err()；返回 Rows 之后 ctx 也管到行消费 —— 取消时
+// driver 会关掉结果流，卡住的 Next 立即带着 ctx.Err() 返回。
+//
+// ctx 不会终止服务端的 MaxCompute instance：终止运行中的任务是破坏性动作，
+// 由调用方决定（见 odps.Instance.Terminate）；取消报错里带 instance id 就是为了
+// 让调用方还能追到这个任务。已经发出的单个 HTTP 请求不会被打断，所以等待的
+// 返回时刻在一个轮询周期加一次往返之内。
 func (c *connection) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	sqlStr, err := namedArgQueryToSql(query, args)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	return c.query(sqlStr)
+	return c.queryContext(ctx, sqlStr)
 }
 
 func (c *connection) Query(query string, args []driver.Value) (driver.Rows, error) {
@@ -71,20 +85,24 @@ func (c *connection) Query(query string, args []driver.Value) (driver.Rows, erro
 		return nil, errors.WithStack(err)
 	}
 
-	return c.query(sqlStr)
+	return c.queryContext(context.Background(), sqlStr)
 }
 
-func (c *connection) query(query string) (driver.Rows, error) {
+func (c *connection) queryContext(ctx context.Context, query string) (driver.Rows, error) {
+	// 提交前先检查一次：ctx 已经取消时不去创建远端 instance。
+	if err := ctx.Err(); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
 	// 执行sql task，获取instance
 	ins, err := c.odpsIns.ExecSQlWithHints(query, c.config.Hints)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	// 等待instance结束
-	err = ins.WaitForSuccess()
-	if err != nil {
-		return nil, errors.WithStack(err)
+	// 等待instance结束，等待受ctx控制
+	if err = ins.WaitForSuccessContext(ctx); err != nil {
+		return nil, waitError(ins, err)
 	}
 
 	// 如果dsn中配置了enableLogview=true，将打印相应logView
@@ -120,7 +138,15 @@ func (c *connection) query(query string) (driver.Rows, error) {
 		}
 	}
 
+	if err := ctx.Err(); err != nil {
+		return nil, canceledWaitingInstance(ins, err)
+	}
+
+	// 结果下载的连接是一次性的：每建一个 session 都会新起一个 http.Transport，
+	// 池化那条 keep-alive 连接没有下一次可用，只会连同喂它的 goroutine 一起留下，
+	// 所以这里显式关掉 keep-alive（见 tunnel.Tunnel.DisableKeepAlives）。
 	tunnelIns := tunnel.NewTunnel(c.odpsIns, tunnelEndpoint)
+	tunnelIns.DisableKeepAlives = true
 	projectName := c.odpsIns.DefaultProjectName()
 	session, err := tunnelIns.CreateInstanceResultDownloadSession(projectName, ins.Id())
 	if err != nil {
@@ -141,18 +167,64 @@ func (c *connection) query(query string) (driver.Rows, error) {
 	rows := &rowsReader{
 		columns: schema.Columns,
 		inner:   reader,
+		ctx:     ctx,
+		// 注意取的是 session 里那个 RestClient 的地址：它的 http.Client 是
+		// 惰性建的，值拷贝会拿到一个还没建过连接的副本，关不掉任何东西。
+		releaseIdleConns: session.RestClient.CloseIdleConnections,
+	}
+	rows.startCancelWatch()
+
+	// 结果下载已经建连，此时若 ctx 已取消，必须自己关掉响应体：
+	// Rows 还没有交给调用方，没有人会再 Close 它。
+	if err := ctx.Err(); err != nil {
+		_ = rows.Close()
+		return nil, canceledWaitingInstance(ins, err)
 	}
 
 	return rows, nil
 }
 
+// waitError 把等待 instance 结束的错误转成 driver 层的错误。ctx 取消/超时时
+// 带上 instance id：调用方只有拿 id 才能在服务端继续跟踪或主动终止该任务。
+func waitError(ins *odps.Instance, err error) error {
+	if ctxErr := contextCancellation(err); ctxErr != nil {
+		return canceledWaitingInstance(ins, ctxErr)
+	}
+
+	return errors.WithStack(err)
+}
+
+// contextCancellation 从错误链里取出 context.Canceled / context.DeadlineExceeded，
+// 没有则返回 nil。
+func contextCancellation(err error) error {
+	if errors.Is(err, context.Canceled) {
+		return context.Canceled
+	}
+
+	if errors.Is(err, context.DeadlineExceeded) {
+		return context.DeadlineExceeded
+	}
+
+	return nil
+}
+
+func canceledWaitingInstance(ins *odps.Instance, ctxErr error) error {
+	return errors.Wrapf(
+		ctxErr,
+		"canceled while waiting for MaxCompute instance %s; the instance keeps running on the server, "+
+			"use odps.Instance.Terminate to stop it if it is no longer needed",
+		ins.Id())
+}
+
+// ExecContext sql/driver.ExecerContext接口实现，ctx 语义与 QueryContext 一致：
+// 只约束客户端等待，不终止服务端 instance。
 func (c *connection) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 	sqlStr, err := namedArgQueryToSql(query, args)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	return c.exec(sqlStr)
+	return c.execContext(ctx, sqlStr)
 }
 
 func (c *connection) Exec(query string, args []driver.Value) (driver.Result, error) {
@@ -161,10 +233,14 @@ func (c *connection) Exec(query string, args []driver.Value) (driver.Result, err
 		return nil, errors.WithStack(err)
 	}
 
-	return c.exec(sqlStr)
+	return c.execContext(context.Background(), sqlStr)
 }
 
-func (c *connection) exec(query string) (driver.Result, error) {
+func (c *connection) execContext(ctx context.Context, query string) (driver.Result, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
 	// 执行sql task，获取instance
 	ins, err := c.odpsIns.ExecSQlWithHints(query, c.config.Hints)
 	if err != nil {
@@ -172,8 +248,11 @@ func (c *connection) exec(query string) (driver.Result, error) {
 	}
 
 	// 等待instance结束
-	err = ins.WaitForSuccess()
-	return nil, errors.WithStack(err)
+	if err = ins.WaitForSuccessContext(ctx); err != nil {
+		return nil, waitError(ins, err)
+	}
+
+	return nil, nil
 }
 
 func namedArgQueryToSql(query string, args []driver.NamedValue) (string, error) {
