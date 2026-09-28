@@ -74,7 +74,14 @@ func (s Struct) String() string {
 	for i, field := range s.fields {
 		sb.WriteString(field.Name)
 		sb.WriteString(":")
-		sb.WriteString(field.Value.String())
+
+		// A NULL field is legal in a struct, render it instead of
+		// dereferencing a nil Data.
+		if field.Value == nil {
+			sb.WriteString("NULL")
+		} else {
+			sb.WriteString(field.Value.String())
+		}
 
 		if i < n {
 			sb.WriteString(",")
@@ -173,7 +180,9 @@ func (s *Struct) SafeSetField(fieldName string, i interface{}) error {
 		return errors.Errorf("cannot set %s to %s", fieldName, s.typ)
 	}
 
-	if !datatype.IsTypeEqual(fieldType, d.Type()) {
+	// A NULL field value is legal in a struct, and NULL has no type to check
+	// against.
+	if d != nil && !datatype.IsTypeEqual(fieldType, d.Type()) {
 		return errors.Errorf("cannot set type %s to %s of %s", d.Type(), fieldName, s.typ)
 	}
 
@@ -189,6 +198,12 @@ func (s *Struct) TypeInfer() (datatype.DataType, error) {
 
 	fieldTypes := make([]datatype.StructFieldType, len(s.fields))
 	for i, field := range s.fields {
+		// A NULL field carries no type information, its type cannot be inferred
+		// from the value.
+		if field.Value == nil {
+			return nil, errors.Errorf("cannot infer type for null field %s", field.Name)
+		}
+
 		fieldTypes[i] = datatype.NewStructFieldType(field.Name, field.Value.Type())
 	}
 

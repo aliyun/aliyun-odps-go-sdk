@@ -60,7 +60,13 @@ func (a Array) String() string {
 	sb.WriteString("array(")
 
 	for i, d := range a.data {
-		sb.WriteString(d.String())
+		// A NULL element is legal in an array, render it instead of
+		// dereferencing a nil Data.
+		if d == nil {
+			sb.WriteString("NULL")
+		} else {
+			sb.WriteString(d.String())
+		}
 
 		if i+1 < n {
 			sb.WriteString(", ")
@@ -135,6 +141,12 @@ func (a *Array) SafeAppend(data ...interface{}) error {
 			return errors.WithStack(err)
 		}
 
+		// NULL is a valid array element and has no type to check against.
+		if o == nil {
+			a.data = append(a.data, nil)
+			continue
+		}
+
 		if !datatype.IsTypeEqual(o.Type(), a.typ.ElementType) {
 			return errors.Errorf("expect %s element type for array, but get %s", a.typ.ElementType, o.Type())
 		}
@@ -158,11 +170,26 @@ func (a *Array) TypeInfer() (datatype.DataType, error) {
 		return nil, errors.Errorf("cannot infer type for empty array")
 	}
 
-	et := a.data[0].Type()
-	for _, e := range a.data[1:] {
-		if !datatype.IsTypeEqual(e.Type(), et) {
+	// NULL elements carry no type information, the element type is inferred
+	// from the non-null elements.
+	var et datatype.DataType
+	for _, e := range a.data {
+		if e == nil {
+			continue
+		}
+
+		if et == nil {
+			et = e.Type()
+			continue
+		}
+
+		if !datatype.IsTypeEqual(et, e.Type()) {
 			return nil, errors.Errorf("element type is not the same in array, find %s, %s types", et, e.Type())
 		}
+	}
+
+	if et == nil {
+		return nil, errors.New("cannot infer element type for an array whose elements are all null")
 	}
 
 	return datatype.NewArrayType(et), nil
