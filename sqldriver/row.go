@@ -150,16 +150,18 @@ func (rr *rowsReader) Next(dst []driver.Value) error {
 
 	record, err := rr.inner.Read()
 
+	// Cancellation can arrive while Read is blocked, including when the reader
+	// reports EOF as it closes. Preserve the cancellation instead of reporting
+	// a successfully drained result set.
+	if ctxErr := rr.contextErr(); ctxErr != nil {
+		return errors.WithStack(ctxErr)
+	}
+
 	if errors.Is(err, io.EOF) {
 		return io.EOF
 	}
 
 	if err != nil {
-		// 取消时关流会让进行中的 Read 报错，这里把真实原因换成 ctx 的错误。
-		if ctxErr := rr.contextErr(); ctxErr != nil {
-			return errors.WithStack(ctxErr)
-		}
-
 		return errors.WithStack(err)
 	}
 
