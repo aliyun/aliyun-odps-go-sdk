@@ -66,19 +66,24 @@ var (
 //     a single "Retry-After: 86400" would keep the call blocked for a day after
 //     the point where the loop is meant to give up.
 func instanceCreateRetryDelay(header http.Header, remaining time.Duration) time.Duration {
+	if remaining <= 0 {
+		return 0
+	}
 	delay := instanceCreateDefaultRetryDelay
 
 	if header != nil {
 		if raw := header.Get("Retry-After"); raw != "" {
-			if seconds, err := strconv.Atoi(raw); err == nil && seconds > 0 {
+			if seconds, err := strconv.ParseInt(raw, 10, 64); err == nil && seconds > 0 {
+				// Compare seconds first: converting an untrusted value to
+				// nanoseconds can overflow and turn the backoff negative.
+				if seconds > int64(remaining/time.Second) {
+					return remaining
+				}
 				delay = time.Duration(seconds) * time.Second
 			}
 		}
 	}
 
-	if remaining <= 0 {
-		return 0
-	}
 	if delay > remaining {
 		return remaining
 	}
