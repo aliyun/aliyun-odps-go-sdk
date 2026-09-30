@@ -56,6 +56,10 @@ type Tunnel struct {
 	httpTimeout          time.Duration
 	tcpConnectionTimeout time.Duration
 	odpsUserAgent        string
+	// DisableKeepAlives is passed to the RestClient this Tunnel builds for each
+	// session, so sessions that will not reuse their connections do not leave
+	// idle ones behind.
+	DisableKeepAlives bool
 }
 
 // Once the tunnel endpoint is set, it cannot be modified anymore.
@@ -190,6 +194,7 @@ func (t *Tunnel) getRestClient(projectName string) (restclient.RestClient, error
 	client.HttpTimeout = t.HttpTimeout()
 	client.TcpConnectionTimeout = t.TcpConnectionTimeout()
 	client.SetUserAgent(t.odpsUserAgent)
+	client.DisableKeepAlives = t.DisableKeepAlives
 
 	return client, nil
 }

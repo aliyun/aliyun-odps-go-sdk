@@ -17,6 +17,7 @@
 package odps
 
 import (
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"io/ioutil"
@@ -343,10 +344,47 @@ func (instance *Instance) TaskResults() []TaskResult {
 	return instance.taskResults
 }
 
+// instancePollInterval is how long WaitForSuccessContext waits between two
+// status checks. Cancellation is observed during this wait, so a canceled
+// context does not cost a full interval.
+const instancePollInterval = time.Second
+
+// WaitForSuccess wait the instance to terminate, and return error if the
+// instance or one of its tasks failed. It blocks until the instance is done,
+// ignoring any caller side deadline: use WaitForSuccessContext when the wait
+// needs to be bounded by a context.
 func (instance *Instance) WaitForSuccess() error {
+	return instance.WaitForSuccessContext(context.Background())
+}
+
+// WaitForSuccessContext behaves like WaitForSuccess, but it stops waiting and
+// returns ctx.Err() as soon as ctx is canceled or its deadline passes. The
+// returned error keeps the context error in its chain, so
+// errors.Is(err, context.Canceled) and errors.Is(err, context.DeadlineExceeded)
+// both work.
+//
+// Two boundaries are worth knowing:
+//
+//  1. Cancellation only stops the client from waiting. The MaxCompute instance
+//     keeps running on the server side, and it is not terminated here, because
+//     cancelling a running job is a destructive action that the caller should
+//     decide explicitly (see Instance.Terminate).
+//  2. An HTTP request that is already in flight is not aborted, so the call
+//     returns after the current status check finishes, which is bounded by one
+//     round trip plus one polling interval.
+func (instance *Instance) WaitForSuccessContext(ctx context.Context) error {
 	if instance.isSync {
 		return nil
 	}
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	if err := ctx.Err(); err != nil {
+		return errors.WithStack(err)
+	}
+
 	for {
 		err := instance.Load()
 		if err != nil {
@@ -359,7 +397,9 @@ func (instance *Instance) WaitForSuccess() error {
 		}
 
 		if len(tasks) == 0 {
-			time.Sleep(time.Second * 1)
+			if err := sleepContext(ctx, instancePollInterval); err != nil {
+				return errors.WithStack(err)
+			}
 			continue
 		}
 
@@ -389,10 +429,31 @@ func (instance *Instance) WaitForSuccess() error {
 			break
 		}
 
-		time.Sleep(time.Second * 1)
+		if err := sleepContext(ctx, instancePollInterval); err != nil {
+			return errors.WithStack(err)
+		}
 	}
 
 	return nil
+}
+
+// sleepContext waits for d, or returns ctx.Err() if ctx is canceled before
+// that happens. A canceled context is reported with a non-nil error so the
+// caller can stop the polling loop.
+func sleepContext(ctx context.Context, d time.Duration) error {
+	if ctx == nil {
+		return nil
+	}
+
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func (instance *Instance) GetResult() ([]TaskResult, error) {

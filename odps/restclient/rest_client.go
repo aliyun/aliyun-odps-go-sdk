@@ -27,6 +27,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -49,11 +50,44 @@ type RestClient struct {
 	TcpConnectionTimeout time.Duration
 	DnsCacheExpireTime   time.Duration
 	DisableCompression   bool
-	_client              *http.Client
-	defaultProject       string
-	currentSchema        string
+	// DisableKeepAlives closes the TCP connection as soon as a response is done
+	// with, instead of pooling it. Callers that build a RestClient per request
+	// and get nothing out of pooling use it so that idle connections - and the
+	// goroutines serving them - do not pile up.
+	DisableKeepAlives bool
+	// _slot holds the lazily created http.Client and is a pointer on purpose:
+	// RestClient values get copied all over the SDK ("client := odpsIns.restClient"),
+	// and a per-copy http.Client means a per-copy http.Transport, i.e. one pooled
+	// connection (plus its goroutines) leaked per request. Sharing the slot makes
+	// a RestClient and all of its copies use one connection pool.
+	_slot          *clientSlot
+	defaultProject string
+	currentSchema  string
+	endpoint       string
+	userAgent      string
+}
+
+// clientSlot is the state shared by one RestClient and every copy of it.
+// The mutex lives here rather than on RestClient so copying the struct never
+// copies a lock.
+type clientSlot struct {
+	mu    sync.Mutex
+	built bool
+	// settings is the snapshot the current client was built from, so a caller
+	// that changes a timeout on a live RestClient still gets it applied instead
+	// of silently keeping the client built by an earlier request.
+	settings clientSettings
+	client   *http.Client
+}
+
+// clientSettings are the fields that decide how the http.Client is built.
+type clientSettings struct {
 	endpoint             string
-	userAgent            string
+	httpTimeout          time.Duration
+	tcpConnectionTimeout time.Duration
+	dnsCacheExpireTime   time.Duration
+	disableCompression   bool
+	disableKeepAlives    bool
 }
 
 func NewOdpsRestClient(a account.Account, endpoint string) RestClient {
@@ -64,6 +98,7 @@ func NewOdpsRestClient(a account.Account, endpoint string) RestClient {
 		TcpConnectionTimeout: DefaultTcpConnectionTimeout * time.Second,
 		DnsCacheExpireTime:   time.Duration(DefaultDNSCacheExpireTime) * time.Second,
 		DisableCompression:   true,
+		_slot:                &clientSlot{},
 	}
 
 	return client
@@ -94,21 +129,59 @@ func (client *RestClient) UserAgent() string {
 	return common.UserAgentValue
 }
 
+// CloseIdleConnections closes the keep-alive connections that this client
+// pooled but is not using. A RestClient owns its http.Transport, so a caller
+// that is done with it (for example a database/sql connection being discarded)
+// should call this to release the pooled connections and the goroutines that
+// serve them. It is a no-op if no client has been created yet.
+func (client *RestClient) CloseIdleConnections() {
+	if client._slot == nil {
+		return
+	}
+
+	slot := client._slot
+	slot.mu.Lock()
+	built := slot.client
+	slot.mu.Unlock()
+
+	if built != nil {
+		built.CloseIdleConnections()
+	}
+}
+
 func (client *RestClient) Endpoint() string {
 	return client.endpoint
 }
 
 func (client *RestClient) client() *http.Client {
-	if client._client != nil {
-		return client._client
+	if client._slot == nil {
+		// A RestClient not built by NewOdpsRestClient: fall back to per-copy
+		// state, which is what this code did before.
+		client._slot = &clientSlot{}
 	}
 
-	resolver := NewResolver(int64(client.DnsCacheExpireTime) / int64(time.Second))
+	slot := client._slot
+	want := client.settings()
+
+	slot.mu.Lock()
+	defer slot.mu.Unlock()
+
+	if slot.built && slot.settings == want {
+		return slot.client
+	}
+
+	if slot.client != nil {
+		// Settings changed on a live client: drop the old connection pool so it
+		// does not linger behind the replacement.
+		slot.client.CloseIdleConnections()
+	}
+
+	resolver := NewResolver(int64(want.dnsCacheExpireTime) / int64(time.Second))
 
 	dialer := Dialer{
 		Resolver: resolver,
 		Dialer: net.Dialer{
-			Timeout:   client.TcpConnectionTimeout,
+			Timeout:   want.tcpConnectionTimeout,
 			KeepAlive: 30 * time.Second,
 		},
 	}
@@ -117,15 +190,32 @@ func (client *RestClient) client() *http.Client {
 		Proxy:              http.ProxyFromEnvironment,
 		DialContext:        dialer.DialContext,
 		ForceAttemptHTTP2:  false,
-		DisableCompression: client.DisableCompression,
+		DisableCompression: want.disableCompression,
+		DisableKeepAlives:  want.disableKeepAlives,
 	}
 
-	client._client = &http.Client{
+	slot.client = &http.Client{
 		Transport: &transport,
-		Timeout:   client.HttpTimeout,
+		Timeout:   want.httpTimeout,
 	}
+	slot.settings = want
+	slot.built = true
 
-	return client._client
+	return slot.client
+}
+
+// settings snapshots everything that influences the http.Client. It is a value
+// type on purpose: comparing it tells client() whether the pooled transport is
+// still the one the caller asked for.
+func (client *RestClient) settings() clientSettings {
+	return clientSettings{
+		endpoint:             client.endpoint,
+		httpTimeout:          client.HttpTimeout,
+		tcpConnectionTimeout: client.TcpConnectionTimeout,
+		dnsCacheExpireTime:   client.DnsCacheExpireTime,
+		disableCompression:   client.DisableCompression,
+		disableKeepAlives:    client.DisableKeepAlives,
+	}
 }
 
 func (client *RestClient) NewRequest(method, resource string, body io.Reader) (*http.Request, error) {
