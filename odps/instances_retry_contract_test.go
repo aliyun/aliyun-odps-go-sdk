@@ -519,3 +519,13 @@ func TestInstancesCreateRetryContractReadPathIsNotRepeated(t *testing.T) {
 	assert.True(t, stderrors.As(err, &httpErr), "the original service answer must survive, got %#v", err)
 	assert.Equal(t, http.StatusServiceUnavailable, httpErr.StatusCode)
 }
+
+// Large positive seconds must be clamped before converting to nanoseconds.
+func TestInstanceCreateRetryDelayOverflow(t *testing.T) {
+	for _, value := range []string{"9223372037", "18446744074", "9223372036854775807"} {
+		t.Run(value, func(t *testing.T) {
+			header := http.Header{"Retry-After": []string{value}}
+			assert.Equal(t, 180*time.Second, instanceCreateRetryDelay(header, 180*time.Second))
+		})
+	}
+}
