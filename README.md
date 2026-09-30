@@ -237,3 +237,20 @@ Example代码中的输出都用了println, 这是因为大多示例虽然在没�
 
 # License
 licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0.html)
+
+## HTTP forward proxies
+
+The SDK transport uses Go's `http.ProxyFromEnvironment`. Set `HTTP_PROXY` for
+HTTP endpoints or `HTTPS_PROXY` for HTTPS endpoints before starting the process.
+Use `NO_PROXY` for hosts that should bypass the proxy. Lowercase equivalents are
+also supported by Go. HTTPS destinations use HTTP CONNECT when the proxy URL is
+an HTTP proxy.
+
+```sh
+HTTPS_PROXY=http://proxy.example:8080 NO_PROXY=internal.example go run ./your-client
+```
+
+This applies to SDK REST and Tunnel clients created with their standard
+transport. The proxy does not change the MaxCompute endpoint or authentication
+account. Configure it before the first request: Go caches proxy environment
+settings within a process. Do not print proxy URLs containing credentials.
