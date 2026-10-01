@@ -38,7 +38,12 @@ func (r *Record) String() string {
 
 	n := len(*r) - 1
 	for i, f := range *r {
-		sb.WriteString(f.String())
+		// A NULL column is rendered instead of dereferencing a nil Data.
+		if f == nil {
+			sb.WriteString("NULL")
+		} else {
+			sb.WriteString(f.String())
+		}
 
 		if i < n {
 			sb.WriteString(", ")
