@@ -162,6 +162,11 @@ func (rr *rowsReader) Next(dst []driver.Value) error {
 	}
 
 	if err != nil {
+		// 取消时关流会让进行中的 Read 报错，这里把真实原因换成 ctx 的错误。
+		if ctxErr := rr.contextErr(); ctxErr != nil {
+			return errors.WithStack(ctxErr)
+		}
+
 		return errors.WithStack(err)
 	}
 
