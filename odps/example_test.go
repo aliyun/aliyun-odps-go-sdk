@@ -34,8 +34,12 @@ var (
 )
 
 func init() {
+	// The setup below creates tables and a schema on a live service. When no
+	// credentials are configured there is nothing to create them on, and
+	// panicking here would also keep the offline contract tests in this
+	// package from running at all, so skip the live setup instead.
 	if account == nil {
-		panic("account environments are not set")
+		return
 	}
 
 	// odpsIns.SetDefaultProjectName("odps_smoke_test")
