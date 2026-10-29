@@ -97,11 +97,17 @@ LOOP:
 			}
 
 			crcOfCrc, err := r.protocReader.ReadUInt32()
-			if err == nil {
-				_, err = r.protocReader.inner.Read([]byte{'0'})
-				if (!errors.Is(err, io.EOF)) && (!errors.Is(err, io.ErrUnexpectedEOF)) {
-					return nil, errors.New("expect end of stream, but not")
+			if err != nil {
+				// EOF inside the required checksum is a truncated stream, not
+				// the successful EOF that Iterator treats as completion.
+				if errors.Is(err, io.EOF) {
+					err = io.ErrUnexpectedEOF
 				}
+				return nil, errors.WithStack(err)
+			}
+			_, err = r.protocReader.inner.Read([]byte{'0'})
+			if (!errors.Is(err, io.EOF)) && (!errors.Is(err, io.ErrUnexpectedEOF)) {
+				return nil, errors.New("expect end of stream, but not")
 			}
 
 			if r.crcOfCrc.Value() != crcOfCrc {
