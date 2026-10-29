@@ -20,6 +20,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"flag"
 	"os"
 	"regexp"
 	"strings"
@@ -27,6 +28,7 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
+	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 )
 
 // 真服务 smoke：只有给了凭据与项目才会跑，否则 skip。它验证的是
@@ -73,6 +75,85 @@ func openRealDB(t *testing.T, cfg *odps.Config) *sql.DB {
 	return db
 }
 
+// liveJobBudget 是给"等真实作业跑完"的期限。这个环境的排队时间不在我们控制之内：
+// 同一条 explode 查询在 2026-09-24 是 55 秒，2026-10-16 超过 15 分钟还没出第一行。
+// 用例要验的是取消语义，不是环境吞吐，所以期限可以给足，并且允许用
+// MAXCOMPUTE_SMOKE_BUDGET（Go duration，如 "3m"）覆盖。
+//
+// 但期限必须落在 `go test -timeout`（默认 10 分钟）之内：否则 test binary 先到点 panic，
+// 用例既拿不到结论，也来不及把留在服务端的作业收掉。这里读回 binary 自己的超时，
+// 取较小者并留出 1/5 给收尾；要跑更长的期限，就同时把 -timeout 提上去。
+func liveJobBudget() time.Duration {
+	budget := 20 * time.Minute
+
+	if v := os.Getenv("MAXCOMPUTE_SMOKE_BUDGET"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			budget = d
+		}
+	}
+
+	if f := flag.Lookup("test.timeout"); f != nil {
+		if d, err := time.ParseDuration(f.Value.String()); err == nil && d > 0 {
+			if headroom := d - d/5; headroom < budget {
+				budget = headroom
+			}
+		}
+	}
+
+	return budget
+}
+
+// stopCanceledInstance 把"客户端不再等待"时留在服务端的那个作业收掉。
+// instance id 来自本进程刚拿到的取消错误，所以归属是构造性的，不靠时间窗猜；
+// 没有这个清理，一次超时会把一个真实作业丢在共享项目里继续跑。
+func stopCanceledInstance(t *testing.T, cfg *odps.Config, err error) string {
+	t.Helper()
+
+	var canceledErr *sqldriver.CanceledError
+	if !errors.As(err, &canceledErr) || canceledErr.InstanceID == "" {
+		return ""
+	}
+
+	ins := cfg.GenOdps().Instance(canceledErr.InstanceID)
+
+	if err := ins.Load(); err != nil {
+		t.Logf("cannot read instance %s for cleanup: %v", canceledErr.InstanceID, err)
+
+		return canceledErr.InstanceID
+	}
+
+	if ins.Status() != odps.InstanceRunning {
+		t.Logf("instance %s is already %s, nothing to clean", canceledErr.InstanceID, ins.Status())
+
+		return canceledErr.InstanceID
+	}
+
+	if err := ins.Terminate(); err != nil {
+		t.Logf("Terminate(%s) returned %v", canceledErr.InstanceID, err)
+
+		return canceledErr.InstanceID
+	}
+
+	deadline := time.Now().Add(2 * time.Minute)
+
+	for time.Now().Before(deadline) {
+		if err := ins.Load(); err != nil {
+			t.Logf("reload of %s failed: %v", canceledErr.InstanceID, err)
+
+			break
+		}
+
+		if ins.Status() == odps.InstanceTerminated {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	t.Logf("cleaned up instance %s: status=%s", canceledErr.InstanceID, ins.Status())
+
+	return canceledErr.InstanceID
+}
+
 // instanceIdFromError 从取消报错里取回 instance id。
 func instanceIdFromError(t *testing.T, err error) string {
 	t.Helper()
@@ -95,11 +176,19 @@ func TestRealServiceQueryWithoutContextStillWorks(t *testing.T) {
 	db := openRealDB(t, cfg)
 	defer db.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), liveJobBudget())
 	defer cancel()
 
 	rows, err := db.QueryContext(ctx, "select 1 as one;")
 	if err != nil {
+		stopCanceledInstance(t, cfg, err)
+
+		if errors.Is(err, context.DeadlineExceeded) {
+			cancel()
+			t.Skipf("the live service did not finish this job within %s (environment throughput, not a driver behaviour): %v",
+				liveJobBudget(), err)
+		}
+		cancel()
 		t.Fatal(err)
 	}
 	defer rows.Close()
@@ -189,10 +278,17 @@ func TestRealServiceCancelDuringRowConsumption(t *testing.T) {
 	db := openRealDB(t, cfg)
 	defer db.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), liveJobBudget())
 
 	rows, err := db.QueryContext(ctx, multiRowQuery())
 	if err != nil {
+		stopCanceledInstance(t, cfg, err)
+
+		if errors.Is(err, context.DeadlineExceeded) {
+			cancel()
+			t.Skipf("no first row within %s, so mid-consumption cancellation could not be exercised: %v",
+				liveJobBudget(), err)
+		}
 		cancel()
 		t.Fatal(err)
 	}
