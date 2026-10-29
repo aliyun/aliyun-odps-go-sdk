@@ -229,7 +229,7 @@ func Example_tunnel_download_arrow_with_partition() {
 	// Output:
 }
 
-func ExampleTunnel_UploadInSpecificSchema() {
+func ExampleTunnel_CreateUploadSession_withSchema() {
 	session, err := tunnelIns.CreateUploadSession(ProjectName, "test",
 		tunnel2.SessionCfg.WithSchemaName("new_Schema"),
 		tunnel2.SessionCfg.WithDefaultZstdCompressor(),
@@ -265,7 +265,7 @@ func ExampleTunnel_UploadInSpecificSchema() {
 	// Output:
 }
 
-func ExampleTunnel_DownloadInSpecificSchema() {
+func ExampleTunnel_CreateDownloadSession_withSchema() {
 	session, err := tunnelIns.CreateDownloadSession(ProjectName, "test", tunnel2.SessionCfg.WithSchemaName("new_Schema"))
 	println(session.Id)
 	if err != nil {
