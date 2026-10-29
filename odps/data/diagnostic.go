@@ -16,6 +16,10 @@
 
 package data
 
+import (
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+)
+
 // NULLDiagnostic is the text used for a null value in a diagnostic rendering. It is
 // exported so callers that parse this output (logs, assertions) can name it.
 const NULLDiagnostic = "NULL"
@@ -32,7 +36,7 @@ const NULLDiagnostic = "NULL"
 // `struct<x:11,y:hello,...>`, is unchanged. SQL text goes through Sql(), which quotes
 // consistently and is the right thing to compare against when a value must round-trip.
 func diagnosticValue(d Data) string {
-	if d == nil {
+	if isNullValue(d) {
 		return NULLDiagnostic
 	}
 
@@ -42,4 +46,19 @@ func diagnosticValue(d Data) string {
 	}
 
 	return rendered
+}
+
+// isNullValue reports the two ways a value can carry "no data": the nil Data
+// interface, and an explicit data.Null - a non-nil NullData{} whose Type() is the
+// NULL type and whose String() is already the marker text. Both keep the bare
+// marker. Without the second case the quoting rule below turns data.Null into
+// 'NULL', which is exactly how a string whose text is "NULL" renders, so an
+// explicit null would become indistinguishable from that string - the opposite of
+// what the rule exists for.
+func isNullValue(d Data) bool {
+	if d == nil {
+		return true
+	}
+
+	return datatype.IsNullType(d.Type())
 }
