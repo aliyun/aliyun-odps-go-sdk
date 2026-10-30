@@ -24,6 +24,9 @@ import (
 )
 
 func ExamplePartition_Load() {
+	if !liveServiceConfigured() {
+		return
+	}
 	err := odpsIns.Table("sale_detail").AddPartitions(true, []string{"sale_date=201910/region=shanghai"})
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -43,6 +46,9 @@ func ExamplePartition_Load() {
 }
 
 func ExamplePartition_LoadExtended() {
+	if !liveServiceConfigured() {
+		return
+	}
 	err := odpsIns.Table("sale_detail").AddPartitions(true, []string{"sale_date=201910/region=shanghai"})
 	if err != nil {
 		log.Fatalf("%+v", err)

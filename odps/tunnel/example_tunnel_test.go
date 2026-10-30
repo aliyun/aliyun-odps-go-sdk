@@ -33,6 +33,9 @@ import (
 )
 
 func Example_tunnel_upload_arrow() {
+	if !liveServiceConfigured() {
+		return
+	}
 	err := odpsIns.Tables().Get("sale_detail").AddPartition(true, "sale_date=202111/region=hangzhou")
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -148,6 +151,9 @@ func Example_tunnel_upload_arrow() {
 }
 
 func Example_tunnel_download_arrow_simple() {
+	if !liveServiceConfigured() {
+		return
+	}
 	session, err := tunnelIns.CreateDownloadSession(
 		ProjectName,
 		// "upload_sample_arrow",
@@ -188,6 +194,9 @@ func Example_tunnel_download_arrow_simple() {
 }
 
 func Example_tunnel_download_arrow_with_partition() {
+	if !liveServiceConfigured() {
+		return
+	}
 	session, err := tunnelIns.CreateDownloadSession(
 		"go_sdk_regression_testing",
 		"sale_detail",
@@ -230,6 +239,9 @@ func Example_tunnel_download_arrow_with_partition() {
 }
 
 func ExampleTunnel_CreateUploadSession_withSchema() {
+	if !liveServiceConfigured() {
+		return
+	}
 	session, err := tunnelIns.CreateUploadSession(ProjectName, "test",
 		tunnel2.SessionCfg.WithSchemaName("new_Schema"),
 		tunnel2.SessionCfg.WithDefaultZstdCompressor(),
@@ -266,6 +278,9 @@ func ExampleTunnel_CreateUploadSession_withSchema() {
 }
 
 func ExampleTunnel_CreateDownloadSession_withSchema() {
+	if !liveServiceConfigured() {
+		return
+	}
 	session, err := tunnelIns.CreateDownloadSession(ProjectName, "test", tunnel2.SessionCfg.WithSchemaName("new_Schema"))
 	println(session.Id)
 	if err != nil {
@@ -281,6 +296,9 @@ func ExampleTunnel_CreateDownloadSession_withSchema() {
 }
 
 func ExampleTunnel_Preview() {
+	if !liveServiceConfigured() {
+		return
+	}
 	tableName := "ExampleTunnel_Preview"
 	exists, err := odpsIns.Tables().Get(tableName).Exists()
 	if err != nil {

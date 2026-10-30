@@ -3,6 +3,7 @@ package odps_test
 import "testing"
 
 func TestTenant_Load(t *testing.T) {
+	skipWithoutLiveService(t)
 	tenant := odpsIns.Tenant()
 	err := tenant.Load()
 	if err != nil {
