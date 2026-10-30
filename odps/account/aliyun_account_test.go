@@ -27,6 +27,7 @@ func TestNewAliyunAccount(t *testing.T) {
 }
 
 func TestSignatureV4(t *testing.T) {
+	skipWithoutLiveService(t)
 	var ak, sk, stsToken string
 	if accessId, found := os.LookupEnv("ALIBABA_CLOUD_ACCESS_KEY_ID"); found {
 		ak = accessId

@@ -15,6 +15,7 @@ import (
 )
 
 func TestStreamUploadSessionTest_SchemaEvolution(t *testing.T) {
+	skipWithoutLiveService(t)
 	tableName := "TestStreamUploadSessionTest_SchemaEvolution"
 
 	column1 := tableschema.Column{

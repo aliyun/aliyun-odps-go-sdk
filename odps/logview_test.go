@@ -9,6 +9,7 @@ import (
 )
 
 func TestLogView_GenerateLogViewAuto(t *testing.T) {
+	skipWithoutLiveService(t)
 	odpsIns.SetDefaultProjectName(defaultProjectName)
 	odpsIns.Options.LogViewVersion = options.Auto
 	instance := odps.NewInstance(odpsIns, defaultProjectName, "20221027160000000001000001")
@@ -21,6 +22,7 @@ func TestLogView_GenerateLogViewAuto(t *testing.T) {
 }
 
 func TestLogView_GenerateLogView(t *testing.T) {
+	skipWithoutLiveService(t)
 	odpsIns.SetDefaultProjectName(defaultProjectName)
 	odpsIns.Options.LogViewVersion = options.LegacyLogView
 	instance := odps.NewInstance(odpsIns, defaultProjectName, "20221027160000000001000001")
@@ -33,6 +35,7 @@ func TestLogView_GenerateLogView(t *testing.T) {
 }
 
 func TestLogView_SetLogViewHost(t *testing.T) {
+	skipWithoutLiveService(t)
 	odpsIns.SetDefaultProjectName(defaultProjectName)
 	odpsIns.Options.LogViewVersion = options.LegacyLogView
 	instance := odps.NewInstance(odpsIns, defaultProjectName, "20221027160000000001000001")
@@ -49,6 +52,7 @@ func TestLogView_SetLogViewHost(t *testing.T) {
 }
 
 func TestLogView_GenerateJobInsight(t *testing.T) {
+	skipWithoutLiveService(t)
 	odpsIns.SetDefaultProjectName(defaultProjectName)
 	odpsIns.Options.LogViewVersion = options.JobInsight
 	instance := odps.NewInstance(odpsIns, defaultProjectName, "20221027160000000001000001")
@@ -65,6 +69,7 @@ func TestLogView_GenerateJobInsight(t *testing.T) {
 }
 
 func TestLogView_SetJobInsightHost(t *testing.T) {
+	skipWithoutLiveService(t)
 	odpsIns.SetDefaultProjectName(defaultProjectName)
 	odpsIns.Options.LogViewVersion = options.JobInsight
 	instance := odps.NewInstance(odpsIns, defaultProjectName, "20221027160000000001000001")
@@ -82,6 +87,7 @@ func TestLogView_SetJobInsightHost(t *testing.T) {
 }
 
 func TestLogView_GenerateLogViewV2(t *testing.T) {
+	skipWithoutLiveService(t)
 	odpsIns.SetDefaultProjectName(defaultProjectName)
 	instance := odps.NewInstance(odpsIns, defaultProjectName, "20221027160000000001000001")
 	logView := odps.NewLogView(odpsIns)
