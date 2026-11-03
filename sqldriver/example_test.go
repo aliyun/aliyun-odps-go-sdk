@@ -137,7 +137,7 @@ func ExampleStructField() {
 	// Output:
 }
 
-func ExampleInsert() {
+func Example_insert() {
 	account := account2.AccountFromEnv()
 	endpoint := restclient.LoadEndpointFromEnv()
 
@@ -197,7 +197,7 @@ func ExampleInsert() {
 	// Output:
 }
 
-func ExampleCreateTable() {
+func Example_createTable() {
 	account := account2.AccountFromEnv()
 	endpoint := restclient.LoadEndpointFromEnv()
 
