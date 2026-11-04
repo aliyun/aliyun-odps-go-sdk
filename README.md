@@ -1,7 +1,7 @@
 # Note
 This SDK is used in production, including the control-plane surfaces (`SQLTask`, instance status and results, `Tables`/`Schemas`/`Table.Load`) and the Tunnel APIs.
 
-It is still under active development toward v1.0. CI coverage in this repository is not comprehensive yet, so before relying on a specific path, check the open issues: complex-type (`ARRAY`/`MAP`/`STRUCT`) NULL values in Tunnel records (#27) and truncated checksum detection (#82) are open, with fixes in review (#79, #83).
+It is still under active development toward v1.0, and CI coverage in this repository is not comprehensive yet. Before relying on a specific path, check the open issues: NULL values inside `ARRAY`/`MAP`/`STRUCT` in Tunnel records are an open defect (#27, fix under review in #79), and the truncated-checksum fix (#82, fixed by #83) is on `master` but not in any published release, so a released version still accepts a truncated stream.
 
 # Install
 required >= go1.15
