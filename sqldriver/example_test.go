@@ -29,6 +29,9 @@ import (
 )
 
 func Example() {
+	if !liveServiceConfigured() {
+		return
+	}
 	account := account2.AccountFromEnv()
 	endpoint := restclient.LoadEndpointFromEnv()
 
@@ -91,6 +94,9 @@ func Example() {
 }
 
 func ExampleStructField() {
+	if !liveServiceConfigured() {
+		return
+	}
 	account := account2.AccountFromEnv()
 	endpoint := restclient.LoadEndpointFromEnv()
 
@@ -138,6 +144,9 @@ func ExampleStructField() {
 }
 
 func ExampleInsert() {
+	if !liveServiceConfigured() {
+		return
+	}
 	account := account2.AccountFromEnv()
 	endpoint := restclient.LoadEndpointFromEnv()
 
@@ -198,6 +207,9 @@ func ExampleInsert() {
 }
 
 func ExampleCreateTable() {
+	if !liveServiceConfigured() {
+		return
+	}
 	account := account2.AccountFromEnv()
 	endpoint := restclient.LoadEndpointFromEnv()
 

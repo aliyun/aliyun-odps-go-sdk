@@ -15,10 +15,7 @@ import (
 )
 
 func TestDownloadSession_OpenRecordArrowReader(t *testing.T) {
-	// Skip if no test environment is configured
-	if odpsIns == nil {
-		t.Skip("ODPS instance not configured for testing")
-	}
+	skipWithoutLiveService(t)
 	tableName := "big_table"
 
 	// Create a test table in the specific schema
@@ -107,11 +104,7 @@ func TestDownloadSession_OpenRecordArrowReader(t *testing.T) {
 
 // TestDownloadSessionWithSchema tests that download sessions work correctly with schema names
 func TestDownloadSessionWithSchema(t *testing.T) {
-	// Skip if no test environment is configured
-	if odpsIns == nil {
-		t.Skip("ODPS instance not configured for testing")
-	}
-
+	skipWithoutLiveService(t)
 	tableName := "download_session_schema_test"
 	schemaName := SchemaName // Use the test schema from the environment
 

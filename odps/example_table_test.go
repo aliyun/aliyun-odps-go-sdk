@@ -91,6 +91,9 @@ func ExampleTableSchema_ToSQLString() {
 }
 
 func ExampleTable_Load() {
+	if !liveServiceConfigured() {
+		return
+	}
 	table := odpsIns.Table("has_struct")
 	err := table.Load()
 	if err != nil {
@@ -103,6 +106,9 @@ func ExampleTable_Load() {
 }
 
 func ExampleTable_AddPartition() {
+	if !liveServiceConfigured() {
+		return
+	}
 	table := odpsIns.Table("sale_detail")
 	err := table.AddPartition(true, "sale_date=202111/region=hangzhou")
 	if err != nil {
@@ -113,6 +119,9 @@ func ExampleTable_AddPartition() {
 }
 
 func ExampleTable_GetPartitions() {
+	if !liveServiceConfigured() {
+		return
+	}
 	table := odpsIns.Table("sale_detail")
 	partitions, err := table.GetPartitions()
 	if err != nil {
@@ -131,6 +140,9 @@ func ExampleTable_GetPartitions() {
 }
 
 func ExampleTable_ExecSql() {
+	if !liveServiceConfigured() {
+		return
+	}
 	// table := odps.NewTable(odpsIns, "go_sdk_regression_testing", "sale_detail")
 	table := odpsIns.Table("has_struct")
 	// instance, err := table.ExecSql("SelectSale_detail", "select * from sale_detail;")
@@ -157,6 +169,9 @@ func ExampleTable_ExecSql() {
 }
 
 func ExampleTable_GetClusterInfo() {
+	if !liveServiceConfigured() {
+		return
+	}
 	cluster := tableschema.ClusterInfo{
 		ClusterType: tableschema.CLUSTER_TYPE.Hash,
 		ClusterCols: []string{"c1", "c2"},
@@ -194,6 +209,9 @@ func ExampleTable_GetClusterInfo() {
 }
 
 func ExampleTable_GetPrimaryKey() {
+	if !liveServiceConfigured() {
+		return
+	}
 	schema := tableschema.NewSchemaBuilder().Name("has_pk").PrimaryKeys([]string{"id", "name"}).Column(tableschema.Column{Name: "id", Type: datatype.IntType, NotNull: true}).
 		Column(tableschema.Column{Name: "name", Type: datatype.StringType, NotNull: true}).
 		Column(tableschema.Column{Name: "name2", Type: datatype.StringType, NotNull: false}).
@@ -217,6 +235,9 @@ func ExampleTable_GetPrimaryKey() {
 }
 
 func ExampleTable_IsTransactional() {
+	if !liveServiceConfigured() {
+		return
+	}
 	schema := tableschema.NewSchemaBuilder().Name("deltaTable").PrimaryKeys([]string{"id", "name"}).Column(tableschema.Column{Name: "id", Type: datatype.IntType, NotNull: true}).
 		Column(tableschema.Column{Name: "name", Type: datatype.StringType, NotNull: true}).
 		Column(tableschema.Column{Name: "name2", Type: datatype.StringType, NotNull: false}).

@@ -14,6 +14,7 @@ import (
 )
 
 func TestUploadSession_Overwrite(t *testing.T) {
+	skipWithoutLiveService(t)
 	tableName := "overwrite_test"
 	tableSchema := tableschema.NewSchemaBuilder().Name(tableName).Column(
 		tableschema.Column{Name: "c1", Type: datatype.BigIntType},

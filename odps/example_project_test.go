@@ -25,6 +25,9 @@ import (
 )
 
 func ExampleProjects_List() {
+	if !liveServiceConfigured() {
+		return
+	}
 	projectsIns := odpsIns.Projects()
 	projects, err := projectsIns.List(odps.ProjectFilter.NamePrefix("p"))
 	if err != nil {
@@ -39,6 +42,9 @@ func ExampleProjects_List() {
 }
 
 func ExampleProjects_Exists() {
+	if !liveServiceConfigured() {
+		return
+	}
 	projects := odpsIns.Projects()
 	projectName := defaultProjectName
 
@@ -52,6 +58,9 @@ func ExampleProjects_Exists() {
 }
 
 func ExampleProject() {
+	if !liveServiceConfigured() {
+		return
+	}
 	projects := odpsIns.Projects()
 	project := projects.Get(defaultProjectName)
 
@@ -88,6 +97,9 @@ func ExampleProject() {
 }
 
 func ExampleProject_GetTunnelEndpoint() {
+	if !liveServiceConfigured() {
+		return
+	}
 	project := odpsIns.DefaultProject()
 	tunnelEndpoint, err := project.GetTunnelEndpoint()
 	if err != nil {

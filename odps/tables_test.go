@@ -7,6 +7,7 @@ import (
 )
 
 func TestTables_List(t *testing.T) {
+	skipWithoutLiveService(t)
 	odpsIns.DefaultProject().Schemas().Get("mv").Tables().List(func(table *odps.Table, err error) {
 		err = table.Load()
 		if err != nil {
@@ -17,6 +18,7 @@ func TestTables_List(t *testing.T) {
 }
 
 func TestTables_BatchLoadTables(t *testing.T) {
+	skipWithoutLiveService(t)
 	var tables []string
 
 	odpsIns.DefaultProject().Schemas().Get("mv").Tables().List(func(table *odps.Table, err error) {

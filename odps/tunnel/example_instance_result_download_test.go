@@ -27,6 +27,9 @@ import (
 )
 
 func Example_tunnel_download_instance_result() {
+	if !liveServiceConfigured() {
+		return
+	}
 	account := account2.AccountFromEnv()
 	endpoint := restclient.LoadEndpointFromEnv()
 	odpsIns := odps.NewOdps(account, endpoint)

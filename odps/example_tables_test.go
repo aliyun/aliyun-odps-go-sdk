@@ -26,6 +26,9 @@ import (
 )
 
 func ExampleTables_List() {
+	if !liveServiceConfigured() {
+		return
+	}
 	ts := odps.NewTables(odpsIns, "", "")
 	f := func(t *odps.Table, err error) {
 		if err != nil {
@@ -40,6 +43,9 @@ func ExampleTables_List() {
 }
 
 func ExampleTables_BatchLoadTables() {
+	if !liveServiceConfigured() {
+		return
+	}
 	tablesIns := odps.NewTables(odpsIns, "", "")
 	tableNames := []string{
 		"has_struct",
@@ -67,6 +73,9 @@ func ExampleTables_BatchLoadTables() {
 }
 
 func ExampleTables_Create() {
+	if !liveServiceConfigured() {
+		return
+	}
 	c1 := tableschema.Column{
 		Name:    "name",
 		Type:    datatype.StringType,
@@ -119,6 +128,9 @@ func ExampleTables_Create() {
 }
 
 func ExampleTables_Delete() {
+	if !liveServiceConfigured() {
+		return
+	}
 	tables := odps.NewTables(odpsIns, odpsIns.DefaultProjectName(), "")
 	err := tables.Delete("user_temp", false)
 	if err != nil {

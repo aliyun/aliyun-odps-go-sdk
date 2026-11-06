@@ -3,34 +3,26 @@
 
 name: CI
 
+permissions:
+  contents: read
+
 on:
   workflow_dispatch: # 支持手动触发
   push:
     branches: [ "master" ]
+  pull_request: # 编译与离线单测不需要凭据，PR 上也应该跑到
+
+env:
+  # odps/tunnel 的 protoc 定长报文样例是按 Asia/Shanghai 的墙上时间生成的，
+  # 时区不同这三个用例就会失败，所以把时区固定在用例假设值上，不依赖 runner 默认值。
+  TZ: Asia/Shanghai
 
 jobs:
 
+  # 编译与离线单测：不取任何凭据，任何环境（包括 fork 的 PR）都必须真跑。
   build:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write     # 获取 oidc token 的权限
     steps:
-    - name: get credentials
-      id: get-credentials
-      uses: aliyun/configure-aliyun-credentials-action@v1.0.3
-      with:
-        role-to-assume: '${{ secrets.ROLE_ARN }}'
-        oidc-provider-arn: '${{ secrets.OIDC_ARN }}'
-        audience: 'actions.github.com' # default value
-        
-    - name: Set up environment
-      run: |
-        echo "ALIBABA_CLOUD_ACCESS_KEY_ID=${{ steps.get-credentials.outputs.aliyun-access-key-id }}" >> $GITHUB_ENV
-        echo "ALIBABA_CLOUD_ACCESS_KEY_SECRET=${{ steps.get-credentials.outputs.aliyun-access-key-secret }}" >> $GITHUB_ENV
-        echo "ALIBABA_CLOUD_SECURITY_TOKEN=${{ steps.get-credentials.outputs.aliyun-security-token }}" >> $GITHUB_ENV
-        echo "odps_endpoint=${{ secrets.ENDPOINT }}" >> $GITHUB_ENV
-        echo "TZ=Asia/Shanghai" >> $GITHUB_ENV
-    
     - uses: actions/checkout@v4
 
     - name: Set up Go
@@ -42,4 +34,64 @@ jobs:
       run: go build -v ./...
 
     - name: Test (Expect Arrow Package)
+      run: go test -v $(go list ./... | grep -v './arrow')
+
+  # 需要真实 MaxCompute 项目的用例：单独成 job，凭据取不到时页面必须有信号，
+  # 而不是像以前那样在 get credentials 失败后把 Build/Test 全部 skipped。
+  live-service:
+    name: Live-service test (needs OIDC credentials)
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write     # 获取 oidc token 的权限
+    steps:
+    # secrets 在这个 job 之外取不到值（fork 的 PR、未配置 secrets 的仓库都是如此），
+    # 所以先把「配没配」读成一个可比较的输出，并把它写在页面上，再决定跑不跑。
+    - name: Check whether credentials are configured
+      id: credentials
+      env:
+        ROLE_ARN: '${{ secrets.ROLE_ARN }}'
+        OIDC_ARN: '${{ secrets.OIDC_ARN }}'
+      run: |
+        if [ -n "$ROLE_ARN" ] && [ -n "$OIDC_ARN" ]; then
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "configured=false" >> "$GITHUB_OUTPUT"
+          echo "::warning title=Live-service tests not run::ROLE_ARN / OIDC_ARN are not available to this run, so the tests that need a real MaxCompute project did not run. The Build and Test steps in the build job are not affected."
+          echo "### Live-service tests did not run" >> "$GITHUB_STEP_SUMMARY"
+          echo "ROLE_ARN / OIDC_ARN are not available to this run (fork pull requests never receive repository secrets). The steps below are skipped, and this job is reported as successful *without* having tested anything." >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+    - name: get credentials
+      if: steps.credentials.outputs.configured == 'true'
+      id: get-credentials
+      uses: aliyun/configure-aliyun-credentials-action@v1.0.3
+      with:
+        role-to-assume: '${{ secrets.ROLE_ARN }}'
+        oidc-provider-arn: '${{ secrets.OIDC_ARN }}'
+        audience: 'actions.github.com' # default value
+
+    - name: Set up environment
+      if: steps.credentials.outputs.configured == 'true'
+      run: |
+        echo "ALIBABA_CLOUD_ACCESS_KEY_ID=${{ steps.get-credentials.outputs.aliyun-access-key-id }}" >> $GITHUB_ENV
+        echo "ALIBABA_CLOUD_ACCESS_KEY_SECRET=${{ steps.get-credentials.outputs.aliyun-access-key-secret }}" >> $GITHUB_ENV
+        echo "ALIBABA_CLOUD_SECURITY_TOKEN=${{ steps.get-credentials.outputs.aliyun-security-token }}" >> $GITHUB_ENV
+        echo "odps_endpoint=${{ secrets.ENDPOINT }}" >> $GITHUB_ENV
+
+    - uses: actions/checkout@v4
+      if: steps.credentials.outputs.configured == 'true'
+
+    - name: Set up Go
+      if: steps.credentials.outputs.configured == 'true'
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Build
+      if: steps.credentials.outputs.configured == 'true'
+      run: go build -v ./...
+
+    - name: Test with credentials (Expect Arrow Package)
+      if: steps.credentials.outputs.configured == 'true'
       run: go test -v $(go list ./... | grep -v './arrow')
