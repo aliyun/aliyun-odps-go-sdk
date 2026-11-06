@@ -64,7 +64,11 @@ func (m Map) Sql() string {
 	sb.WriteString("map(")
 
 	for key, value := range m.data {
-		sb.WriteString(key.Sql())
+		if key != nil {
+			sb.WriteString(key.Sql())
+		} else {
+			sb.WriteString("null")
+		}
 		sb.WriteString(", ")
 		if value != nil {
 			sb.WriteString(value.Sql())
@@ -117,11 +121,13 @@ func (m *Map) SafeSet(keyI Data, valueI Data) error {
 		return errors.WithStack(err)
 	}
 
-	if !datatype.IsTypeEqual(key.Type(), m.typ.KeyType) {
+	// NULL keys and values are legal in the wire format and carry no type to
+	// check against, so only non-null entries are type checked.
+	if key != nil && !datatype.IsTypeEqual(key.Type(), m.typ.KeyType) {
 		return errors.Errorf("fail to set key of type %s to %s", key.Type(), m.typ)
 	}
 
-	if !datatype.IsTypeEqual(value.Type(), m.typ.ValueType) {
+	if value != nil && !datatype.IsTypeEqual(value.Type(), m.typ.ValueType) {
 		return errors.Errorf("fail to set key of type %s to %s", value.Type(), m.typ)
 	}
 
@@ -138,25 +144,30 @@ func (m *Map) TypeInfer() (datatype.DataType, error) {
 		return nil, errors.Errorf("cannot infer type for empty map")
 	}
 
-	i := 0
+	// NULL keys and values carry no type information, the types are inferred
+	// from the entries that do have a value.
 	var keyT, valueT datatype.DataType
 
 	for key, value := range m.data {
-		if i == 0 {
-			keyT = key.Type()
-			valueT = value.Type()
-			continue
+		if key != nil {
+			if keyT == nil {
+				keyT = key.Type()
+			} else if !datatype.IsTypeEqual(keyT, key.Type()) {
+				return nil, errors.Errorf("key type is not the same in array, find %s, %s types", keyT, key.Type())
+			}
 		}
 
-		if !datatype.IsTypeEqual(keyT, key.Type()) {
-			return nil, errors.Errorf("key type is not the same in array, find %s, %s types", keyT, key.Type())
+		if value != nil {
+			if valueT == nil {
+				valueT = value.Type()
+			} else if !datatype.IsTypeEqual(valueT, value.Type()) {
+				return nil, errors.Errorf("value type is not the same in array, find %s, %s types", valueT, value.Type())
+			}
 		}
+	}
 
-		if !datatype.IsTypeEqual(valueT, value.Type()) {
-			return nil, errors.Errorf("value type is not the same in array, find %s, %s types", valueT, value.Type())
-		}
-
-		i += 1
+	if keyT == nil || valueT == nil {
+		return nil, errors.New("cannot infer type for a map whose keys or values are all null")
 	}
 
 	return datatype.NewMapType(keyT, valueT), nil
