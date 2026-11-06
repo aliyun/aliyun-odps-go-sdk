@@ -1,7 +1,9 @@
 # Note
 This SDK is used in production, including the control-plane surfaces (`SQLTask`, instance status and results, `Tables`/`Schemas`/`Table.Load`) and the Tunnel APIs.
 
-It is still under active development toward v1.0, and CI coverage in this repository is not comprehensive yet. Before relying on a specific path, check the open issues: NULL values inside `ARRAY`/`MAP`/`STRUCT` in Tunnel records are an open defect (#27, fix under review in #79), and the truncated-checksum fix (#82, fixed by #83) is on `master` but not in any published release, so a released version still accepts a truncated stream.
+It is still under active development toward v1.0, and CI coverage in this repository is not comprehensive yet. Fixes land on `master` first and reach a user only with the next release, so do not read any status sentence here - including this one - as a statement about the version you depend on: run `git tag --contains <fix-commit>`, and it answers for you.
+
+Two Tunnel behaviours worth checking on a pinned version: NULL inside `ARRAY`/`MAP`/`STRUCT` records (#27, fixed by #79 = `16b3dbf22`) and a truncated checksum trailer accepted silently (#82, fixed by #83 = `a62b7896f`). Measured 2026-11-07: both fixes are on `master` (tip `16b3dbf22`), and `git tag --contains` returns no tag for either - `v0.4.26`, published 2026-09-04, is the newest release, so `v0.4.26` and earlier still show both behaviours.
 
 # Install
 required >= go1.15
