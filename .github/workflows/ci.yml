@@ -37,16 +37,20 @@ jobs:
       run: go build -v ./...
 
     # tee 会把管道退出码变成 tee 自己的，所以这里显式 pipefail：go test 红了这条腿必须红。
+    # -count=1 是必须的：不带它，Go 会重放缓存结果并照样打印 "ok ... (cached)" 与
+    # 全部 "--- PASS" 行，那么下面数的就是历史而不是这一轮真跑过的用例。
     - name: Test (Expect Arrow Package)
       shell: bash
       run: |
         set -o pipefail
-        go test -v $(go list ./... | grep -v './arrow') | tee /tmp/offline-test.log
+        go test -count=1 -v $(go list ./... | grep -v './arrow') | tee /tmp/offline-test.log
 
-    # `go test` 在用例被整体过滤掉时仍然 rc=0（包级报告写 "[no tests to run]"，实测见 PR 评论），
-    # 所以“这条腿绿”不等于“用例跑了”。这一步把两件事钉住：没有报告要红，
-    # 以及 PASS 行数低于下限要红。下限取 300（当前实测 341 行 PASS、31 行 SKIP），
-    # 留出正常删改的余量，但用例大面积静默消失时一定拦下。
+    # `go test` 在用例被整体过滤掉时仍然 rc=0（包级报告写 "[no tests to run]"，实测见 PR 评论）。
+    # 这一步钉住三件事：报告必须在、包集合必须等于 go list 选中的集合、并且必须是本轮真跑的
+    # （出现 "(cached)" 即红）。PASS 行数下限只是兜底网：它数的是 "--- PASS" 行，
+    # 含子测试与空 "// Output:" 的早退 Example，不等于"某个函数体被重新执行过"——
+    # 真跑的证据来自上一步的 -count=1 加上这一步对 (cached) 的拒绝。
+    # 下限取 300（-count=1 下实测 341 行 PASS、32 行 SKIP），留正常删改余量。
     - name: Assert the offline cases actually ran
       shell: bash
       env:
@@ -64,6 +68,11 @@ jobs:
         esac
         if [ ! -f "$LOG" ]; then
           echo "::error::no test log at $LOG - the Test step did not produce a report"
+          exit 1
+        fi
+        if grep -q '(cached)' "$LOG"; then
+          echo "::error::some packages reported (cached) - the PASS lines below are replayed history, not this run"
+          grep -n '(cached)' "$LOG" | head -5
           exit 1
         fi
         if grep -q '\[no tests to run\]' "$LOG"; then
@@ -154,4 +163,4 @@ jobs:
 
     - name: Test with credentials (Expect Arrow Package)
       if: steps.credentials.outputs.configured == 'true'
-      run: go test -v $(go list ./... | grep -v './arrow')
+      run: go test -count=1 -v $(go list ./... | grep -v './arrow')
