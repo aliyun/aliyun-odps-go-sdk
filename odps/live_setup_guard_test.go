@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 )
@@ -44,14 +45,27 @@ import (
 type countingServer struct {
 	srv      *httptest.Server
 	requests int64
-	paths    []string
+	mu       sync.Mutex
+	seen     []string
+}
+
+// requested returns a copy of the request lines seen so far; the tests assert on
+// the project name inside them, so the slice needs to be read under a lock.
+func (c *countingServer) requested() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]string, len(c.seen))
+	copy(out, c.seen)
+	return out
 }
 
 func newCountingServer(t *testing.T) *countingServer {
 	c := &countingServer{}
 	c.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt64(&c.requests, 1)
-		c.paths = append(c.paths, r.Method+" "+r.URL.Path)
+		c.mu.Lock()
+		c.seen = append(c.seen, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery)
+		c.mu.Unlock()
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte("<Error><Code>NoSuchObject</Code><Message>counting server</Message></Error>"))
 	}))
@@ -63,13 +77,13 @@ func (c *countingServer) count() int64 { return atomic.LoadInt64(&c.requests) }
 
 // goTest runs `go test` for this package in a child process whose environment
 // is exactly env. It returns the child's exit code and combined output.
-func goTest(t *testing.T, runFlag string, env []string) (int, string) {
+func goTest(t *testing.T, pkg, runFlag string, env []string) (int, string) {
 	goBin, err := exec.LookPath("go")
 	if err != nil {
 		t.Skipf("no go binary on PATH, cannot exercise process startup in a child process: %v", err)
 	}
 	root := filepath.Join("..") // this test lives in odps/, the module root is above it
-	cmd := exec.Command(goBin, "test", "-count=1", "-timeout", "120s", "-v", "-run", runFlag, "./odps")
+	cmd := exec.Command(goBin, "test", "-count=1", "-timeout", "180s", "-v", "-run", runFlag, pkg)
 	cmd.Dir = root
 	cmd.Env = env
 	out, err := cmd.CombinedOutput()
@@ -121,17 +135,17 @@ func TestLiveSetupStaysAsleepWithoutOptIn(t *testing.T) {
 	}, []string{"ODPS_RUN_LIVE_TESTS", "ALIBABA_CLOUD_SECURITY_TOKEN", "ODPS_LIVE_TEST_PROJECT"})
 
 	t.Run("selecting no test still creates nothing", func(t *testing.T) {
-		code, out := goTest(t, "^$", env)
+		code, out := goTest(t, "./odps", "^$", env)
 		if code != 0 {
 			t.Fatalf("child exited %d with no live case selected:\n%s", code, out)
 		}
 		if got := srv.count(); got != 0 {
-			t.Fatalf("%d requests reached the service although nothing was opted in (paths %v)", got, srv.paths)
+			t.Fatalf("%d requests reached the service although nothing was opted in (paths %v)", got, srv.requested())
 		}
 	})
 
 	t.Run("a live case is skipped, not run", func(t *testing.T) {
-		code, out := goTest(t, "^TestSchemas_List$", env)
+		code, out := goTest(t, "./odps", "^TestSchemas_List$", env)
 		if code != 0 {
 			t.Fatalf("child exited %d; a guarded live case must skip, not fail:\n%s", code, out)
 		}
@@ -139,7 +153,7 @@ func TestLiveSetupStaysAsleepWithoutOptIn(t *testing.T) {
 			t.Errorf("child output does not show the live case skipping:\n%s", out)
 		}
 		if got := srv.count(); got != 0 {
-			t.Fatalf("%d requests reached the service without opt-in (paths %v)", got, srv.paths)
+			t.Fatalf("%d requests reached the service without opt-in (paths %v)", got, srv.requested())
 		}
 	})
 }
@@ -183,12 +197,12 @@ func TestLiveSetupRejectsIncompleteConfigurationEvenWithOptIn(t *testing.T) {
 				}
 			}
 			env := childEnv(set, append(unset, c.unset...))
-			code, out := goTest(t, "^TestSchemas_List$", env)
+			code, out := goTest(t, "./odps", "^TestSchemas_List$", env)
 			if code != 0 {
 				t.Fatalf("child exited %d on an incomplete configuration; it must skip:\n%s", code, out)
 			}
 			if got := srv.count(); got != 0 {
-				t.Fatalf("%d requests reached the service with an incomplete configuration (paths %v)", got, srv.paths)
+				t.Fatalf("%d requests reached the service with an incomplete configuration (paths %v)", got, srv.requested())
 			}
 		})
 	}
@@ -211,14 +225,14 @@ func TestOptInWithCompleteConfigurationActuallyCalls(t *testing.T) {
 
 	// Even opted in, selecting no test must not create anything: setup is tied
 	// to the guard, not to process startup.
-	if code, out := goTest(t, "^$", env); code != 0 {
+	if code, out := goTest(t, "./odps", "^$", env); code != 0 {
 		t.Fatalf("opted-in child exited %d with no case selected:\n%s", code, out)
 	}
 	if got := srv.count(); got != 0 {
-		t.Fatalf("%d requests with no live case selected (paths %v)", got, srv.paths)
+		t.Fatalf("%d requests with no live case selected (paths %v)", got, srv.requested())
 	}
 
-	code, out := goTest(t, "^TestSchemas_List$", env)
+	code, out := goTest(t, "./odps", "^TestSchemas_List$", env)
 	if srv.count() == 0 {
 		t.Fatalf("no request reached the server although the live case was opted in and configured; child exit %d:\n%s", code, out)
 	}
@@ -232,28 +246,112 @@ func TestOptInWithCompleteConfigurationActuallyCalls(t *testing.T) {
 // ODPS_LIVE_TEST_PROJECT for the live job moves every case together. A literal
 // left in a test file would silently keep pointing at the old project.
 func TestLiveProjectIsNotHardcodedAnywhere(t *testing.T) {
+	// The first version read only this package's directory and skipped
+	// subdirectories, which is exactly how a hard-coded project survived in
+	// odps/tunnel. Walk the whole module instead: the point of this check is that
+	// the project name has one source, and that claim is only true across every
+	// package that talks to a live project.
 	const literal = "go_sdk_regression_testing"
-	files, err := ioutil.ReadDir(".")
+	var files []string
+	err := filepath.Walk("..", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			if info.Name() == ".git" || info.Name() == "node_modules" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(path, "_test.go") {
+			files = append(files, path)
+		}
+		return nil
+	})
 	if err != nil {
-		t.Fatalf("cannot read this package directory: %v", err)
+		t.Fatalf("cannot walk the module: %v", err)
+	}
+	if len(files) < 20 {
+		t.Fatalf("the walk found only %d test files; the scan is not covering the module", len(files))
 	}
 	var hits []string
-	for _, f := range files {
-		if f.IsDir() || !strings.HasSuffix(f.Name(), "_test.go") {
-			continue
-		}
-		if f.Name() == "live_setup_guard_test.go" {
+	for _, path := range files {
+		if filepath.Base(path) == "live_setup_guard_test.go" {
 			continue // this file names the literal in order to look for it
 		}
-		data, err := ioutil.ReadFile(f.Name())
+		if filepath.Base(path) == "livetest.go" {
+			continue // DefaultProject, the one place the value is allowed to sit
+		}
+		data, err := ioutil.ReadFile(path)
 		if err != nil {
-			t.Fatalf("cannot read %s: %v", f.Name(), err)
+			t.Fatalf("cannot read %s: %v", path, err)
 		}
 		if strings.Contains(string(data), literal) {
-			hits = append(hits, f.Name())
+			hits = append(hits, path)
 		}
 	}
 	if len(hits) > 0 {
 		t.Errorf("%d test file(s) still hardcode the live project %q: %v", len(hits), literal, hits)
+	}
+	t.Logf("scanned %d *_test.go files across the module, %d hard-coded project literals", len(files), len(hits))
+}
+
+// TestTunnelPackageStaysAsleepWithoutOptIn is the cell that was missing when the
+// reviewer found that TestEndToEndComplexTypeWithNulls - which arrives from
+// master, not from this branch - guarded itself with "is a secret exported" and
+// therefore created a table on any machine holding credentials. Every live case in
+// every package has to go through the shared gate, and a head-only audit of the
+// branch cannot prove that, so the check runs the integrated tree's tunnel package.
+func TestTunnelPackageStaysAsleepWithoutOptIn(t *testing.T) {
+	srv := newCountingServer(t)
+	env := childEnv(map[string]string{
+		"ALIBABA_CLOUD_ACCESS_KEY_ID":     "fake-id",
+		"ALIBABA_CLOUD_ACCESS_KEY_SECRET": "fake-secret",
+		"odps_endpoint":                   srv.srv.URL,
+		"tunnel_endpoint":                 srv.srv.URL,
+	}, []string{"ODPS_RUN_LIVE_TESTS", "ALIBABA_CLOUD_SECURITY_TOKEN", "ODPS_LIVE_TEST_PROJECT"})
+
+	code, out := goTest(t, "./odps/tunnel", "^TestEndToEndComplexTypeWithNulls$", env)
+	if code != 0 {
+		t.Fatalf("child exited %d; a live case must skip when nothing was opted in:\n%s", code, out)
+	}
+	if !strings.Contains(out, "--- SKIP: TestEndToEndComplexTypeWithNulls") {
+		t.Errorf("the tunnel live case did not report SKIP:\n%s", out)
+	}
+	if got := srv.count(); got != 0 {
+		t.Fatalf("%d requests reached the service from the tunnel package without opt-in (paths %v)", got, srv.requested())
+	}
+}
+
+// TestProjectOverrideReachesTheWire is the "assert the requested project at a
+// fake endpoint" half of the review: setting ODPS_LIVE_TEST_PROJECT has to show up
+// in what the SDK actually asks for, otherwise "the project is explicit" is only a
+// statement about a variable.
+func TestProjectOverrideReachesTheWire(t *testing.T) {
+	srv := newCountingServer(t)
+	env := childEnv(map[string]string{
+		"ODPS_RUN_LIVE_TESTS":             "1",
+		"ODPS_LIVE_TEST_PROJECT":          "gate_probe_project",
+		"ALIBABA_CLOUD_ACCESS_KEY_ID":     "fake-id",
+		"ALIBABA_CLOUD_ACCESS_KEY_SECRET": "fake-secret",
+		"odps_endpoint":                   srv.srv.URL,
+	}, []string{"ALIBABA_CLOUD_SECURITY_TOKEN"})
+
+	code, out := goTest(t, "./odps", "^TestSchemas_List$", env)
+	if srv.count() == 0 {
+		t.Fatalf("opted-in live case made no request at all, so the project cannot be checked; child exit %d:\n%s", code, out)
+	}
+	found := false
+	for _, path := range srv.requested() {
+		if strings.Contains(path, "gate_probe_project") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("no request carried the configured project; paths seen: %v", srv.requested())
+	}
+	if code == 0 {
+		t.Errorf("the opted-in case passed against a server that answers 404 - the live path is not really being exercised:\n%s", out)
 	}
 }

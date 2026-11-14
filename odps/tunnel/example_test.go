@@ -109,7 +109,7 @@ func createSaleDetailTable() {
 }
 
 func createUploadSampleArrowTable() {
-	ins, err := odpsIns.ExecSQl("CREATE TABLE IF NOT EXISTS go_sdk_regression_testing.upload_sample_arrow(payload STRING);")
+	ins, err := odpsIns.ExecSQl("CREATE TABLE IF NOT EXISTS " + ProjectName + ".upload_sample_arrow(payload STRING);")
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

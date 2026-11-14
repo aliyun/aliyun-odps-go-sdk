@@ -19,7 +19,6 @@ package tunnel_test
 import (
 	"errors"
 	"io"
-	"os"
 	"runtime/debug"
 	"sort"
 	"strings"
@@ -194,9 +193,11 @@ func complexNullE2ERecords(t *testing.T) ([]data.Record, []string) {
 }
 
 func TestEndToEndComplexTypeWithNulls(t *testing.T) {
-	if os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET") == "" {
-		t.Skip("no MaxCompute credentials in the environment; this test needs a real project and tunnel endpoint")
-	}
+	// This case arrived from master with a "is a secret exported" guard, which is
+	// not the shared gate: on a machine that happens to hold credentials it would
+	// create a table and open an overwrite upload session without anyone asking
+	// for a live run. Same rule as every other live case now.
+	skipWithoutLiveService(t)
 
 	arrayType := mustParseE2EDataType(t, "array<bigint>").(datatype.ArrayType)
 	mapType := mustParseE2EDataType(t, "map<string,string>").(datatype.MapType)

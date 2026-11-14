@@ -198,7 +198,7 @@ func Example_tunnel_download_arrow_with_partition() {
 		return
 	}
 	session, err := tunnelIns.CreateDownloadSession(
-		"go_sdk_regression_testing",
+		ProjectName,
 		"sale_detail",
 		tunnel2.SessionCfg.WithPartitionKey("sale_date='202111',region='hangzhou'"),
 	)

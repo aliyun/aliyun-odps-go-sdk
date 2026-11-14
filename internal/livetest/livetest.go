@@ -46,6 +46,10 @@ const (
 	EnvOptIn = "ODPS_RUN_LIVE_TESTS"
 	// EnvProject names the project live cases run against.
 	EnvProject = "ODPS_LIVE_TEST_PROJECT"
+	// LegacyProjectEnv is the project variable the sqldriver real-service helpers
+	// have always required. It is kept working on purpose rather than renamed out
+	// from under them - see ProjectExplicit for which one wins.
+	LegacyProjectEnv = "MAXCOMPUTE_PROJECT"
 	// DefaultProject is the regression project the live cases have always used.
 	// It stays the default so that turning this gate on changes nothing for an
 	// existing live run; the live job is expected to set EnvProject explicitly.
@@ -182,6 +186,28 @@ func Project() string {
 		return ""
 	}
 	return cfg.Project
+}
+
+// ProjectExplicit returns the project an individual live helper should use,
+// honouring ODPS_LIVE_TEST_PROJECT first and falling back to the older
+// MAXCOMPUTE_PROJECT, with no implicit default: helpers that have always
+// required an explicit project keep skipping when neither is set.
+//
+// Two variables is not elegant and this is the honest reason it stays that way
+// for now: ODPS_LIVE_TEST_PROJECT controls every case that goes through this
+// package, while the two sqldriver real-service helpers predate it and name a
+// project of their own choosing. Collapsing them into one knob would silently
+// repoint those helpers at DefaultProject, so the reconciliation is "prefer the
+// new name, keep the old one working" here plus a line in the PR, not a claim
+// that one variable rules every live case.
+func ProjectExplicit() string {
+	if v, ok := os.LookupEnv(EnvProject); ok && strings.TrimSpace(v) != "" {
+		return strings.TrimSpace(v)
+	}
+	if v, ok := os.LookupEnv(LegacyProjectEnv); ok && strings.TrimSpace(v) != "" {
+		return strings.TrimSpace(v)
+	}
+	return ""
 }
 
 // ProjectOrDefault returns the validated project when a live run is
