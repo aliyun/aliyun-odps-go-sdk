@@ -38,7 +38,7 @@ func (r *Record) String() string {
 
 	n := len(*r) - 1
 	for i, f := range *r {
-		sb.WriteString(f.String())
+		sb.WriteString(diagnosticValue(f))
 
 		if i < n {
 			sb.WriteString(", ")
