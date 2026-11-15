@@ -32,6 +32,35 @@ go sql/driver 接口的odps实现
 也使用errors.WithStack等方法对获取进行封装，这样可以保留完整的error stack context.
 
 
+# 从环境变量读取凭据
+`account.AccountFromEnv()` 读取三个环境变量：
+
+| 环境变量 | 含义 |
+| --- | --- |
+| `ALIBABA_CLOUD_ACCESS_KEY_ID` | AccessKey Id |
+| `ALIBABA_CLOUD_ACCESS_KEY_SECRET` | AccessKey Secret |
+| `ALIBABA_CLOUD_SECURITY_TOKEN` | 临时凭证的 security token，可选 |
+
+规则：
+
+1. Id 与 Secret **都导出、且去掉空白后非空**，才返回账号。只导出其中一个、导出空串、导出全空白的，一律返回 `nil`。
+2. 满足 1 的前提下，`ALIBABA_CLOUD_SECURITY_TOKEN` 也导出且非空白 ⇒ `*StsAccount`；否则 ⇒ `*AliyunAccount`。token 导出了但值是空串/全空白，按“没有临时凭证”处理。
+3. 环境变量里的值原样交给账号。这个函数只判断“配置没配置”，不替你修配置。
+
+所以 `account.AccountFromEnv() != nil` 的确切含义是“这里有一对可以拿去签名的密钥”，它**不**说明这对密钥有效、project 存在或 endpoint 可达——那些只有服务端知道。没有凭据时想跳过真实服务的用例，判 `nil` 就够；想确认配置可用，仍然要发一次请求。
+
+这里的行为在之前是不同的：每一次 `os.LookupEnv` 的 found 都被下一次覆盖，于是
+
+| 组合 | 之前 | 现在 |
+| --- | --- | --- |
+| 只导出 Secret，没有 Id | 返回 AccessId 为空的账号，请求带着空 AK 去签名 | `nil` |
+| Id 或 Secret 导出为空串/全空白 | 返回带空值的账号 | `nil` |
+| 三者齐备，但 token 是空串/全空白 | `*StsAccount`（token 为空） | `*AliyunAccount` |
+
+依赖旧行为（“只要 secret 在就算配置好了”）的调用方需要改成显式判断。同包的 `account.AliyunAccountFromEnv()` 不在这次变更范围内：它不做任何校验，任何情况下都返回非 `nil` 的 `*AliyunAccount`，字段可能是空的。
+
+离线用例见 `odps/account/account_from_env_test.go`。
+
 # odps model实现列表
 <p>[x] project</p>
 <p>[x] table</p>
