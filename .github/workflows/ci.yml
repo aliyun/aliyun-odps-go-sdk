@@ -8,6 +8,13 @@ permissions:
 
 on:
   workflow_dispatch: # 支持手动触发
+    inputs:
+      run_live:
+        # 手动开一次真实项目那一档。默认关，且前置条件是夹具名字已经做成 run 级
+        # （创建/读取/清理三侧一致）——见 live-service job 上的注释。
+        description: 'Run the live-service suite against a real MaxCompute project'
+        type: boolean
+        default: false
   push:
     branches: [ "master" ]
   pull_request: # 编译与离线单测不需要凭据，PR 上也应该跑到
@@ -51,6 +58,19 @@ jobs:
     # 含子测试与空 "// Output:" 的早退 Example，不等于"某个函数体被重新执行过"——
     # 真跑的证据来自上一步的 -count=1 加上这一步对 (cached) 的拒绝。
     # 下限取 300（-count=1 下实测 341 行 PASS、32 行 SKIP），留正常删改余量。
+    - name: Live-suite activation status
+      shell: bash
+      env:
+        ODPS_LIVE_TESTS_ENABLED: '${{ vars.ODPS_LIVE_TESTS_ENABLED }}'
+        EVENT_NAME: '${{ github.event_name }}'
+        RUN_LIVE: '${{ inputs.run_live }}'
+      run: |
+        if [ "$ODPS_LIVE_TESTS_ENABLED" = "true" ] || { [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$RUN_LIVE" = "true" ]; }; then
+          echo "live-service job is enabled for this run"
+        else
+          echo "::notice::live-service did not run in this CI run: it is off by default until fixture names are run-scoped across creators/readers/cleanup. Nothing in the offline gate depends on it; today's credential failure is not the control, this switch is."
+        fi
+
     - name: Assert the offline cases actually ran
       shell: bash
       env:
@@ -101,9 +121,15 @@ jobs:
 
   # 需要真实 MaxCompute 项目的用例：单独成 job，凭据取不到时页面必须有信号，
   # 而不是像以前那样在 get credentials 失败后把 Build/Test 全部 skipped。
+  # 这一档默认**不跑**。原因不是凭据坏着（那只是今天的表象），而是：它一跑就会在固定项目里
+  # 建表、开 overwrite upload session，而夹具名字还不是 run 级的——多个 run 并发就会互相踩，
+  # 任何一次"凭据恰好修好"都会把它悄悄激活。所以开关放在仓库变量 ODPS_LIVE_TESTS_ENABLED
+  # （默认不存在=关），或手动 dispatch 勾 run_live；离线 build/test 门禁不受这里影响，照旧自动跑。
+  # 把它打开的前置条件：创建方/读取方/清理三侧都用同一套 run 级名字并验证过（另案跟踪）。
   live-service:
     name: Live-service test (needs OIDC credentials)
     needs: build
+    if: ${{ vars.ODPS_LIVE_TESTS_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_live) }}
     runs-on: ubuntu-latest
     # 只有这一档声明「我要跑真实项目的用例」：internal/livetest 要 ODPS_RUN_LIVE_TESTS=1
     # 且配置完整（ID/Secret 非空、endpoint 是带主机的 http(s)、给了 token 就不能为空）
