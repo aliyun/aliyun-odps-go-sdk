@@ -18,6 +18,7 @@ package security_test
 
 import (
 	"fmt"
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	"log"
 
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
@@ -29,10 +30,13 @@ var (
 	account     = account2.AccountFromEnv()
 	endpoint    = restclient.LoadEndpointFromEnv()
 	restClient  = restclient.NewOdpsRestClient(account, endpoint)
-	projectName = "go_sdk_regression_testing"
+	projectName = livetest.ProjectOrDefault()
 )
 
 func ExampleManager_GetSecurityConfig() {
+	if !liveServiceConfigured() {
+		return
+	}
 	sm := security.NewSecurityManager(restClient, projectName)
 	sc, err := sm.GetSecurityConfig(true)
 	if err != nil {
@@ -45,6 +49,9 @@ func ExampleManager_GetSecurityConfig() {
 }
 
 func ExampleManager_CheckPermissionV1() {
+	if !liveServiceConfigured() {
+		return
+	}
 	sm := security.NewSecurityManager(restClient, projectName)
 	p := security.NewPermission(
 		projectName,
@@ -64,6 +71,9 @@ func ExampleManager_CheckPermissionV1() {
 }
 
 func ExampleManager_CheckPermissionV0() {
+	if !liveServiceConfigured() {
+		return
+	}
 	sm := security.NewSecurityManager(restClient, projectName)
 
 	r, err := sm.CheckPermissionV0(
@@ -81,6 +91,9 @@ func ExampleManager_CheckPermissionV0() {
 }
 
 func ExampleManager_GetPolicy() {
+	if !liveServiceConfigured() {
+		return
+	}
 	sm := security.NewSecurityManager(restClient, projectName)
 	policy, err := sm.GetPolicy()
 	if err != nil {
@@ -92,6 +105,9 @@ func ExampleManager_GetPolicy() {
 }
 
 func ExampleManager_ListUsers() {
+	if !liveServiceConfigured() {
+		return
+	}
 	sm := security.NewSecurityManager(restClient, projectName)
 	users, err := sm.ListUsers()
 	if err != nil {
@@ -106,6 +122,9 @@ func ExampleManager_ListUsers() {
 }
 
 func ExampleManager_RunQuery() {
+	if !liveServiceConfigured() {
+		return
+	}
 	sm := security.NewSecurityManager(restClient, projectName)
 	result, err := sm.RunQuery("whoami;", true, "")
 	if err != nil {

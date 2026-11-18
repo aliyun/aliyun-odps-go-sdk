@@ -68,13 +68,13 @@ func ExampleTableSchema_ToSQLString() {
 
 	schema := builder.Build()
 
-	sql, _ := schema.ToSQLString("go_sdk_regression_testing", "schema", true)
+	sql, _ := schema.ToSQLString(defaultProjectName, "schema", true)
 	println("sql of create table:")
 	println(sql)
 	println()
 
 	externalSql, err := schema.ToExternalSQLString(
-		"go_sdk_regression_testing",
+		defaultProjectName,
 		"",
 		true,
 		serdeProperties,
@@ -91,6 +91,9 @@ func ExampleTableSchema_ToSQLString() {
 }
 
 func ExampleTable_Load() {
+	if !liveServiceConfigured() {
+		return
+	}
 	table := odpsIns.Table("has_struct")
 	err := table.Load()
 	if err != nil {
@@ -103,6 +106,9 @@ func ExampleTable_Load() {
 }
 
 func ExampleTable_AddPartition() {
+	if !liveServiceConfigured() {
+		return
+	}
 	table := odpsIns.Table("sale_detail")
 	err := table.AddPartition(true, "sale_date=202111/region=hangzhou")
 	if err != nil {
@@ -113,6 +119,9 @@ func ExampleTable_AddPartition() {
 }
 
 func ExampleTable_GetPartitions() {
+	if !liveServiceConfigured() {
+		return
+	}
 	table := odpsIns.Table("sale_detail")
 	partitions, err := table.GetPartitions()
 	if err != nil {
@@ -131,7 +140,10 @@ func ExampleTable_GetPartitions() {
 }
 
 func ExampleTable_ExecSql() {
-	// table := odps.NewTable(odpsIns, "go_sdk_regression_testing", "sale_detail")
+	if !liveServiceConfigured() {
+		return
+	}
+	// table := odps.NewTable(odpsIns, defaultProjectName, "sale_detail")
 	table := odpsIns.Table("has_struct")
 	// instance, err := table.ExecSql("SelectSale_detail", "select * from sale_detail;")
 	instance, err := table.ExecSql("Select_has_struct", "select * from has_struct;")
@@ -157,6 +169,9 @@ func ExampleTable_ExecSql() {
 }
 
 func ExampleTable_GetClusterInfo() {
+	if !liveServiceConfigured() {
+		return
+	}
 	cluster := tableschema.ClusterInfo{
 		ClusterType: tableschema.CLUSTER_TYPE.Hash,
 		ClusterCols: []string{"c1", "c2"},
@@ -173,7 +188,7 @@ func ExampleTable_GetClusterInfo() {
 		ClusterSortColumns(cluster.SortCols).
 		ClusterBucketNum(cluster.BucketNum).
 		Build()
-	println(schema.ToSQLString("go_sdk_regression_testing", "default", true))
+	println(schema.ToSQLString(defaultProjectName, "default", true))
 	err := odpsIns.Tables().Create(schema, true, nil, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -194,11 +209,14 @@ func ExampleTable_GetClusterInfo() {
 }
 
 func ExampleTable_GetPrimaryKey() {
+	if !liveServiceConfigured() {
+		return
+	}
 	schema := tableschema.NewSchemaBuilder().Name("has_pk").PrimaryKeys([]string{"id", "name"}).Column(tableschema.Column{Name: "id", Type: datatype.IntType, NotNull: true}).
 		Column(tableschema.Column{Name: "name", Type: datatype.StringType, NotNull: true}).
 		Column(tableschema.Column{Name: "name2", Type: datatype.StringType, NotNull: false}).
 		Build()
-	println(schema.ToSQLString("go_sdk_regression_testing", "default", true))
+	println(schema.ToSQLString(defaultProjectName, "default", true))
 	err := odpsIns.Tables().Create(schema, true, nil, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -217,12 +235,15 @@ func ExampleTable_GetPrimaryKey() {
 }
 
 func ExampleTable_IsTransactional() {
+	if !liveServiceConfigured() {
+		return
+	}
 	schema := tableschema.NewSchemaBuilder().Name("deltaTable").PrimaryKeys([]string{"id", "name"}).Column(tableschema.Column{Name: "id", Type: datatype.IntType, NotNull: true}).
 		Column(tableschema.Column{Name: "name", Type: datatype.StringType, NotNull: true}).
 		Column(tableschema.Column{Name: "name2", Type: datatype.StringType, NotNull: false}).
 		TblProperties(map[string]string{"transactional": "true"}).
 		Build()
-	println(schema.ToSQLString("go_sdk_regression_testing", "default", true))
+	println(schema.ToSQLString(defaultProjectName, "default", true))
 	err := odpsIns.Tables().Create(schema, true, nil, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)

@@ -3,34 +3,36 @@
 
 name: CI
 
+permissions:
+  contents: read
+
 on:
   workflow_dispatch: # 支持手动触发
+    inputs:
+      run_live:
+        # 手动开一次真实项目那一档。默认关，且前置条件是夹具名字已经做成 run 级
+        # （创建/读取/清理三侧一致）——见 live-service job 上的注释。
+        description: 'Run the live-service suite against a real MaxCompute project'
+        type: boolean
+        default: false
   push:
     branches: [ "master" ]
+  pull_request: # 编译与离线单测不需要凭据，PR 上也应该跑到
+
+env:
+  # odps/tunnel 的 protoc 定长报文样例是按 Asia/Shanghai 的墙上时间生成的，
+  # 时区不同这三个用例就会失败，所以把时区固定在用例假设值上，不依赖 runner 默认值。
+  TZ: Asia/Shanghai
 
 jobs:
 
+  # 编译与离线单测：不取任何凭据，也不设 ODPS_RUN_LIVE_TESTS，任何环境（包括
+  # fork 的 PR）都必须真跑。internal/livetest 要求显式 opt-in，所以就算某个
+  # runner 恰好导出了 ALIBABA_CLOUD_* / odps_endpoint，需要真实项目的用例也只是
+  # SKIP，不会去动服务。
   build:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write     # 获取 oidc token 的权限
     steps:
-    - name: get credentials
-      id: get-credentials
-      uses: aliyun/configure-aliyun-credentials-action@v1.0.3
-      with:
-        role-to-assume: '${{ secrets.ROLE_ARN }}'
-        oidc-provider-arn: '${{ secrets.OIDC_ARN }}'
-        audience: 'actions.github.com' # default value
-        
-    - name: Set up environment
-      run: |
-        echo "ALIBABA_CLOUD_ACCESS_KEY_ID=${{ steps.get-credentials.outputs.aliyun-access-key-id }}" >> $GITHUB_ENV
-        echo "ALIBABA_CLOUD_ACCESS_KEY_SECRET=${{ steps.get-credentials.outputs.aliyun-access-key-secret }}" >> $GITHUB_ENV
-        echo "ALIBABA_CLOUD_SECURITY_TOKEN=${{ steps.get-credentials.outputs.aliyun-security-token }}" >> $GITHUB_ENV
-        echo "odps_endpoint=${{ secrets.ENDPOINT }}" >> $GITHUB_ENV
-        echo "TZ=Asia/Shanghai" >> $GITHUB_ENV
-    
     - uses: actions/checkout@v4
 
     - name: Set up Go
@@ -41,5 +43,150 @@ jobs:
     - name: Build
       run: go build -v ./...
 
+    # tee 会把管道退出码变成 tee 自己的，所以这里显式 pipefail：go test 红了这条腿必须红。
+    # -count=1 是必须的：不带它，Go 会重放缓存结果并照样打印 "ok ... (cached)" 与
+    # 全部 "--- PASS" 行，那么下面数的就是历史而不是这一轮真跑过的用例。
     - name: Test (Expect Arrow Package)
-      run: go test -v $(go list ./... | grep -v './arrow')
+      shell: bash
+      run: |
+        set -o pipefail
+        go test -count=1 -v $(go list ./... | grep -v './arrow') | tee /tmp/offline-test.log
+
+    # `go test` 在用例被整体过滤掉时仍然 rc=0（包级报告写 "[no tests to run]"，实测见 PR 评论）。
+    # 这一步钉住三件事：报告必须在、包集合必须等于 go list 选中的集合、并且必须是本轮真跑的
+    # （出现 "(cached)" 即红）。PASS 行数下限只是兜底网：它数的是 "--- PASS" 行，
+    # 含子测试与空 "// Output:" 的早退 Example，不等于"某个函数体被重新执行过"——
+    # 真跑的证据来自上一步的 -count=1 加上这一步对 (cached) 的拒绝。
+    # 下限取 300（-count=1 下实测 341 行 PASS、32 行 SKIP），留正常删改余量。
+    - name: Live-suite activation status
+      shell: bash
+      env:
+        ODPS_LIVE_TESTS_ENABLED: '${{ vars.ODPS_LIVE_TESTS_ENABLED }}'
+        EVENT_NAME: '${{ github.event_name }}'
+        RUN_LIVE: '${{ inputs.run_live }}'
+      run: |
+        if [ "$ODPS_LIVE_TESTS_ENABLED" = "true" ] || { [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$RUN_LIVE" = "true" ]; }; then
+          echo "live-service job is enabled for this run"
+        else
+          echo "::notice::live-service did not run in this CI run: it is off by default until fixture names are run-scoped across creators/readers/cleanup. Nothing in the offline gate depends on it; today's credential failure is not the control, this switch is."
+        fi
+
+    - name: Assert the offline cases actually ran
+      shell: bash
+      env:
+        MIN_PASSED_CASES: '300'
+      run: |
+        set -o pipefail
+        LOG=/tmp/offline-test.log
+        # 下限自己兜底并校验：env 丢了或写错时这一步要红，不能变成一个静默通过的比较。
+        MIN="${MIN_PASSED_CASES:-300}"
+        case "$MIN" in
+          ''|*[!0-9]*)
+            echo "::error::MIN_PASSED_CASES must be a positive integer, got \"$MIN\""
+            exit 1
+            ;;
+        esac
+        if [ ! -f "$LOG" ]; then
+          echo "::error::no test log at $LOG - the Test step did not produce a report"
+          exit 1
+        fi
+        if grep -q '(cached)' "$LOG"; then
+          echo "::error::some packages reported (cached) - the PASS lines below are replayed history, not this run"
+          grep -n '(cached)' "$LOG" | head -5
+          exit 1
+        fi
+        if grep -q '\[no tests to run\]' "$LOG"; then
+          echo "::error::at least one package reported \"no tests to run\"; the gate would be green while executing nothing"
+          grep -n '\[no tests to run\]' "$LOG" | head -5
+          exit 1
+        fi
+        # 下限只能抓住"大面积消失"：11-14 实测 12 个包各贡献 0 到 84 行 PASS，
+        # floor 300 要一次少 42 行以上才咬，单个小包从结果里不见是漏的。
+        # 所以把"该报的包都报了吗"直接对出来：go list 选中的集合必须等于报告里的集合。
+        expected=$(go list ./... | grep -v './arrow' | sort)
+        reported=$(grep -oE '^(ok|\?)[[:space:]]+[^[:space:]]+' "$LOG" | awk '{print $2}' | sort)
+        if [ "$expected" != "$reported" ]; then
+          echo "::error::the packages that reported are not the packages go list selected"
+          diff <(printf '%s\n' "$expected") <(printf '%s\n' "$reported") || true
+          exit 1
+        fi
+        echo "package set matches go list: $(printf '%s\n' "$expected" | grep -c .) packages"
+        passed=$(grep -cE '^[[:space:]]*--- PASS' "$LOG")
+        skipped=$(grep -cE '^[[:space:]]*--- SKIP' "$LOG")
+        echo "executed cases (--- PASS lines): $passed (floor $MIN); skipped: $skipped"
+        if [ "$passed" -lt "$MIN" ]; then
+          echo "::error::only $passed cases reported PASS; the floor is $MIN"
+          exit 1
+        fi
+
+  # 需要真实 MaxCompute 项目的用例：单独成 job，凭据取不到时页面必须有信号，
+  # 而不是像以前那样在 get credentials 失败后把 Build/Test 全部 skipped。
+  # 这一档默认**不跑**。原因不是凭据坏着（那只是今天的表象），而是：它一跑就会在固定项目里
+  # 建表、开 overwrite upload session，而夹具名字还不是 run 级的——多个 run 并发就会互相踩，
+  # 任何一次"凭据恰好修好"都会把它悄悄激活。所以开关放在仓库变量 ODPS_LIVE_TESTS_ENABLED
+  # （默认不存在=关），或手动 dispatch 勾 run_live；离线 build/test 门禁不受这里影响，照旧自动跑。
+  # 把它打开的前置条件：创建方/读取方/清理三侧都用同一套 run 级名字并验证过（另案跟踪）。
+  live-service:
+    name: Live-service test (needs OIDC credentials)
+    needs: build
+    if: ${{ vars.ODPS_LIVE_TESTS_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_live) }}
+    runs-on: ubuntu-latest
+    # 只有这一档声明「我要跑真实项目的用例」：internal/livetest 要 ODPS_RUN_LIVE_TESTS=1
+    # 且配置完整（ID/Secret 非空、endpoint 是带主机的 http(s)、给了 token 就不能为空）
+    # 才放行；项目名在这里显式写出来，不靠代码里的默认值。
+    env:
+      ODPS_RUN_LIVE_TESTS: '1'
+      ODPS_LIVE_TEST_PROJECT: go_sdk_regression_testing
+    permissions:
+      id-token: write     # 获取 oidc token 的权限
+    steps:
+    # secrets 在这个 job 之外取不到值（fork 的 PR、未配置 secrets 的仓库都是如此），
+    # 所以先把「配没配」读成一个可比较的输出，并把它写在页面上，再决定跑不跑。
+    - name: Check whether credentials are configured
+      id: credentials
+      env:
+        ROLE_ARN: '${{ secrets.ROLE_ARN }}'
+        OIDC_ARN: '${{ secrets.OIDC_ARN }}'
+      run: |
+        if [ -n "$ROLE_ARN" ] && [ -n "$OIDC_ARN" ]; then
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "configured=false" >> "$GITHUB_OUTPUT"
+          echo "::warning title=Live-service tests not run::ROLE_ARN / OIDC_ARN are not available to this run, so the tests that need a real MaxCompute project did not run. The Build and Test steps in the build job are not affected."
+          echo "### Live-service tests did not run" >> "$GITHUB_STEP_SUMMARY"
+          echo "ROLE_ARN / OIDC_ARN are not available to this run (fork pull requests never receive repository secrets). The steps below are skipped, and this job is reported as successful *without* having tested anything." >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+    - name: get credentials
+      if: steps.credentials.outputs.configured == 'true'
+      id: get-credentials
+      uses: aliyun/configure-aliyun-credentials-action@v1.0.3
+      with:
+        role-to-assume: '${{ secrets.ROLE_ARN }}'
+        oidc-provider-arn: '${{ secrets.OIDC_ARN }}'
+        audience: 'actions.github.com' # default value
+
+    - name: Set up environment
+      if: steps.credentials.outputs.configured == 'true'
+      run: |
+        echo "ALIBABA_CLOUD_ACCESS_KEY_ID=${{ steps.get-credentials.outputs.aliyun-access-key-id }}" >> $GITHUB_ENV
+        echo "ALIBABA_CLOUD_ACCESS_KEY_SECRET=${{ steps.get-credentials.outputs.aliyun-access-key-secret }}" >> $GITHUB_ENV
+        echo "ALIBABA_CLOUD_SECURITY_TOKEN=${{ steps.get-credentials.outputs.aliyun-security-token }}" >> $GITHUB_ENV
+        echo "odps_endpoint=${{ secrets.ENDPOINT }}" >> $GITHUB_ENV
+
+    - uses: actions/checkout@v4
+      if: steps.credentials.outputs.configured == 'true'
+
+    - name: Set up Go
+      if: steps.credentials.outputs.configured == 'true'
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Build
+      if: steps.credentials.outputs.configured == 'true'
+      run: go build -v ./...
+
+    - name: Test with credentials (Expect Arrow Package)
+      if: steps.credentials.outputs.configured == 'true'
+      run: go test -count=1 -v $(go list ./... | grep -v './arrow')

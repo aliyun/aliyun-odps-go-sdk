@@ -17,6 +17,7 @@
 package tunnel_test
 
 import (
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	"log"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
@@ -27,11 +28,14 @@ import (
 )
 
 func Example_tunnel_download_instance_result() {
+	if !liveServiceConfigured() {
+		return
+	}
 	account := account2.AccountFromEnv()
 	endpoint := restclient.LoadEndpointFromEnv()
 	odpsIns := odps.NewOdps(account, endpoint)
 
-	projectName := "go_sdk_regression_testing"
+	projectName := livetest.ProjectOrDefault()
 	odpsIns.SetDefaultProjectName(projectName)
 	project := odpsIns.DefaultProject()
 	tunnelIns, err := tunnel.NewTunnelFromProject(project)

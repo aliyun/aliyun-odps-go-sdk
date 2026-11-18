@@ -26,6 +26,9 @@ import (
 )
 
 func ExampleOdps_RunSQL() {
+	if !liveServiceConfigured() {
+		return
+	}
 	column := tableschema.Column{
 		Name: "id",
 		Type: datatype.DateType,
