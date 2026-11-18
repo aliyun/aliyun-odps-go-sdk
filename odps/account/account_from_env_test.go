@@ -184,3 +184,91 @@ func TestAccountFromEnvWithACompleteKeyPair(t *testing.T) {
 		assert.Equal(t, "test-token", *credential.SecurityToken)
 	})
 }
+
+// TestAccountFromEnvPassesNonblankValuesThroughByteForByte pins the other half of
+// the contract: a value that counts as configured is handed to the account exactly
+// as it was exported, surrounding whitespace included. The blank-rejection cases
+// above show when a value is refused; this one shows that accepting a value never
+// rewrites it, which is what "this decides configuration, it does not repair one"
+// has to mean before anyone relies on it.
+func TestAccountFromEnvPassesNonblankValuesThroughByteForByte(t *testing.T) {
+	t.Run("permanent key pair", func(t *testing.T) {
+		accessId := "  padded-id \t"
+		accessKey := " padded-secret\n"
+		exportCredentialEnv(t, &accessId, &accessKey, nil)
+
+		acct := AccountFromEnv()
+		if !assert.NotNil(t, acct) {
+			return
+		}
+		assert.Equal(t, Aliyun, acct.GetType())
+
+		ak, ok := acct.(*AliyunAccount)
+		if !assert.True(t, ok, "unexpected concrete account type: %T", acct) {
+			return
+		}
+		assert.Equal(t, accessId, ak.AccessId(), "the access key id must reach the account byte-for-byte")
+		assert.Equal(t, accessKey, ak.AccessKey(), "the access key secret must reach the account byte-for-byte")
+	})
+
+	t.Run("temporary credential", func(t *testing.T) {
+		accessId := " padded-id "
+		accessKey := "\tpadded-secret "
+		securityToken := " padded-token \n"
+		exportCredentialEnv(t, &accessId, &accessKey, &securityToken)
+
+		acct := AccountFromEnv()
+		if !assert.NotNil(t, acct) {
+			return
+		}
+		assert.Equal(t, STS, acct.GetType())
+
+		sts, ok := acct.(*StsAccount)
+		if !assert.True(t, ok, "unexpected concrete account type: %T", acct) {
+			return
+		}
+		credential, err := sts.Credential()
+		if !assert.NoError(t, err) {
+			return
+		}
+		if credential.AccessKeyId == nil || credential.AccessKeySecret == nil || credential.SecurityToken == nil {
+			t.Fatalf("incomplete credential model: %+v", credential)
+		}
+		assert.Equal(t, accessId, *credential.AccessKeyId)
+		assert.Equal(t, accessKey, *credential.AccessKeySecret)
+		assert.Equal(t, securityToken, *credential.SecurityToken)
+	})
+}
+
+// TestAccountFromEnvTokenDoesNotRescueAnIncompleteKeyPair covers the other reading
+// of "both are required": the malformed-key cases in
+// TestAccountFromEnvIsConfiguredOnlyWithAUsableKeyPair all leave the token unset,
+// so on their own they would still pass an implementation that returned an
+// StsAccount whenever a token was exported. A non-blank token is not a credential
+// pair, so it must not turn an incomplete pair into an account.
+func TestAccountFromEnvTokenDoesNotRescueAnIncompleteKeyPair(t *testing.T) {
+	securityToken := "test-token"
+
+	cases := []struct {
+		name      string
+		accessId  *string
+		accessKey *string
+	}{
+		{"id not exported", nil, strPtr("test-secret")},
+		{"id exported empty", strPtr(""), strPtr("test-secret")},
+		{"id exported blank", strPtr("   "), strPtr("test-secret")},
+		{"secret not exported", strPtr("test-id"), nil},
+		{"secret exported empty", strPtr("test-id"), strPtr("")},
+		{"secret exported blank", strPtr("test-id"), strPtr("\t ")},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			exportCredentialEnv(t, tc.accessId, tc.accessKey, &securityToken)
+
+			assert.Nil(t, AccountFromEnv(),
+				"a non-blank ALIBABA_CLOUD_SECURITY_TOKEN must not stand in for a missing or blank access key id/secret")
+		})
+	}
+}

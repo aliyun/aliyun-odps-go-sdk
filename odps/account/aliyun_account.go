@@ -104,16 +104,24 @@ func lookupCredentialEnv(key string) (string, bool) {
 // service, so a caller that needs a "this configuration works" answer has to make
 // a request (or check the account it built by itself).
 //
-// Previously the found flag of each lookup was overwritten by the next one, so
-// exporting only the secret returned an account with an empty access key id, and
-// an exported-but-empty ALIBABA_CLOUD_SECURITY_TOKEN selected the STS account.
-// Both are now "not configured" (nil) and "permanent key" respectively, so code
-// that treats nil as "fall back to another credential source" starts taking that
-// fallback in those two shapes instead of sending requests signed with empty
-// credentials.
+// Two shapes changed relative to the previous implementation, and they do not
+// change in the same direction:
 //
-// A non-blank ALIBABA_CLOUD_SECURITY_TOKEN gives an *StsAccount; without one this
-// returns an *AliyunAccount.
+//   - An incomplete key pair (id or secret missing, empty or blank) returns nil.
+//     A caller that treats nil as "not configured, use my other credential source"
+//     now takes that fallback instead of signing with empty credential material.
+//   - A complete key pair plus an exported-but-blank ALIBABA_CLOUD_SECURITY_TOKEN
+//     returns a non-nil *AliyunAccount. That is a configuration that counts, not a
+//     nil, so it does not activate a nil-based fallback. Dropping the blank token
+//     only selects the Aliyun account and its signing path; it cannot turn a
+//     temporary AccessKey pair into usable permanent credentials, and whether the
+//     pair is accepted is still the service's answer.
+//
+// nil is a signal, not graceful failure handling. Handing a nil Account to
+// odps.NewOdps or restclient.NewOdpsRestClient panics on the first request,
+// because RestClient embeds account.Account and calls through it when signing, so
+// the nil check belongs before the client is built. See the credential section of
+// README.md for that migration example.
 func AccountFromEnv() Account {
 	accessId, accessIdFound := lookupCredentialEnv("ALIBABA_CLOUD_ACCESS_KEY_ID")
 	accessKey, accessKeyFound := lookupCredentialEnv("ALIBABA_CLOUD_ACCESS_KEY_SECRET")

@@ -47,7 +47,29 @@ go sql/driver 接口的odps实现
 2. 满足 1 的前提下，`ALIBABA_CLOUD_SECURITY_TOKEN` 也导出且非空白 ⇒ `*StsAccount`；否则 ⇒ `*AliyunAccount`。token 导出了但值是空串/全空白，按“没有临时凭证”处理。
 3. 环境变量里的值原样交给账号。这个函数只判断“配置没配置”，不替你修配置。
 
-所以 `account.AccountFromEnv() != nil` 的确切含义是“这里有一对可以拿去签名的密钥”，它**不**说明这对密钥有效、project 存在或 endpoint 可达——那些只有服务端知道。没有凭据时想跳过真实服务的用例，判 `nil` 就够；想确认配置可用，仍然要发一次请求。
+所以 `account.AccountFromEnv() != nil` 的确切含义是“这里有一对可以拿去签名的密钥”，它**不**说明这对密钥有效、project 存在或 endpoint 可达——那些只有服务端知道。
+
+`nil` 只回答“密钥对缺不缺、完不完整”这一件事，两点边界要说清：
+
+1. **非 nil 不等于“可以跑真实服务用例”，也不等于“live 配置完整”。** 真实服务用例要的是显式开关加可用 endpoint（公仓 PR #92 引入的 `internal/livetest` 就是这套门禁：要 `ODPS_RUN_LIVE_TESTS=1`、要能用的 `odps_endpoint`，而且对“导出了但值为空白的 token”直接判配置不可用——比本函数更严，这是测试门禁有意保留的口径）。不要因为本函数收紧了，就把那套门禁换成 `AccountFromEnv() != nil`。
+2. **返回 nil 不代表下游会优雅失败。** `RestClient` 内嵌 `account.Account`，签名时直接从它走；把 nil 账号交给 `odps.NewOdps` 或 `restclient.NewOdpsRestClient`，构造时不报错，第一次请求就 panic。所以判 nil 必须发生在构造客户端之前。
+
+拿到 nil 之后怎么办，按你自己的来源决定，别把它往下传：
+
+```go
+acct := account.AccountFromEnv()
+if acct == nil {
+	// 这里没配好。换成你自己的处理：读配置文件、走 ECS RAM Role、
+	// 或者直接把这句话回给用户。不要带着 nil 往下构造客户端。
+	return fmt.Errorf("MaxCompute credentials are not configured: export " +
+		"ALIBABA_CLOUD_ACCESS_KEY_ID and ALIBABA_CLOUD_ACCESS_KEY_SECRET, both non-empty")
+}
+
+odpsIns := odps.NewOdps(acct, endpoint)
+odpsIns.SetDefaultProjectName(projectName)
+```
+
+以前只导出 secret 的机器会走过这个 `if`，带着空 AccessId 继续跑，错误到服务端才现形；现在它停在配置这一步。
 
 这里的行为在之前是不同的：每一次 `os.LookupEnv` 的 found 都被下一次覆盖，于是
 
@@ -55,7 +77,7 @@ go sql/driver 接口的odps实现
 | --- | --- | --- |
 | 只导出 Secret，没有 Id | 返回 AccessId 为空的账号，请求带着空 AK 去签名 | `nil` |
 | Id 或 Secret 导出为空串/全空白 | 返回带空值的账号 | `nil` |
-| 三者齐备，但 token 是空串/全空白 | `*StsAccount`（token 为空） | `*AliyunAccount` |
+| 三者齐备，但 token 是空串/全空白 | `*StsAccount`（token 为空） | `*AliyunAccount`（**非 nil**，仍是一次可用配置，只是不走 STS 签名头） |
 
 依赖旧行为（“只要 secret 在就算配置好了”）的调用方需要改成显式判断。同包的 `account.AliyunAccountFromEnv()` 不在这次变更范围内：它不做任何校验，任何情况下都返回非 `nil` 的 `*AliyunAccount`，字段可能是空的。
 
