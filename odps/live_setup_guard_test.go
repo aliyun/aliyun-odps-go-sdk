@@ -17,6 +17,7 @@
 package odps_test
 
 import (
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -355,3 +356,94 @@ func TestProjectOverrideReachesTheWire(t *testing.T) {
 		t.Errorf("the opted-in case passed against a server that answers 404 - the live path is not really being exercised:\n%s", out)
 	}
 }
+
+// TestSqldriverHelpersHonourProjectPrecedence is the half the reviewer asked
+// for: the wire test above exercises a fixture request from package odps, while
+// the two SQL-driver real-service helpers pick their project through
+// livetest.ProjectExplicit(). These cells run those helpers themselves, in a
+// child process, against the counting endpoint, and assert which project name
+// actually reaches the wire - new name wins, legacy alone still works, and with
+// neither named the case skips and makes no request.
+func TestSqldriverHelpersHonourProjectPrecedence(t *testing.T) {
+	const runFlag = "^TestRealServiceQueryWithoutContextStillWorks$"
+
+	envFor := func(srv *countingServer, extra map[string]string, unset []string) []string {
+		set := map[string]string{
+			"ODPS_RUN_LIVE_TESTS":             "1",
+			"ALIBABA_CLOUD_ACCESS_KEY_ID":     "fake-id",
+			"ALIBABA_CLOUD_ACCESS_KEY_SECRET": "fake-secret",
+			"odps_endpoint":                   srv.srv.URL,
+			"tunnel_endpoint":                 srv.srv.URL,
+		}
+		for k, v := range extra {
+			set[k] = v
+		}
+		// 先清掉从父进程继承来的两个项目变量，但 extra 里显式给值的那个要留下——
+		// childEnv 的语义是 unset 赢过 set，所以不能无条件把两个名字都塞进 drop。
+		drop := []string{"ALIBABA_CLOUD_SECURITY_TOKEN"}
+		for _, key := range []string{livetest.EnvProject, livetest.LegacyProjectEnv} {
+			if _, given := extra[key]; !given {
+				drop = append(drop, key)
+			}
+		}
+		return childEnv(set, append(drop, unset...))
+	}
+
+	t.Run("new name wins over the legacy one", func(t *testing.T) {
+		srv := newCountingServer(t)
+		env := envFor(srv, map[string]string{livetest.EnvProject: "new_proj", livetest.LegacyProjectEnv: "legacy_proj"}, []string{})
+		code, out := goTest(t, "./sqldriver", runFlag, env)
+		if strings.Contains(out, "--- SKIP") {
+			t.Fatalf("the helper skipped although both projects are named; child exit %d:\n%s", code, out)
+		}
+		paths := srv.requested()
+		if len(paths) == 0 {
+			t.Fatalf("no request reached the endpoint, so precedence cannot be judged; child exit %d:\n%s", code, out)
+		}
+		var sawNew, sawLegacy bool
+		for _, path := range paths {
+			if strings.Contains(path, "new_proj") {
+				sawNew = true
+			}
+			if strings.Contains(path, "legacy_proj") {
+				sawLegacy = true
+			}
+		}
+		if !sawNew || sawLegacy {
+			t.Errorf("requests should carry only the new project; sawNew=%v sawLegacy=%v paths=%v", sawNew, sawLegacy, paths)
+		}
+	})
+
+	t.Run("legacy name alone is still honoured", func(t *testing.T) {
+		srv := newCountingServer(t)
+		env := envFor(srv, map[string]string{livetest.LegacyProjectEnv: "legacy_proj"}, []string{})
+		code, out := goTest(t, "./sqldriver", runFlag, env)
+		if strings.Contains(out, "--- SKIP") {
+			t.Fatalf("the helper skipped with a usable legacy project; child exit %d:\n%s", code, out)
+		}
+		var sawLegacy bool
+		for _, path := range srv.requested() {
+			if strings.Contains(path, "legacy_proj") {
+				sawLegacy = true
+			}
+		}
+		if !sawLegacy {
+			t.Errorf("no request carried the legacy project; paths=%v child exit=%d\n%s", srv.requested(), code, out)
+		}
+	})
+
+	t.Run("no project named means skip and zero requests", func(t *testing.T) {
+		srv := newCountingServer(t)
+		env := envFor(srv, map[string]string{}, []string{})
+		code, out := goTest(t, "./sqldriver", runFlag, env)
+		if !strings.Contains(out, "--- SKIP: TestRealServiceQueryWithoutContextStillWorks") {
+			t.Errorf("the helper should skip when neither project is named; child exit %d:\n%s", code, out)
+		}
+		if got := len(srv.requested()); got != 0 {
+			t.Errorf("%d requests reached the endpoint with no project named", got)
+		}
+	})
+}
+
+// EnvKeys are the two project variables, referenced by name so a rename in
+// internal/livetest cannot leave this test asserting on a stale name.

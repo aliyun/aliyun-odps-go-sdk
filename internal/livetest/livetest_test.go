@@ -189,3 +189,33 @@ func TestInspectRejectsSecretOnlyEnvironment(t *testing.T) {
 		t.Errorf("reason = %q, want the missing ID to be the reported problem", problem)
 	}
 }
+
+func TestProjectExplicitPrecedenceMatrix(t *testing.T) {
+	cases := []struct {
+		name  string
+		set   map[string]string
+		unset []string
+		want  string
+	}{
+		{"new variable only", map[string]string{EnvProject: "new_proj"}, nil, "new_proj"},
+		{"legacy variable only", map[string]string{LegacyProjectEnv: "legacy_proj"}, []string{EnvProject}, "legacy_proj"},
+		{"both set, new wins", map[string]string{EnvProject: "new_proj", LegacyProjectEnv: "legacy_proj"}, nil, "new_proj"},
+		{"neither set", nil, []string{EnvProject, LegacyProjectEnv}, ""},
+		{"new exported but blank, legacy usable", map[string]string{EnvProject: "   ", LegacyProjectEnv: "legacy_proj"}, nil, "legacy_proj"},
+		{"both exported but blank", map[string]string{EnvProject: "", LegacyProjectEnv: "\t "}, nil, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			values := map[string]string{}
+			for k, v := range c.set {
+				values[k] = v
+			}
+			for _, k := range c.unset {
+				delete(values, k)
+			}
+			if got := ProjectExplicitFrom(env(values)); got != c.want {
+				t.Errorf("ProjectExplicit = %q, want %q (env %v)", got, c.want, values)
+			}
+		})
+	}
+}

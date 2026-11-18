@@ -200,11 +200,18 @@ func Project() string {
 // repoint those helpers at DefaultProject, so the reconciliation is "prefer the
 // new name, keep the old one working" here plus a line in the PR, not a claim
 // that one variable rules every live case.
-func ProjectExplicit() string {
-	if v, ok := os.LookupEnv(EnvProject); ok && strings.TrimSpace(v) != "" {
+func ProjectExplicit() string { return ProjectExplicitFrom(os.LookupEnv) }
+
+// ProjectExplicitFrom is the same rule with the environment injected, so the
+// precedence table can be exercised without touching the process environment.
+// The exported helper is what the live cases actually call; the matrix below is
+// paired with a subprocess cell that proves the sqldriver helpers really go
+// through it, because a pure-function test on its own does not prove that.
+func ProjectExplicitFrom(env EnvFunc) string {
+	if v, ok := env(EnvProject); ok && strings.TrimSpace(v) != "" {
 		return strings.TrimSpace(v)
 	}
-	if v, ok := os.LookupEnv(LegacyProjectEnv); ok && strings.TrimSpace(v) != "" {
+	if v, ok := env(LegacyProjectEnv); ok && strings.TrimSpace(v) != "" {
 		return strings.TrimSpace(v)
 	}
 	return ""
