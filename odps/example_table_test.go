@@ -156,7 +156,7 @@ func ExampleTable_ExecSql() {
 	// Output:
 }
 
-func ExampleTable_GetClusterInfo() {
+func ExampleTable_ClusterInfo() {
 	cluster := tableschema.ClusterInfo{
 		ClusterType: tableschema.CLUSTER_TYPE.Hash,
 		ClusterCols: []string{"c1", "c2"},
@@ -193,7 +193,7 @@ func ExampleTable_GetClusterInfo() {
 	// Output:
 }
 
-func ExampleTable_GetPrimaryKey() {
+func ExampleTable_PrimaryKeys() {
 	schema := tableschema.NewSchemaBuilder().Name("has_pk").PrimaryKeys([]string{"id", "name"}).Column(tableschema.Column{Name: "id", Type: datatype.IntType, NotNull: true}).
 		Column(tableschema.Column{Name: "name", Type: datatype.StringType, NotNull: true}).
 		Column(tableschema.Column{Name: "name2", Type: datatype.StringType, NotNull: false}).
@@ -216,7 +216,7 @@ func ExampleTable_GetPrimaryKey() {
 	// Output:
 }
 
-func ExampleTable_IsTransactional() {
+func ExampleTable_Transactional() {
 	schema := tableschema.NewSchemaBuilder().Name("deltaTable").PrimaryKeys([]string{"id", "name"}).Column(tableschema.Column{Name: "id", Type: datatype.IntType, NotNull: true}).
 		Column(tableschema.Column{Name: "name", Type: datatype.StringType, NotNull: true}).
 		Column(tableschema.Column{Name: "name2", Type: datatype.StringType, NotNull: false}).
