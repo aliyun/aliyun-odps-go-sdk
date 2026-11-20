@@ -285,36 +285,25 @@ func calculateMaxLabel(labels []string) string {
 			continue
 		}
 
-		curCategory := label[0 : len(label)-1]
+		curCategory := strings.ToLower(label[:len(label)-1])
 		num, err := strconv.Atoi(string(label[len(label)-1]))
-		if err != nil {
+		if err != nil || num < maxLevel {
 			continue
-		}
-
-		if num > maxLevel {
-			maxLevel = num
-			category = ""
 		}
 
 		if curCategory == "" {
-			category = "L"
-			continue
+			curCategory = "L"
 		}
-
-		curCategory = strings.ToLower(curCategory)
-		if category == "" {
+		if num > maxLevel || category == "" {
+			maxLevel = num
 			category = curCategory
 		} else if category != curCategory {
 			category = "L"
 		}
 	}
 
-	if category == "" && maxLevel == 0 {
-		return ""
-	}
-
 	if category == "" {
-		category = "L"
+		return ""
 	}
 
 	return fmt.Sprintf("%s%d", category, maxLevel)
@@ -558,6 +547,7 @@ func (t *Table) DeletePartition(ifExists bool, partitionValue string) error {
 func (t *Table) GetPartitionValues() ([]string, error) {
 	queryArgs := make(url.Values, 4)
 	queryArgs.Set("partitions", "")
+	queryArgs.Set("expectmarker", "true")
 	// 指定name为空后，接口只会返回分区的“名字”，也就是分区的值q
 	queryArgs.Set("name", "")
 
@@ -577,18 +567,20 @@ func (t *Table) GetPartitionValues() ([]string, error) {
 		} `xml:"Partition"`
 	}
 
-	var resModel ResModel
-	err := client.GetWithModel(resource, queryArgs, nil, &resModel)
-	if err != nil {
-		return nil, errors.WithStack(err)
+	partitionValues := []string{}
+	for {
+		var page ResModel
+		if err := client.GetWithModel(resource, queryArgs, nil, &page); err != nil {
+			return nil, errors.WithStack(err)
+		}
+		for _, partition := range page.Partitions {
+			partitionValues = append(partitionValues, partition.Name)
+		}
+		if page.Marker == "" {
+			return partitionValues, nil
+		}
+		queryArgs.Set("marker", page.Marker)
 	}
-
-	partitionValues := make([]string, len(resModel.Partitions))
-	for i, p := range resModel.Partitions {
-		partitionValues[i] = p.Name
-	}
-
-	return partitionValues, err
 }
 
 // GetPartition get partitions with partitionKey like "region=10026/name=abc", error if not found

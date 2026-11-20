@@ -19,7 +19,6 @@ package data
 import (
 	"reflect"
 	"strings"
-	"sync"
 
 	"github.com/pkg/errors"
 
@@ -136,20 +135,18 @@ func (s *Struct) SetField(fieldName string, a interface{}) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	i, ok := s.fieldIndexes[fieldName]
-
-	if !ok {
-		m := sync.Mutex{}
-		m.Lock()
-		s.fields = append(s.fields, NewStructField(fieldName, d))
-		s.fieldIndexes[fieldName] = len(s.fields) - 1
-		m.Unlock()
-	} else {
-		s.fields[i] = NewStructField(fieldName, d)
-	}
-
+	s.setField(fieldName, d)
 	return nil
+}
+
+func (s *Struct) setField(fieldName string, d Data) {
+	i, ok := s.fieldIndexes[fieldName]
+	if !ok {
+		i = len(s.fields)
+		s.fieldIndexes[fieldName] = i
+		s.fields = append(s.fields, StructField{})
+	}
+	s.fields[i] = NewStructField(fieldName, d)
 }
 
 func (s *Struct) SafeSetField(fieldName string, i interface{}) error {
@@ -180,7 +177,7 @@ func (s *Struct) SafeSetField(fieldName string, i interface{}) error {
 		return errors.Errorf("cannot set type %s to %s of %s", d.Type(), fieldName, s.typ)
 	}
 
-	_ = s.SetField(fieldName, d)
+	s.setField(fieldName, d)
 
 	return nil
 }
@@ -206,8 +203,8 @@ func (s *Struct) TypeInfer() (datatype.DataType, error) {
 
 func StructFromGoStruct(i interface{}) (*Struct, error) {
 	it := reflect.TypeOf(i)
-	if it.Kind() != reflect.Struct {
-		return nil, errors.Errorf("%s is not a struct", it.Name())
+	if it == nil || it.Kind() != reflect.Struct {
+		return nil, errors.Errorf("%T is not a struct", i)
 	}
 
 	s, err := TryConvertGoToOdpsData(i)
@@ -220,21 +217,20 @@ func StructFromGoStruct(i interface{}) (*Struct, error) {
 }
 
 func (s *Struct) FillGoStruct(i interface{}) error {
-	it := reflect.TypeOf(i)
-	if it.Kind() != reflect.Ptr {
-		return errors.Errorf("%s is not a pointer", it.Name())
+	target := reflect.ValueOf(i)
+	if target.Kind() != reflect.Pointer || target.IsNil() || target.Elem().Kind() != reflect.Struct {
+		return errors.Errorf("%T is not a non-nil pointer to a struct", i)
 	}
+	return s.fillGoStruct(target.Elem())
+}
 
-	it = it.Elem()
-
-	if it.Kind() != reflect.Struct {
-		return errors.Errorf("%s is not a struct", it.Name())
-	}
-
-	iv := reflect.ValueOf(i).Elem()
-
-	for j, n := 0, it.NumField(); j < n; j++ {
-		field := it.Field(j)
+func (s *Struct) fillGoStruct(target reflect.Value) error {
+	for j := 0; j < target.NumField(); j++ {
+		fv := target.Field(j)
+		if !fv.CanSet() {
+			continue
+		}
+		field := target.Type().Field(j)
 		fieldName := field.Tag.Get("odps")
 
 		if fieldName == "" {
@@ -246,12 +242,16 @@ func (s *Struct) FillGoStruct(i interface{}) error {
 			continue
 		}
 
-		fv := iv.Field(j)
-
 		var goData interface{}
 		switch dt := data.(type) {
 		case *Struct:
-			return dt.FillGoStruct(fv)
+			if fv.Kind() != reflect.Struct {
+				return errors.Errorf("field %s is not a struct", field.Name)
+			}
+			if err := dt.fillGoStruct(fv); err != nil {
+				return err
+			}
+			continue
 		case *Array:
 			goData = dt.ToSlice()
 		case *Map:

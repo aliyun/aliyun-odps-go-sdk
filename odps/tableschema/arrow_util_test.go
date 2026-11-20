@@ -3,6 +3,7 @@
 package tableschema
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -193,4 +194,66 @@ func TestArrowRecordIntervals(t *testing.T) {
 	require.EqualValues(t, 86401, interval.Seconds())
 	require.EqualValues(t, 234000000, interval.NanosFraction())
 	require.Equal(t, data.IntervalYearMonth(-13), rows[0][1])
+}
+
+func TestArrowRecordPrimitives(t *testing.T) {
+	schema := TableSchema{Columns: []Column{
+		{Name: "active", Type: datatype.BooleanType},
+		{Name: "tiny", Type: datatype.TinyIntType},
+		{Name: "small", Type: datatype.SmallIntType},
+		{Name: "count", Type: datatype.IntType},
+		{Name: "f", Type: datatype.FloatType},
+		{Name: "d", Type: datatype.DoubleType},
+		{Name: "day", Type: datatype.DateType},
+	}}
+	physical, err := schema.ToArrowSchema()
+	require.NoError(t, err)
+	batch, _, err := array.RecordFromJSON(memory.DefaultAllocator, physical, strings.NewReader(
+		`[{"active":true,"tiny":-8,"small":1024,"count":-100,"f":1.25,"d":-0.5,"day":"1969-12-31"}]`,
+	))
+	require.NoError(t, err)
+	defer batch.Release()
+
+	records, err := ToMaxComputeRecords(batch, schema.Columns)
+	require.NoError(t, err)
+	require.Equal(t, []data.Record{{
+		data.Bool(true), data.TinyInt(-8), data.SmallInt(1024), data.Int(-100), data.Float(1.25), data.Double(-0.5),
+		data.Date(time.Date(1969, time.December, 31, 0, 0, 0, 0, time.UTC)),
+	}}, records)
+}
+
+func TestArrowIncompatibleNestedFieldsFailBeforeReturningRows(t *testing.T) {
+	decimal := datatype.NewDecimalType(12, 2)
+	wrongScale := datatype.NewDecimalType(12, 3)
+	schema := TableSchema{Columns: []Column{
+		{Name: "items", Type: datatype.NewArrayType(decimal)},
+		{Name: "lookup", Type: datatype.NewMapType(decimal, decimal)},
+		{Name: "record", Type: datatype.NewStructType(datatype.NewStructFieldType("amount", decimal))},
+	}}
+	physical, err := schema.ToArrowSchema()
+	require.NoError(t, err)
+	batch, _, err := array.RecordFromJSON(memory.DefaultAllocator, physical, strings.NewReader(
+		`[{"items":["1.23"],"lookup":[{"key":"4.56","value":"7.89"}],"record":{"amount":"0.10"}}]`,
+	))
+	require.NoError(t, err)
+	defer batch.Release()
+
+	for _, tc := range []struct {
+		index int
+		typ   datatype.DataType
+		msg   string
+	}{
+		{0, datatype.NewArrayType(wrongScale), `column "items": incompatible Arrow decimal scale`},
+		{1, datatype.NewMapType(wrongScale, decimal), `column "lookup": incompatible Arrow decimal scale`},
+		{1, datatype.NewMapType(decimal, wrongScale), `column "lookup": incompatible Arrow decimal scale`},
+		{2, datatype.NewStructType(), "struct field count"},
+		{2, datatype.NewStructType(datatype.NewStructFieldType("amount", wrongScale)), `struct field "amount": incompatible Arrow decimal scale`},
+		{0, datatype.NewPrimitiveType(datatype.VOID), "unsupported ODPS type"},
+	} {
+		columns := append([]Column(nil), schema.Columns...)
+		columns[tc.index].Type = tc.typ
+		records, err := ToMaxComputeRecords(batch, columns)
+		require.ErrorContains(t, err, tc.msg)
+		require.Nil(t, records)
+	}
 }

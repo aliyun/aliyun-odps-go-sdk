@@ -113,20 +113,24 @@ func (d Decimal) Type() datatype.DataType {
 }
 
 func (d Decimal) String() string {
-	if d.value == parseFromValue {
-		valueStr := d.intValue.String()
-		if d.scale > 0 {
-			if len(valueStr) <= d.scale {
-				valueStr = "0." + fmt.Sprintf("%0*s", d.scale, valueStr)
-			} else {
-				integerPart := valueStr[:len(valueStr)-d.scale]
-				fractionalPart := valueStr[len(valueStr)-d.scale:]
-				valueStr = integerPart + "." + fractionalPart
-			}
-		}
-		return fmt.Sprintf("%s", valueStr)
+	if d.value != parseFromValue {
+		return d.value
 	}
-	return fmt.Sprintf("%s", d.value)
+	value := d.intValue.String()
+	if d.scale <= 0 {
+		return value
+	}
+
+	sign := ""
+	if unsigned, negative := strings.CutPrefix(value, "-"); negative {
+		sign = "-"
+		value = unsigned
+	}
+	if len(value) <= d.scale {
+		value = strings.Repeat("0", d.scale-len(value)+1) + value
+	}
+	split := len(value) - d.scale
+	return sign + value[:split] + "." + value[split:]
 }
 
 func (d Decimal) Sql() string {

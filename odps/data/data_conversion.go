@@ -22,63 +22,51 @@ import (
 	"github.com/pkg/errors"
 )
 
-var odpsDataType = reflect.TypeOf((*Data)(nil)).Elem()
-
 // 主要用于将go的array|slice, map, struct, 转换为Array, Map, Struct类型
 
 func TryConvertGoToOdpsData(i interface{}) (Data, error) {
-	if i == nil {
+	if d, ok := i.(Data); ok {
+		return d, nil
+	}
+
+	value := reflect.Indirect(reflect.ValueOf(i))
+	if !value.IsValid() {
 		return nil, nil
 	}
-
-	it := reflect.TypeOf(i)
-
-	if it.Implements(odpsDataType) {
-		return i.(Data), nil
+	if value.Kind() == reflect.Slice && value.Type().Elem().Kind() == reflect.Uint8 {
+		return Binary(value.Bytes()), nil
 	}
 
-	if it.Kind() == reflect.Slice && it.Elem().Kind() == reflect.Uint8 {
-		return Binary(i.([]byte)), nil
-	}
-
-	iv := reflect.ValueOf(i)
-	if iv.Kind() == reflect.Ptr {
-		iv = iv.Elem()
-	}
-
-	return tryConvertGoToOdpsData(iv)
+	return tryConvertGoToOdpsData(value)
 }
 
 func tryConvertGoToOdpsData(v reflect.Value) (Data, error) {
 	switch v.Kind() {
 	case reflect.Bool:
-		return Bool(v.Interface().(bool)), nil
+		return Bool(v.Bool()), nil
 	case reflect.Int8:
-		return TinyInt(v.Interface().(int8)), nil
-	case reflect.Int:
-		return Int(v.Interface().(int)), nil
-	case reflect.Int32:
-		return Int(v.Interface().(int32)), nil
+		return TinyInt(v.Int()), nil
+	case reflect.Int, reflect.Int32:
+		return Int(v.Int()), nil
 	case reflect.Int16:
-		return SmallInt(v.Interface().(int16)), nil
+		return SmallInt(v.Int()), nil
 	case reflect.Int64:
-		return BigInt(v.Interface().(int64)), nil
+		return BigInt(v.Int()), nil
 	case reflect.Float32:
-		return Float(v.Interface().(float32)), nil
+		return Float(v.Float()), nil
 	case reflect.Float64:
-		return Double(v.Interface().(float64)), nil
+		return Double(v.Float()), nil
 	case reflect.String:
-		s := String(v.Interface().(string))
-		return s, nil
+		return String(v.String()), nil
 	case reflect.Array, reflect.Slice:
 		arr := NewArray()
-		for i, n := 0, v.Len(); i < n; i++ {
+		for i := 0; i < v.Len(); i++ {
 			elem, err := TryConvertGoToOdpsData(v.Index(i).Interface())
 			if err != nil {
 				return nil, err
 			}
 
-			arr.Append(elem)
+			arr.UnSafeAppend(elem)
 		}
 
 		return arr, nil
@@ -95,15 +83,21 @@ func tryConvertGoToOdpsData(v reflect.Value) (Data, error) {
 				return nil, err
 			}
 
-			m.Set(key, value)
+			if err := m.set(key, value); err != nil {
+				return nil, err
+			}
 		}
 
 		return m, nil
 	case reflect.Struct:
 		s := NewStruct()
 		t := v.Type()
-		for i, n := 0, v.NumField(); i < n; i++ {
-			fieldValue, err := TryConvertGoToOdpsData(v.Field(i).Interface())
+		for i := 0; i < v.NumField(); i++ {
+			value := v.Field(i)
+			if !value.CanInterface() {
+				continue
+			}
+			fieldValue, err := TryConvertGoToOdpsData(value.Interface())
 			if err != nil {
 				return nil, err
 			}
@@ -113,7 +107,7 @@ func tryConvertGoToOdpsData(v reflect.Value) (Data, error) {
 			if fieldName == "" {
 				fieldName = field.Name
 			}
-			s.SetField(fieldName, fieldValue)
+			s.setField(fieldName, fieldValue)
 		}
 
 		return s, nil

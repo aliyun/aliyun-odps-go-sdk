@@ -372,10 +372,7 @@ func (schema *TableSchema) ToBaseSQLString(projectName string, schemaName string
 		")" +
 		"{{ end }}"
 
-	tpl, err := template.New("DDL_CREATE_TABLE").Funcs(fns).Parse(tplStr)
-	if err != nil {
-		panic(err)
-	}
+	tpl := template.Must(template.New("DDL_CREATE_TABLE").Funcs(fns).Parse(tplStr))
 
 	type Data struct {
 		ProjectName       string
@@ -388,9 +385,8 @@ func (schema *TableSchema) ToBaseSQLString(projectName string, schemaName string
 	data := Data{projectName, schemaName, schema, isExternal, createIfNotExists}
 
 	var out bytes.Buffer
-	err = tpl.Execute(&out, data)
-	if err != nil {
-		panic(err)
+	if err := tpl.Execute(&out, data); err != nil {
+		return "", errors.Wrap(err, "render table DDL")
 	}
 	return out.String(), nil
 }
@@ -730,9 +726,9 @@ func (schema *TableSchema) FieldByName(name string) (Column, bool) {
 // GeneratePartitionSpec Used for Auto-Partition tables to automatically generate partition columns based on Record
 func (schema *TableSchema) GeneratePartitionSpec(record *data.Record) (string, error) {
 	var builder strings.Builder
-	for index, partitionColumn := range schema.PartitionColumns {
+	for _, partitionColumn := range schema.PartitionColumns {
 		if partitionColumn.GenerateExpression != nil {
-			if index > 0 {
+			if builder.Len() > 0 {
 				builder.WriteString("/")
 			}
 			generate, err := partitionColumn.GenerateExpression.generate(record, schema)
