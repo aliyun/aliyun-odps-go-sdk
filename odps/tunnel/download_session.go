@@ -208,6 +208,7 @@ func (ds *DownloadSession) OpenRecordReader(start, count int, columnNames []stri
 	}
 
 	reader := newRecordProtocReader(res, columns, ds.shouldTransformDate)
+	reader.expectRange(start, count, ds.recordCount)
 	return &reader, nil
 }
 
@@ -276,10 +277,6 @@ func (ds *DownloadSession) loadInformation(req *http.Request) error {
 
 	var resModel ResModel
 	err := ds.RestClient.DoWithParseFunc(req, func(res *http.Response) error {
-		if res.StatusCode/100 != 2 {
-			return restclient.NewHttpNotOk(res)
-		}
-
 		ds.shouldTransformDate = res.Header.Get(common.HttpHeaderOdpsDateTransFrom) == "true"
 		decoder := json.NewDecoder(res.Body)
 		return decoder.Decode(&resModel)

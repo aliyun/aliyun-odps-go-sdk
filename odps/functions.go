@@ -120,7 +120,7 @@ func (f *Functions) Get(functionName string) (*Function, error) {
 	}
 
 	fb := NewFunctionBuilder()
-	function := fb.ProjectName(f.projectName).Odps(f.OdpsIns).Name(functionName).Build()
+	function := fb.ProjectName(f.projectName).SchemaName(f.schemaName).Odps(f.OdpsIns).Name(functionName).Build()
 	return &function, nil
 }
 

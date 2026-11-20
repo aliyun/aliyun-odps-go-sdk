@@ -109,14 +109,12 @@ func (t *Table) IsLoaded() bool {
 }
 
 func (t *Table) IsLoadedExtended() bool {
-	return t.beLoaded
+	return t.beLoadedExtended
 }
 
 func (t *Table) Load() error {
 	client := t.odpsIns.restClient
 	resource := t.ResourceUrl()
-	t.beLoaded = true
-
 	queryArgs := make(url.Values, 4)
 	if t.SchemaName() != "" {
 		queryArgs.Set("curr_schema", t.SchemaName())
@@ -131,6 +129,7 @@ func (t *Table) Load() error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
+	t.beLoaded = true
 
 	// LoadExtendedInfo会加载其他额外信息，主要是table schema信息
 	return errors.WithStack(t.LoadExtendedInfo())

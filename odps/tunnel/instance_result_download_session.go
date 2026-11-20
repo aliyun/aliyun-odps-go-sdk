@@ -168,6 +168,9 @@ func (is *InstanceResultDownloadSession) OpenRecordReader(
 	}
 
 	reader := newRecordProtocReader(res, columns, is.shouldTransformDate)
+	if !is.IsLongPolling {
+		reader.expectRange(start, count, is.recordCount)
+	}
 	return &reader, nil
 }
 
@@ -227,10 +230,6 @@ func (is *InstanceResultDownloadSession) loadInformation(req *http.Request) erro
 
 	var resModel ResModel
 	err := is.RestClient.DoWithParseFunc(req, func(res *http.Response) error {
-		if res.StatusCode/100 != 2 {
-			return errors.WithStack(restclient.NewHttpNotOk(res))
-		}
-
 		is.shouldTransformDate = res.Header.Get(common.HttpHeaderOdpsDateTransFrom) == "true"
 		decoder := json.NewDecoder(res.Body)
 		return errors.WithStack(decoder.Decode(&resModel))

@@ -35,7 +35,6 @@ func addCommonSessionHttpHeader(header http.Header) {
 }
 
 type columnResModel struct {
-	ColumnId     string `json:"column_id"`
 	Comment      string `json:"comment"`
 	DefaultValue string `json:"default_value"`
 	Name         string `json:"name"`

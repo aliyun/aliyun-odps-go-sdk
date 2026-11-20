@@ -106,7 +106,7 @@ func (u *UploadSession) SetPartitionKey(partitionKey string) {
 // CreateUploadSession create a new upload session before uploading data。
 // The opts can be one or more of:
 // SessionCfg.WithPartitionKey
-// SessionCfg.WithSchemaName, it doesn't work now
+// SessionCfg.WithSchemaName
 // SessionCfg.WithDefaultDeflateCompressor, using deflate compressor with default level
 // SessionCfg.WithDeflateCompressor, using deflate compressor with specific level
 // SessionCfg.WithSnappyFramedCompressor
@@ -146,12 +146,11 @@ func CreateUploadSession(
 // AttachToExistedUploadSession get an existed session by the session id.
 // The opts can be one or more of:
 // SessionCfg.WithPartitionKey
-// SessionCfg.WithSchemaName, it doesn't work now
+// SessionCfg.WithSchemaName
 // SessionCfg.WithDefaultDeflateCompressor, using deflate compressor with default level
 // SessionCfg.WithDeflateCompressor, using deflate compressor with specific level
 // SessionCfg.WithSnappyFramedCompressor
 // SessionCfg.Overwrite, overwrite data
-// SessionCfg.UseArrow, it is the default config
 func AttachToExistedUploadSession(
 	sessionId, projectName, tableName string,
 	restClient restclient.RestClient,
@@ -162,6 +161,7 @@ func AttachToExistedUploadSession(
 	session := UploadSession{
 		Id:           sessionId,
 		ProjectName:  projectName,
+		SchemaName:   cfg.SchemaName,
 		TableName:    tableName,
 		partitionKey: cfg.PartitionKey,
 		RestClient:   restClient,
@@ -224,19 +224,15 @@ func (u *UploadSession) Commit(blockIds []int) error {
 		return errors.Errorf(errMsgFmt, u.blockIds, blockIds)
 	}
 
-	for _, idWanted := range blockIds {
-		found := false
-
-		for _, realId := range u.blockIds {
-			if idWanted == realId {
-				found = true
-				break
-			}
-		}
-
-		if !found {
+	uploaded := make(map[int]struct{}, len(u.blockIds))
+	for _, id := range u.blockIds {
+		uploaded[id] = struct{}{}
+	}
+	for _, id := range blockIds {
+		if _, ok := uploaded[id]; !ok {
 			return errors.Errorf(errMsgFmt, u.blockIds, blockIds)
 		}
+		delete(uploaded, id)
 	}
 
 	queryArgs := make(url.Values, 2)
@@ -290,10 +286,6 @@ func (u *UploadSession) loadInformation(req *http.Request) error {
 
 	var resModel ResModel
 	err := u.RestClient.DoWithParseFunc(req, func(res *http.Response) error {
-		if res.StatusCode/100 != 2 {
-			return errors.WithStack(restclient.NewHttpNotOk(res))
-		}
-
 		u.shouldTransformDate = res.Header.Get(common.HttpHeaderOdpsDateTransFrom) == "true"
 
 		decoder := json.NewDecoder(res.Body)
@@ -391,7 +383,7 @@ func (u *UploadSession) newUploadConnection(blockId int) (*httpConnection, error
 	resource := u.ResourceUrl()
 	req, err := u.RestClient.NewRequestWithParamsAndHeaders(common.HttpMethod.PutMethod, resource, reader, queryArgs, headers)
 	if err != nil {
-		// Close the pipe writer if request creation fails to prevent resource leak
+		_ = reader.Close()
 		_ = writer.CloseWithError(err)
 		return nil, errors.WithStack(err)
 	}
@@ -401,7 +393,7 @@ func (u *UploadSession) newUploadConnection(blockId int) (*httpConnection, error
 		req.Header.Set("Content-Encoding", u.Compressor.Name())
 	}
 
-	resChan := make(chan resOrErr)
+	resChan := make(chan resOrErr, 1)
 
 	go func() {
 		defer reader.Close()

@@ -17,6 +17,7 @@
 package tunnel
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -36,6 +37,8 @@ type RecordProtocReader struct {
 	recordCrc           Crc32CheckSum
 	crcOfCrc            Crc32CheckSum // crc of record crc
 	count               int64
+	expectedRows        *int64
+	finished            bool
 }
 
 func newRecordProtocReader(httpRes *http.Response, columns []tableschema.Column, shouldTransformDate bool) RecordProtocReader {
@@ -53,7 +56,23 @@ func (r *RecordProtocReader) HttpRes() *http.Response {
 	return r.httpRes
 }
 
-func (r *RecordProtocReader) Read() (data.Record, error) {
+func (r *RecordProtocReader) expectRange(start, count, total int) {
+	if total >= 0 {
+		expected := int64(min(count, max(total-start, 0)))
+		r.expectedRows = &expected
+	}
+}
+
+func (r *RecordProtocReader) Read() (_ data.Record, err error) {
+	if r.finished {
+		return nil, io.EOF
+	}
+	defer func() {
+		if !r.finished && errors.Is(err, io.EOF) {
+			err = errors.WithStack(io.ErrUnexpectedEOF)
+		}
+	}()
+
 	record := make([]data.Data, len(r.columns))
 
 LOOP:
@@ -98,21 +117,24 @@ LOOP:
 
 			crcOfCrc, err := r.protocReader.ReadUInt32()
 			if err != nil {
-				// EOF inside the required checksum is a truncated stream, not
-				// the successful EOF that Iterator treats as completion.
-				if errors.Is(err, io.EOF) {
-					err = io.ErrUnexpectedEOF
-				}
 				return nil, errors.WithStack(err)
 			}
-			_, err = r.protocReader.inner.Read([]byte{'0'})
-			if (!errors.Is(err, io.EOF)) && (!errors.Is(err, io.ErrUnexpectedEOF)) {
+			_, err = r.protocReader.inner.ReadByte()
+			if err == nil {
 				return nil, errors.New("expect end of stream, but not")
+			}
+			if !errors.Is(err, io.EOF) {
+				return nil, errors.WithStack(err)
 			}
 
 			if r.crcOfCrc.Value() != crcOfCrc {
 				return nil, errors.New("checksum is invalid")
 			}
+			if r.expectedRows != nil && r.count != *r.expectedRows {
+				return nil, fmt.Errorf("read %d of %d rows: %w", r.count, *r.expectedRows, io.ErrUnexpectedEOF)
+			}
+			r.finished = true
+			return nil, io.EOF
 		default:
 			columnIndex := int32(tag)
 			if int(columnIndex) > len(r.columns) {
@@ -130,6 +152,9 @@ LOOP:
 	}
 
 	r.count += 1
+	if r.expectedRows != nil && r.count > *r.expectedRows {
+		return nil, fmt.Errorf("received more than %d rows for the requested range", *r.expectedRows)
+	}
 	return record, nil
 }
 

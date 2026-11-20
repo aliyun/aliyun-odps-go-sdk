@@ -18,6 +18,7 @@ package tunnel
 
 import (
 	"bytes"
+	"crypto/rand"
 	"time"
 
 	"github.com/pkg/errors"
@@ -35,6 +36,7 @@ type RecordPackStreamWriter struct {
 	buffer       *bytes.Buffer
 	recordCount  int64
 	appendErr    error
+	retryTraceID string
 }
 
 func newRecordStreamHttpWriter(session *StreamUploadSession) RecordPackStreamWriter {
@@ -49,8 +51,7 @@ func newRecordStreamHttpWriter(session *StreamUploadSession) RecordPackStreamWri
 
 func (rsw *RecordPackStreamWriter) Append(record data.Record) error {
 	if rsw.flushing {
-		rsw.appendErr = errors.New("There's an unsuccessful flush called, you should call flush to retry or call Reset to drop the data")
-		return rsw.appendErr
+		return errors.New("there is an unsuccessful flush pending, call Flush to retry or Reset to drop the data")
 	}
 	if !rsw.session.allowSchemaMismatch {
 		err := checkIfRecordSchemaMatchSessionSchema(&record, rsw.session.schema.Columns)
@@ -108,6 +109,9 @@ func (rsw *RecordPackStreamWriter) Flush(timeout_ ...time.Duration) (string, int
 		}
 	}
 
+	if rsw.retryTraceID == "" {
+		rsw.retryTraceID = rand.Text()
+	}
 	rsw.flushing = true
 
 	reqId, bytesSend, err := rsw.session.flushStream(rsw, timeout)
@@ -116,7 +120,6 @@ func (rsw *RecordPackStreamWriter) Flush(timeout_ ...time.Duration) (string, int
 	}
 
 	recordCount := rsw.recordCount
-	rsw.flushing = false
 	rsw.Reset()
 
 	return reqId, recordCount, int64(bytesSend), nil
@@ -136,5 +139,7 @@ func (rsw *RecordPackStreamWriter) Reset() {
 	rsw.buffer.Reset()
 	rsw.protocWriter = newRecordProtocWriter(&bufWriter{rsw.buffer}, rsw.session.schema.Columns, false)
 	rsw.recordCount = 0
+	rsw.flushing = false
 	rsw.appendErr = nil
+	rsw.retryTraceID = ""
 }

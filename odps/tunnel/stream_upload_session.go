@@ -184,7 +184,7 @@ func (su *StreamUploadSession) newReLoadRequest() (*http.Request, error) {
 	headers := getCommonHeaders()
 
 	resource := su.ResourceUrl()
-	req, err := su.RestClient.NewRequestWithParamsAndHeaders(common.HttpMethod.PostMethod, resource, nil, queryArgs, headers)
+	req, err := su.RestClient.NewRequestWithParamsAndHeaders(common.HttpMethod.GetMethod, resource, nil, queryArgs, headers)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -193,24 +193,20 @@ func (su *StreamUploadSession) newReLoadRequest() (*http.Request, error) {
 
 func (su *StreamUploadSession) loadInformation(req *http.Request, inited bool) error {
 	type ResModel struct {
-		CompressMode  string          `json:"compress_mode"`
-		FileFormat    string          `json:"file_format"`
-		Schema        schemaResModel  `json:"schema"`
-		SessionName   string          `json:"session_name"`
-		Slots         [][]interface{} `json:"slots"`
-		Status        string          `json:"status"`
-		QuotaName     string          `json:"quota_name"`
-		SchemaVersion int             `json:"schema_version"`
+		CompressMode  string              `json:"compress_mode"`
+		FileFormat    string              `json:"file_format"`
+		Schema        schemaResModel      `json:"schema"`
+		SessionName   string              `json:"session_name"`
+		Slots         [][]json.RawMessage `json:"slots"`
+		Status        string              `json:"status"`
+		QuotaName     string              `json:"quota_name"`
+		SchemaVersion json.Number         `json:"schema_version"`
 	}
 
 	var resModel ResModel
 	var requestId string
 	err := su.RestClient.DoWithParseFunc(req, func(res *http.Response) error {
 		requestId = res.Header.Get("x-odps-request-id")
-
-		if res.StatusCode/100 != 2 {
-			return errors.WithStack(restclient.NewHttpNotOk(res))
-		}
 
 		decoder := json.NewDecoder(res.Body)
 		return errors.WithStack(decoder.Decode(&resModel))
@@ -229,9 +225,16 @@ func (su *StreamUploadSession) loadInformation(req *http.Request, inited bool) e
 			return errors.WithStack(err)
 		}
 
+		var version int
+		if resModel.SchemaVersion != "" {
+			version, err = strconv.Atoi(resModel.SchemaVersion.String())
+			if err != nil {
+				return errors.Wrap(err, "invalid stream schema version")
+			}
+		}
 		su.id = resModel.SessionName
 		su.schema = tableSchema
-		su.schemaVersion = resModel.SchemaVersion
+		su.schemaVersion = version
 
 		if resModel.QuotaName != "" {
 			su.QuotaName = resModel.QuotaName
@@ -240,7 +243,21 @@ func (su *StreamUploadSession) loadInformation(req *http.Request, inited bool) e
 
 	slots := make([]slot, len(resModel.Slots))
 	for i, rawSlot := range resModel.Slots {
-		slots[i], err = newSlot(strconv.Itoa(int(rawSlot[0].(float64))), rawSlot[1].(string))
+		if len(rawSlot) != 2 {
+			return errors.Errorf("invalid stream slot %d: expected an ID and server", i)
+		}
+		var id json.Number
+		var server string
+		if err := json.Unmarshal(rawSlot[0], &id); err != nil {
+			return errors.Wrapf(err, "invalid stream slot %d ID", i)
+		}
+		if id == "" {
+			return errors.Errorf("missing stream slot %d ID", i)
+		}
+		if err := json.Unmarshal(rawSlot[1], &server); err != nil {
+			return errors.Wrapf(err, "invalid stream slot %d server", i)
+		}
+		slots[i], err = newSlot(id.String(), server)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -276,7 +293,7 @@ func (su *StreamUploadSession) flushStream(streamWriter *RecordPackStreamWriter,
 	var writer io.WriteCloser
 	reader, writer = io.Pipe()
 
-	conn, err := su.newUploadConnection(reader, writer, currentSlot, streamWriter.DataSize(), streamWriter.RecordCount(), timeout)
+	conn, err := su.newUploadConnection(reader, writer, currentSlot, streamWriter, timeout)
 	if err != nil {
 		return "", 0, errors.WithStack(err)
 	}
@@ -315,10 +332,6 @@ func (su *StreamUploadSession) flushStream(streamWriter *RecordPackStreamWriter,
 	}
 
 	res := rOrE.res
-
-	if res.StatusCode/100 != 2 {
-		return "", 0, su.flushFailed(restclient.NewHttpNotOk(res))
-	}
 
 	// The server has committed the data by now. Everything below only affects the
 	// routing information used by the *next* flush, so none of it may be reported
@@ -441,7 +454,7 @@ func (su *StreamUploadSession) reloadSlotsIfStale() {
 
 // newUploadConnection takes currentSlot by value: the goroutine below reads its
 // server while another flush may be rewriting the slot the copy was taken from.
-func (su *StreamUploadSession) newUploadConnection(reader io.ReadCloser, writer io.WriteCloser, currentSlot slot, dataSize int64, recordCount int64, timeout time.Duration) (*httpConnection, error) {
+func (su *StreamUploadSession) newUploadConnection(reader io.ReadCloser, writer io.WriteCloser, currentSlot slot, pack *RecordPackStreamWriter, timeout time.Duration) (*httpConnection, error) {
 	queryArgs := make(url.Values, 5)
 	queryArgs.Set("uploadid", su.id)
 	queryArgs.Set("slotid", currentSlot.id)
@@ -453,9 +466,7 @@ func (su *StreamUploadSession) newUploadConnection(reader io.ReadCloser, writer 
 		queryArgs.Set("partition", su.partitionKey)
 	}
 
-	if recordCount > 0 {
-		queryArgs.Set("record_count", strconv.FormatInt(recordCount, 10))
-	}
+	queryArgs.Set("record_count", strconv.FormatInt(pack.RecordCount(), 10))
 
 	if len(su.Columns) > 0 {
 		queryArgs.Set("zorder_columns", strings.Join(su.Columns, ","))
@@ -467,11 +478,8 @@ func (su *StreamUploadSession) newUploadConnection(reader io.ReadCloser, writer 
 	queryArgs.Set("check_latest_schema", strconv.FormatBool(!su.allowSchemaMismatch))
 
 	headers := getCommonHeaders()
-	if dataSize < 0 {
-		headers[common.HttpHeaderTransferEncoding] = "chunked"
-	} else {
-		headers[common.HttpHeaderContentLength] = strconv.FormatInt(dataSize, 10)
-	}
+	headers["odps-tunnel-retry-trace-id"] = pack.retryTraceID
+	headers[common.HttpHeaderContentLength] = strconv.FormatInt(pack.DataSize(), 10)
 	headers[common.HttpHeaderContentType] = "application/octet-stream"
 	headers[common.HttpHeaderOdpsSlotNum] = strconv.Itoa(su.slotSelector.SlotNum())
 
@@ -489,8 +497,9 @@ func (su *StreamUploadSession) newUploadConnection(reader io.ReadCloser, writer 
 		return nil, errors.WithStack(err)
 	}
 
-	resChan := make(chan resOrErr)
+	resChan := make(chan resOrErr, 1)
 	go func() {
+		defer func() { _ = reader.Close() }()
 		endpoint := su.RestClient.Endpoint()
 		if su.P2PMode {
 			defaultEndpoint, _ := url.Parse(su.RestClient.Endpoint())

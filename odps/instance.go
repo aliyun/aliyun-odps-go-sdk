@@ -141,6 +141,7 @@ func (instance *Instance) Load() error {
 			instance.MaxQA.IsMaxQA = true
 			instance.MaxQA.QueryCookie = header.Get(common.HttpHeaderMaxQAQueryCookie)
 		}
+		instance.reLoaded = true
 		return nil
 	})
 
@@ -374,6 +375,12 @@ func (instance *Instance) WaitForSuccess() error {
 //     round trip plus one polling interval.
 func (instance *Instance) WaitForSuccessContext(ctx context.Context) error {
 	if instance.isSync {
+		for _, result := range instance.taskResults {
+			switch result.Status {
+			case TaskFailed, TaskCancelled, TaskSuspended:
+				return errors.New(result.Content())
+			}
+		}
 		return nil
 	}
 

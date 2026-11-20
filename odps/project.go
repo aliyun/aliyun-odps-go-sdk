@@ -182,10 +182,9 @@ func (p *Project) Load() error {
 	p.beLoaded = true
 
 	if err != nil {
-		if httpNoteOk, ok := err.(restclient.HttpError); ok {
-			if httpNoteOk.StatusCode == 404 {
-				p.exists = false
-			}
+		var response restclient.HttpError
+		if errors.As(err, &response) && response.StatusCode == http.StatusNotFound {
+			p.exists = false
 		}
 
 		return errors.WithStack(err)
