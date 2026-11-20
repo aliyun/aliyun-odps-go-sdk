@@ -30,6 +30,53 @@ func metadataFixture(t *testing.T, handler http.HandlerFunc) *odps.Odps {
 	return service
 }
 
+func TestFunctionExistsReturnsMetadataErrors(t *testing.T) {
+	service := metadataFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "<Function><Alias>incomplete")
+	})
+	fn, err := odps.NewFunctions(service).Get("broken")
+	require.NoError(t, err)
+	exists, err := fn.Exist()
+	require.Error(t, err)
+	require.False(t, exists)
+}
+
+func TestFunctionMutationClosesResponse(t *testing.T) {
+	done := make(chan string, 3)
+	release := make(chan struct{})
+	defer close(release)
+	service := metadataFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		select {
+		case <-r.Context().Done():
+			done <- r.Method
+		case <-release:
+		}
+	})
+	functions := odps.NewFunctions(service)
+	fn, err := functions.Get("fixture")
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		method string
+		call   func() error
+	}{
+		{http.MethodPost, func() error { return functions.Create("", "", *fn) }},
+		{http.MethodPut, func() error { return functions.Update("", "", *fn) }},
+		{http.MethodDelete, func() error { return functions.Delete(fn.Name()) }},
+	} {
+		t.Run(tc.method, func(t *testing.T) {
+			require.NoError(t, tc.call())
+			select {
+			case method := <-done:
+				require.Equal(t, tc.method, method)
+			case <-time.After(2 * time.Second):
+				t.Fatal("client left the response body open")
+			}
+		})
+	}
+}
+
 func TestProjectMetadataCaching(t *testing.T) {
 	var propertyRequests, clusterRequests, extendedRequests, updates atomic.Int32
 	service := metadataFixture(t, func(w http.ResponseWriter, r *http.Request) {

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 // 辅助函数，检查错误是否包含指定消息
@@ -160,4 +162,28 @@ func TestGMTTime_Format_String(t *testing.T) {
 	if gmt.Format("2006-01-02") != expectedFormat {
 		t.Errorf("Format() expected %s, got %s", expectedFormat, gmt.Format("2006-01-02"))
 	}
+}
+
+func TestGMTTimeRejectsMalformedMetadata(t *testing.T) {
+	original := GMTTime(time.Date(2026, 1, 1, 0, 0, 0, 0, GMT))
+	for _, input := range []string{"<time>truncated", "<time>invalid date</time>"} {
+		value := original
+		require.Error(t, xml.Unmarshal([]byte(input), &value))
+		require.Equal(t, original, value)
+	}
+	for _, input := range []string{"1.5", "\"2026-01-01\""} {
+		value := original
+		require.Error(t, json.Unmarshal([]byte(input), &value))
+		require.Equal(t, original, value)
+	}
+}
+
+func TestMetadataPathsAndProperties(t *testing.T) {
+	properties := Properties{{Name: "format", Value: "native"}, {Name: "region", Value: "shanghai"}}
+	require.Equal(t, "shanghai", properties.Get("region"))
+	require.Empty(t, properties.Get("missing"))
+
+	builder := NewResourceBuilder("project")
+	require.Equal(t, "/projects/project/tables/events", builder.Table("", "events"))
+	require.Equal(t, "/projects/project/schemas/reporting/tables/events%2Fpart", builder.Table("reporting", "events/part"))
 }

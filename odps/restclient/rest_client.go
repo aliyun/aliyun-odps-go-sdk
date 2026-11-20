@@ -265,10 +265,7 @@ func (client *RestClient) Do(req *http.Request) (*http.Response, error) {
 	req.Header.Set(common.HttpHeaderDate, gmtTime)
 	query := req.URL.Query()
 
-	_, ok := query["current_project"]
-	// in go1.17, 下面的语句应该这样写：if !query.Has("curr_project") && client.defaultProject != "" {
-	// 但values.Has方法是在go1.17才引入的，为了兼容go1.15，所以不用Has方法
-	if !ok && client.defaultProject != "" {
+	if client.defaultProject != "" && !query.Has("curr_project") && !query.Has("current_project") {
 		query.Set("curr_project", client.defaultProject)
 	}
 	req.URL.RawQuery = query.Encode()
@@ -293,12 +290,7 @@ func (client *RestClient) Do(req *http.Request) (*http.Response, error) {
 }
 
 func (client *RestClient) DoWithParseFunc(req *http.Request, parseFunc func(res *http.Response) error) error {
-	return client.DoWithParseRes(req, func(res *http.Response) error {
-		if parseFunc == nil {
-			return nil
-		}
-		return errors.WithStack(parseFunc(res))
-	})
+	return client.DoWithParseRes(req, parseFunc)
 }
 
 func (client *RestClient) DoWithParseRes(req *http.Request, parseFunc func(res *http.Response) error) error {
@@ -409,21 +401,7 @@ func (client *RestClient) DoXmlWithParseRes(
 	bodyModel interface{},
 	parseFunc func(res *http.Response) error,
 ) error {
-	bodyXml, err := xml.Marshal(bodyModel)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	req, err := client.NewRequestWithUrlQuery(method, resource, bytes.NewReader(bodyXml), queryArgs)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	req.Header.Set(common.HttpHeaderContentType, common.XMLContentType)
-	for name, value := range headers {
-		req.Header.Set(name, value)
-	}
-
-	return errors.WithStack(client.DoWithParseRes(req, parseFunc))
+	return client.DoXmlWithParseFunc(method, resource, queryArgs, headers, bodyModel, parseFunc)
 }
 
 func (client *RestClient) DoXmlWithModel(

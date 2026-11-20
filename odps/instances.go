@@ -267,33 +267,14 @@ func (instances *Instances) createTask(ctx context.Context, projectName string, 
 		instance := NewInstance(instances.odpsIns, projectName, instanceId)
 		instance.taskNameCommitted = task.GetName()
 		instance.taskResults = resModel.Tasks
-		instance.isSync = resModel.Tasks != nil && len(resModel.Tasks) > 0
+		instance.isSync = len(resModel.Tasks) > 0
 		if maxqaOptions.UseMaxQA {
 			instance.MaxQA.IsMaxQA = maxqaOptions.UseMaxQA
 			instance.MaxQA.SessionID = maxqaOptions.SessionID
 			instance.MaxQA.QueryCookie = maxqaQueryCookie
 		}
 
-		if instance.isSync {
-			for _, task := range resModel.Tasks {
-				switch task.Status {
-				case TaskFailed, TaskCancelled, TaskSuspended:
-					results, err := instance.getResult(ctx)
-					if err != nil {
-						return instance, errors.Wrapf(err, "get task %s with status %s", task.Name, task.Status)
-					}
-
-					if len(results) <= 0 {
-						return instance, errors.Errorf("get task %s with status %s", task.Name, task.Status)
-					}
-
-					return instance, errors.New(results[0].Content())
-				case TaskSuccess:
-					continue
-				}
-			}
-		}
-		return instance, nil
+		return instance, inlineResultError(resModel.Tasks)
 	}
 }
 
@@ -445,26 +426,6 @@ var InstanceFilter = struct {
 
 func (instances *Instances) Get(instanceId string) *Instance {
 	return NewInstance(instances.odpsIns, instances.projectName, instanceId)
-}
-
-func getMaxQASessionID(ins *Odps, quotaName string, projectName string) (string, error) {
-	tenantId := ins.Project(projectName).TenantId()
-	resource := "/quotas/" + quotaName
-	queryArgs := make(url.Values, 4)
-	queryArgs.Set("project", projectName)
-	queryArgs.Set("version", "wlm")
-	queryArgs.Set("tenant", tenantId)
-
-	request, err := ins.restClient.NewRequestWithUrlQuery(common.HttpMethod.GetMethod, resource, nil, queryArgs)
-	if err != nil {
-		return "", err
-	}
-	response, err := ins.restClient.Do(request)
-	if err != nil {
-		return "", err
-	}
-	maxqaSessionId := response.Header.Get(common.HttpHeaderMaxQASessionID)
-	return maxqaSessionId, nil
 }
 
 type MaxQAConnInfo struct {

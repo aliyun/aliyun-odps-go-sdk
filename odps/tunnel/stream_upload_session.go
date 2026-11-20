@@ -19,6 +19,7 @@ package tunnel
 import (
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -86,6 +87,14 @@ func CreateStreamUploadSession(
 	restClient restclient.RestClient,
 	opts ...Option,
 ) (*StreamUploadSession, error) {
+	return createStreamUploadSession(projectName, tableName, "", restClient, opts...)
+}
+
+func createStreamUploadSession(
+	projectName, tableName, quotaName string,
+	restClient restclient.RestClient,
+	opts ...Option,
+) (*StreamUploadSession, error) {
 	cfg := newSessionConfig(opts...)
 
 	session := StreamUploadSession{
@@ -97,6 +106,7 @@ func CreateStreamUploadSession(
 		RestClient:          restClient,
 		Columns:             cfg.Columns,
 		CreatePartition:     cfg.CreatePartition,
+		QuotaName:           quotaName,
 		SlotNum:             cfg.SlotNum,
 		schemaVersion:       cfg.SchemaVersion,
 		allowSchemaMismatch: cfg.AllowSchemaMismatch,
@@ -452,9 +462,13 @@ func (su *StreamUploadSession) reloadSlotsIfStale() {
 	}
 }
 
-// newUploadConnection takes currentSlot by value: the goroutine below reads its
-// server while another flush may be rewriting the slot the copy was taken from.
 func (su *StreamUploadSession) newUploadConnection(reader io.ReadCloser, writer io.WriteCloser, currentSlot slot, pack *RecordPackStreamWriter, timeout time.Duration) (*httpConnection, error) {
+	client, err := su.uploadClient(currentSlot, timeout)
+	if err != nil {
+		_ = reader.Close()
+		_ = writer.Close()
+		return nil, err
+	}
 	queryArgs := make(url.Values, 5)
 	queryArgs.Set("uploadid", su.id)
 	queryArgs.Set("slotid", currentSlot.id)
@@ -489,7 +503,7 @@ func (su *StreamUploadSession) newUploadConnection(reader io.ReadCloser, writer 
 	headers[common.HttpHeaderRoutedServer] = currentSlot.Server()
 
 	resource := su.ResourceUrl()
-	req, err := su.RestClient.NewRequestWithParamsAndHeaders(common.HttpMethod.PutMethod, resource, reader, queryArgs, headers)
+	req, err := client.NewRequestWithParamsAndHeaders(common.HttpMethod.PutMethod, resource, reader, queryArgs, headers)
 	if err != nil {
 		// Close the pipe resources if request creation fails to prevent resource leak
 		_ = reader.Close()
@@ -500,31 +514,45 @@ func (su *StreamUploadSession) newUploadConnection(reader io.ReadCloser, writer 
 	resChan := make(chan resOrErr, 1)
 	go func() {
 		defer func() { _ = reader.Close() }()
-		endpoint := su.RestClient.Endpoint()
-		if su.P2PMode {
-			defaultEndpoint, _ := url.Parse(su.RestClient.Endpoint())
-
-			newUrl := url.URL{
-				Scheme: defaultEndpoint.Scheme,
-				Host:   currentSlot.ip,
-			}
-
-			endpoint = newUrl.String()
-		}
-
-		client := restclient.NewOdpsRestClient(su.RestClient, endpoint)
-		client.TcpConnectionTimeout = su.RestClient.TcpConnectionTimeout
-		client.HttpTimeout = su.RestClient.HttpTimeout
-		if timeout > 0 {
-			client.HttpTimeout = timeout
-		}
-
 		res, err := client.Do(req)
 		resChan <- resOrErr{err: err, res: res}
 	}()
 
 	httpConn := newHttpConnection(writer, resChan, su.Compressor)
 	return httpConn, nil
+}
+
+func (su *StreamUploadSession) uploadClient(currentSlot slot, timeout time.Duration) (restclient.RestClient, error) {
+	address := su.RestClient.Endpoint()
+	if !su.P2PMode {
+		if timeout <= 0 {
+			return su.RestClient, nil
+		}
+	} else {
+		endpoint, err := url.Parse(address)
+		if err != nil {
+			return restclient.RestClient{}, errors.Wrap(err, "parse stream upload endpoint")
+		}
+		port := endpoint.Port()
+		endpoint.Host = currentSlot.ip
+		if port != "" {
+			endpoint.Host = net.JoinHostPort(currentSlot.ip, port)
+		} else if strings.Contains(currentSlot.ip, ":") {
+			endpoint.Host = "[" + currentSlot.ip + "]"
+		}
+		address = endpoint.String()
+	}
+	client := restclient.NewOdpsRestClient(su.RestClient.Account, address)
+	client.HttpTimeout = su.RestClient.HttpTimeout
+	if timeout > 0 {
+		client.HttpTimeout = timeout
+	}
+	client.TcpConnectionTimeout = su.RestClient.TcpConnectionTimeout
+	client.DnsCacheExpireTime = su.RestClient.DnsCacheExpireTime
+	client.DisableCompression = su.RestClient.DisableCompression
+	client.SetUserAgent(su.RestClient.UserAgent())
+	client.DisableKeepAlives = true
+	return client, nil
 }
 
 func (su *StreamUploadSession) reloadSlotNum() error {

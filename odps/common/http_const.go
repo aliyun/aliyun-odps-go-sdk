@@ -52,7 +52,7 @@ var HttpMethod = struct {
 	DeleteMethod: "DELETE",
 }
 
-var GMT, _ = time.LoadLocation("GMT")
+var GMT = time.FixedZone("GMT", 0)
 
 const (
 	HttpHeaderDate                          = "Date"

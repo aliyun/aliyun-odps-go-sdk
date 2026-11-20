@@ -20,6 +20,7 @@ import (
 	"context"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -50,7 +51,7 @@ import (
 type Tunnel struct {
 	odpsIns              *odps.Odps
 	endpoint             string
-	explicitEndpoint     bool
+	discovered           atomic.Pointer[tunnelRoute]
 	quotaName            string
 	httpTimeout          time.Duration
 	tcpConnectionTimeout time.Duration
@@ -61,14 +62,19 @@ type Tunnel struct {
 	DisableKeepAlives bool
 }
 
-// Once the tunnel endpoint is set, it cannot be modified anymore.
+type tunnelRoute struct {
+	project  string
+	quota    string
+	endpoint string
+}
+
+// NewTunnel uses the supplied endpoint or discovers a route for each project and quota.
 func NewTunnel(odpsIns *odps.Odps, endpoint ...string) *Tunnel {
 	tunnel := Tunnel{
 		odpsIns: odpsIns,
 	}
 	if len(endpoint) > 0 && endpoint[0] != "" {
 		tunnel.endpoint = endpoint[0]
-		tunnel.explicitEndpoint = true
 	}
 
 	return &tunnel
@@ -80,12 +86,9 @@ func NewTunnelFromProject(project *odps.Project) (*Tunnel, error) {
 		return &Tunnel{}, errors.WithStack(err)
 	}
 
-	tunnel := Tunnel{
-		odpsIns:  project.OdpsIns(),
-		endpoint: endpoint,
-	}
-
-	return &tunnel, nil
+	tunnel := NewTunnel(project.OdpsIns())
+	tunnel.discovered.Store(&tunnelRoute{project: project.Name(), endpoint: endpoint})
+	return tunnel, nil
 }
 
 func (t *Tunnel) HttpTimeout() time.Duration {
@@ -131,7 +134,7 @@ func (t *Tunnel) CreateStreamUploadSession(projectName, tableName string, opts .
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	session, err := CreateStreamUploadSession(projectName, tableName, client, opts...)
+	session, err := createStreamUploadSession(projectName, tableName, t.quotaName, client, opts...)
 
 	return session, errors.WithStack(err)
 }
@@ -192,16 +195,22 @@ func (t *Tunnel) getRestClient(projectName string) (restclient.RestClient, error
 }
 
 func (t *Tunnel) getRestClientContext(ctx context.Context, projectName string) (restclient.RestClient, error) {
-	if t.endpoint == "" {
-		project := t.odpsIns.Project(projectName)
-		endpoint, err := project.GetTunnelEndpointContext(ctx, t.quotaName)
-		if err != nil {
-			return restclient.RestClient{}, errors.WithStack(err)
+	endpoint := t.endpoint
+	if endpoint == "" {
+		route := t.discovered.Load()
+		if route == nil || route.project != projectName || route.quota != t.quotaName {
+			project := t.odpsIns.Project(projectName)
+			address, err := project.GetTunnelEndpointContext(ctx, t.quotaName)
+			if err != nil {
+				return restclient.RestClient{}, errors.WithStack(err)
+			}
+			route = &tunnelRoute{project: projectName, quota: t.quotaName, endpoint: address}
+			t.discovered.Store(route)
 		}
-		t.endpoint = endpoint
+		endpoint = route.endpoint
 	}
 
-	client := restclient.NewOdpsRestClient(t.odpsIns.Account(), t.endpoint)
+	client := restclient.NewOdpsRestClient(t.odpsIns.Account(), endpoint)
 	client.HttpTimeout = t.HttpTimeout()
 	client.TcpConnectionTimeout = t.TcpConnectionTimeout()
 	client.SetUserAgent(t.odpsUserAgent)
@@ -211,6 +220,9 @@ func (t *Tunnel) getRestClientContext(ctx context.Context, projectName string) (
 }
 
 func (t *Tunnel) GetEndpoint() string {
+	if route := t.discovered.Load(); route != nil {
+		return route.endpoint
+	}
 	return t.endpoint
 }
 
@@ -230,13 +242,9 @@ func (t *Tunnel) Preview(table *odps.Table, partitionValue string, limit int64) 
 		}
 	}
 	ctx := context.Background()
-	var endpoint string
-	if t.explicitEndpoint {
-		endpoint = t.endpoint
-	}
 	client, err := storage.NewClient(ctx, t.odpsIns, storage.ClientOptions{
 		Project:              table.ProjectName(),
-		TunnelEndpoint:       endpoint,
+		TunnelEndpoint:       t.endpoint,
 		QuotaName:            t.quotaName,
 		HTTPTimeout:          t.httpTimeout,
 		TCPConnectionTimeout: t.tcpConnectionTimeout,

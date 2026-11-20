@@ -541,3 +541,39 @@ func TestEmulatorProtobufStreamRetryAndReset(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []data.Record{first, second, third}, rows)
 }
+
+func TestEmulatorStreamWritesUseExplicitQuota(t *testing.T) {
+	endpoint := os.Getenv("MAXCOMPUTE_EMULATOR_AUTH_ENDPOINT")
+	if endpoint == "" {
+		t.Skip("MAXCOMPUTE_EMULATOR_AUTH_ENDPOINT is unset")
+	}
+	u, err := url.Parse(endpoint)
+	require.NoError(t, err)
+	require.True(t, u.Scheme == "http" && net.ParseIP(u.Hostname()).IsLoopback())
+	service := odps.NewOdps(account2.NewAliyunAccount("fixture-go-sdk", "local-go-sdk-fixture"), endpoint+"/api")
+	service.SetDefaultProjectName(emulatorProject)
+	service.SetCurrentSchemaName("default")
+	transfer := tunnel.NewTunnel(service, endpoint)
+	transfer.SetHttpTimeout(5 * time.Second)
+	transfer.SetQuotaName("go-batch")
+	e := tunnelFixture{endpoint: endpoint, service: service, tunnel: transfer}
+	table := e.table(t, "", false)
+
+	session, err := transfer.CreateStreamUploadSession(emulatorProject, table)
+	require.NoError(t, err)
+	require.Equal(t, "go-batch", session.QuotaName)
+	writer := session.OpenRecordPackWriter()
+	record := data.Record{data.BigInt(7), data.String("named quota")}
+	require.NoError(t, writer.Append(record))
+	_, count, _, err := writer.Flush(time.Second)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, count)
+
+	snapshot, err := transfer.CreateDownloadSession(emulatorProject, table)
+	require.NoError(t, err)
+	reader, err := snapshot.OpenRecordReader(0, 1, nil)
+	require.NoError(t, err)
+	records, err := readProtobufRows(t, reader)
+	require.NoError(t, err)
+	require.Equal(t, []data.Record{record}, records)
+}

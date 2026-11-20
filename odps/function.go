@@ -2,6 +2,7 @@ package odps
 
 import (
 	"encoding/xml"
+	"net/http"
 	"net/url"
 	"time"
 
@@ -57,6 +58,12 @@ func (f *Function) Load() error {
 		return errors.WithStack(err)
 	}
 
+	if model.Name == "" {
+		model.Name = f.Name()
+	}
+	if model.SchemaName == "" {
+		model.SchemaName = f.SchemaName()
+	}
 	f.Model = model
 	f.beLoaded = true
 	return nil
@@ -66,14 +73,11 @@ func (f *Function) Load() error {
 func (f *Function) Exist() (bool, error) {
 	err := f.Load()
 	var httpErr restclient.HttpError
-	if errors.As(err, &httpErr) {
-		if httpErr.Status == "404 Not Found" {
-			return false, nil
-		}
-		return false, err
+	if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+		return false, nil
 	}
 
-	return true, nil
+	return err == nil, err
 }
 
 // Name get function name

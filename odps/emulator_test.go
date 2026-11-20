@@ -102,8 +102,12 @@ func requireEmulatorServiceError(t *testing.T, err error, status int, code strin
 
 func TestEmulatorFunctionMetadataLifecycle(t *testing.T) {
 	service := emulatorService(t)
-	project, schema := service.DefaultProjectName(), service.CurrentSchemaName()
+	project := service.DefaultProjectName()
 	suffix := time.Now().UnixNano()
+	schema := fmt.Sprintf("go_sdk_function_schema_%d", suffix)
+	require.NoError(t, service.Schemas().Create(schema, false, "Go SDK function fixtures"))
+	t.Cleanup(func() { require.NoError(t, service.Schemas().Delete(schema)) })
+	service.SetCurrentSchemaName(schema)
 	resourceName := fmt.Sprintf("go_sdk_function_%d.jar", suffix)
 	resources := odps.NewResources(service)
 	// The emulator stores the dependency as an opaque file.

@@ -230,3 +230,86 @@ func TestMaxQASessionAndResultWireContract(t *testing.T) {
 	require.Equal(t, int32(1), connections.Load())
 	require.Equal(t, int32(2), submissions.Load())
 }
+
+func TestWaitForSuccessReportsTheFailedTask(t *testing.T) {
+	const replies = "<Instance><Tasks>" +
+		"<Task><Name>setup</Name><Status>SUCCESS</Status><Result>setup complete</Result></Task>" +
+		"<Task><Name>compute</Name><Status>FAILED</Status><Result>compute failed</Result></Task>" +
+		"</Tasks></Instance>"
+	for _, inline := range []bool{false, true} {
+		name := "poll"
+		if inline {
+			name = "inline"
+		}
+		t.Run(name, func(t *testing.T) {
+			service := metadataFixture(t, func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case r.Method == http.MethodPost && inline:
+					w.Header().Set("Location", "/api/projects/fixture/instances/job")
+					_, _ = io.WriteString(w, replies)
+				case r.Method == http.MethodGet && !inline:
+					if r.URL.Query().Has("taskstatus") || r.URL.Query().Has("result") {
+						_, _ = io.WriteString(w, replies)
+					} else {
+						_, _ = io.WriteString(w, "<Instance><Status>Terminated</Status></Instance>")
+					}
+				default:
+					t.Errorf("unexpected request %s %s", r.Method, r.URL)
+					w.WriteHeader(http.StatusNotFound)
+				}
+			})
+
+			if inline {
+				instance, err := service.ExecSQLContext(t.Context(), "select 1")
+				require.ErrorContains(t, err, "compute failed")
+				require.NotNil(t, instance)
+				require.Equal(t, "job", instance.Id())
+				require.ErrorContains(t, instance.WaitForSuccessContext(t.Context()), "compute failed")
+				return
+			}
+			require.ErrorContains(t, service.Instance("job").WaitForSuccessContext(t.Context()), "compute failed")
+		})
+	}
+}
+
+func TestWaitForSuccessRejectsUnknownTaskStatus(t *testing.T) {
+	service := metadataFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Has("taskstatus") {
+			_, _ = io.WriteString(w, "<Instance><Tasks><Task><Name>query</Name><Status>UNRECOGNIZED</Status></Task></Tasks></Instance>")
+			return
+		}
+		_, _ = io.WriteString(w, "<Instance><Status>Terminated</Status></Instance>")
+	})
+	err := service.Instance("job").WaitForSuccessContext(t.Context())
+	require.ErrorContains(t, err, "query")
+	require.ErrorContains(t, err, "TASK_STATUS_UNKNOWN")
+}
+
+func TestMaxQAWaitUsesQueryStatus(t *testing.T) {
+	var polls atomic.Int32
+	service := metadataFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "active", r.Header.Get(common.HttpHeaderMaxQASessionID))
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/mcqa/projects/fixture/instances":
+			w.Header().Set("Location", r.URL.Path+"/job")
+			w.Header().Set(common.HttpHeaderMaxQAQueryCookie, "request-cookie")
+			w.WriteHeader(http.StatusCreated)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/mcqa/projects/fixture/instances/job":
+			assert.Equal(t, "request-cookie", r.Header.Get(common.HttpHeaderMaxQAQueryCookie))
+			assert.True(t, r.URL.Query().Has("instancestatus"))
+			if polls.Add(1) == 1 {
+				_, _ = io.WriteString(w, "<Instance><Status>Running</Status></Instance>")
+				return
+			}
+			_, _ = io.WriteString(w, "<Instance><Status>Terminated</Status><Tasks><Task><Name>query</Name><Status>SUCCESS</Status></Task></Tasks></Instance>")
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	opts := options.NewSQLTaskOptions(options.WithInstanceOption(options.WithMaxQAOptions(options.WithMaxQASessionID("active"))))
+	instance, err := service.ExecSQlWithOption("select 1", opts)
+	require.NoError(t, err)
+	require.NoError(t, instance.WaitForSuccessContext(t.Context()))
+	require.EqualValues(t, 2, polls.Load())
+}

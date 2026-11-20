@@ -137,9 +137,9 @@ func (instance *Instance) load(ctx context.Context) error {
 		}
 
 		instance.status = resModel.Status
-		if resModel.Results != nil {
+		if len(resModel.Results) != 0 {
 			instance.taskResults = resModel.Results
-			instance.isSync = true
+			instance.isSync = instance.status != InstanceRunning
 		}
 		if header.Get(common.HttpHeaderMaxQAQueryCookie) != "" {
 			instance.MaxQA.IsMaxQA = true
@@ -371,13 +371,7 @@ func (instance *Instance) WaitForSuccess() error {
 // Call Instance.Terminate explicitly to stop a running MaxCompute instance.
 func (instance *Instance) WaitForSuccessContext(ctx context.Context) error {
 	if instance.isSync {
-		for _, result := range instance.taskResults {
-			switch result.Status {
-			case TaskFailed, TaskCancelled, TaskSuspended:
-				return errors.New(result.Content())
-			}
-		}
-		return nil
+		return inlineResultError(instance.taskResults)
 	}
 
 	if ctx == nil {
@@ -389,55 +383,80 @@ func (instance *Instance) WaitForSuccessContext(ctx context.Context) error {
 	}
 
 	for {
-		err := instance.load(ctx)
-		if err != nil {
+		if err := instance.load(ctx); err != nil {
 			return errors.WithStack(err)
 		}
-
-		tasks, err := instance.getTasks(ctx)
-		if err != nil {
-			return errors.WithStack(err)
+		if instance.isSync {
+			return inlineResultError(instance.taskResults)
 		}
-
-		if len(tasks) == 0 {
-			if err := common.SleepContext(ctx, instancePollInterval); err != nil {
-				return errors.WithStack(err)
+		if instance.MaxQA.IsMaxQA {
+			// MaxQA puts task results in the query's status response.
+			if instance.status == InstanceTerminated {
+				return errors.Errorf("MaxQA instance %q terminated without task results", instance.Id())
 			}
-			continue
-		}
-
-		success := true
-
-		for _, task := range tasks {
-			switch task.Status {
-			case TaskFailed, TaskCancelled, TaskSuspended:
-				results, err := instance.getResult(ctx)
-				if err != nil {
-					return errors.Wrapf(err, "get task %s with status %s", task.Name, task.Status)
-				}
-
-				if len(results) <= 0 {
-					return errors.Errorf("get task %s with status %s", task.Name, task.Status)
-				}
-
-				return errors.New(results[0].Content())
-			case TaskSuccess:
-				continue
-			case TaskRunning, TaskWaiting:
-				success = false
+		} else {
+			done, err := instance.tasksCompleted(ctx)
+			if err != nil || done {
+				return err
 			}
-		}
-
-		if success {
-			break
 		}
 
 		if err := common.SleepContext(ctx, instancePollInterval); err != nil {
 			return errors.WithStack(err)
 		}
 	}
+}
 
+func inlineResultError(results []TaskResult) error {
+	for _, result := range results {
+		switch result.Status {
+		case 0, TaskSuccess:
+			// Older inline responses can omit the task status.
+			continue
+		default:
+			return taskStatusError(result.Name, result.Status, result.Content())
+		}
+	}
 	return nil
+}
+
+func (instance *Instance) tasksCompleted(ctx context.Context) (bool, error) {
+	tasks, err := instance.getTasks(ctx)
+	if err != nil {
+		return false, err
+	}
+	done := len(tasks) != 0
+	for _, task := range tasks {
+		switch task.Status {
+		case TaskSuccess:
+		case TaskRunning, TaskWaiting:
+			done = false
+		case TaskFailed, TaskCancelled, TaskSuspended:
+			results, err := instance.getResult(ctx)
+			if err != nil {
+				return false, errors.Wrapf(err, "get task %s with status %s", task.Name, task.Status)
+			}
+			for _, result := range results {
+				if result.Name == task.Name {
+					return false, taskStatusError(task.Name, task.Status, result.Content())
+				}
+			}
+			if len(results) == 1 && results[0].Name == "" {
+				return false, taskStatusError(task.Name, task.Status, results[0].Content())
+			}
+			return false, taskStatusError(task.Name, task.Status, "")
+		default:
+			return false, taskStatusError(task.Name, task.Status, "")
+		}
+	}
+	return done, nil
+}
+
+func taskStatusError(name string, status TaskStatus, detail string) error {
+	if detail != "" {
+		return errors.New(detail)
+	}
+	return errors.Errorf("task %s ended with status %s", name, status)
 }
 
 func (instance *Instance) GetResult() ([]TaskResult, error) {

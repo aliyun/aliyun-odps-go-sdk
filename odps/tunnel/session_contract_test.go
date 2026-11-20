@@ -5,16 +5,22 @@ package tunnel
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 )
 
@@ -67,6 +73,65 @@ func TestPreviewUsesStorageQuotaAndHonorsExplicitEndpoint(t *testing.T) {
 	explicit.SetQuotaName("dedicated")
 	_, err = explicit.Preview(table, "", 1)
 	require.ErrorContains(t, err, "/override/api/storage/v3")
+}
+
+func TestTunnelDiscoveryTracksProjectAndQuota(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if path[0] == "api" && len(path) == 4 && path[3] == "tunnel" {
+			quota := r.URL.Query().Get("quotaName")
+			if quota == "" {
+				quota = "default"
+			}
+			_, _ = fmt.Fprintf(w, "%s/routes/%s/%s", r.Host, path[2], quota)
+			return
+		}
+		if len(path) == 7 && path[0] == "routes" && path[3] == "projects" && path[1] == path[4] {
+			quota := r.URL.Query().Get("quotaName")
+			if quota == "" {
+				quota = "default"
+			}
+			if quota == path[2] {
+				_, _ = fmt.Fprintf(w, "{\"UploadID\":%q,\"Status\":\"NORMAL\",\"Schema\":{\"columns\":[{\"name\":\"id\",\"type\":\"bigint\"}]}}", path[1]+"/"+quota)
+				return
+			}
+		}
+		http.Error(w, "the request used the wrong project or quota route", http.StatusNotFound)
+	}))
+	t.Cleanup(server.Close)
+	service := odps.NewOdps(account.NewAliyunAccount("test-ak", "test-sk"), server.URL+"/api")
+	transfer, err := NewTunnelFromProject(service.Project("alpha"))
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		project string
+		quota   string
+		want    string
+	}{
+		{"alpha", "", "alpha/default"},
+		{"alpha", "batch", "alpha/batch"},
+		{"beta", "batch", "beta/batch"},
+		{"beta", "", "beta/default"},
+	} {
+		transfer.SetQuotaName(tc.quota)
+		session, err := transfer.CreateUploadSession(tc.project, "sample")
+		require.NoError(t, err)
+		require.Equal(t, tc.want, session.Id)
+		require.Equal(t, server.URL+"/routes/"+tc.want, transfer.GetEndpoint())
+	}
+
+	shared := NewTunnel(service)
+	shared.SetQuotaName("batch")
+	var group sync.WaitGroup
+	for _, project := range []string{"alpha", "beta", "alpha", "beta"} {
+		group.Go(func() {
+			session, err := shared.CreateUploadSession(project, "sample")
+			if assert.NoError(t, err) {
+				assert.Equal(t, project+"/batch", session.Id)
+				session.RestClient.CloseIdleConnections()
+			}
+		})
+	}
+	group.Wait()
 }
 
 func TestSessionRequestConstructionErrors(t *testing.T) {
@@ -178,6 +243,47 @@ func TestStreamUploadMetadataRouting(t *testing.T) {
 			require.Equal(t, "127.0.0.1:8080", route.Server())
 		})
 	}
+}
+
+func TestStreamP2PFlushUsesWorkerAddress(t *testing.T) {
+	const routedServer = "127.0.0.1:4321"
+	const resource = "/tunnel-route/projects/test_project/tables/sample/streams"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, resource, r.URL.Path)
+		host, _, err := net.SplitHostPort(r.Host)
+		assert.NoError(t, err)
+		if r.Method == http.MethodPost {
+			assert.Equal(t, "localhost", host)
+			_, _ = fmt.Fprintf(w, "{\"session_name\":\"fixture\",\"schema_version\":4,\"slots\":[[0,%q]],\"status\":\"normal\",\"schema\":{\"columns\":[{\"name\":\"id\",\"type\":\"bigint\"}]}}", routedServer)
+			return
+		}
+		assert.Equal(t, http.MethodPut, r.Method)
+		assert.Equal(t, "127.0.0.1", host)
+		assert.Equal(t, routedServer, r.Header.Get(common.HttpHeaderRoutedServer))
+		assert.Equal(t, "stream-test", r.Header.Get(common.HttpHeaderXOdpsUserAgent))
+		assert.Equal(t, "fixture", r.URL.Query().Get("uploadid"))
+		payload, err := io.ReadAll(r.Body)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, payload)
+		w.Header().Set(common.HttpHeaderOdpsRequestId, "worker-receipt")
+		w.Header().Set(common.HttpHeaderOdpsSlotNum, "1")
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+	port := strconv.Itoa(server.Listener.Addr().(*net.TCPAddr).Port)
+
+	client := restclient.NewOdpsRestClient(account.NewAliyunAccount("test-ak", "test-sk"), "http://localhost:"+port+"/tunnel-route")
+	client.SetUserAgent("stream-test")
+	session, err := CreateStreamUploadSession("test_project", "sample", client)
+	require.NoError(t, err)
+	t.Cleanup(session.RestClient.CloseIdleConnections)
+	session.P2PMode = true
+	writer := session.OpenRecordPackWriter()
+	require.NoError(t, writer.Append(data.Record{data.BigInt(7)}))
+	receipt, count, _, err := writer.Flush(2 * time.Second)
+	require.NoError(t, err)
+	require.Equal(t, "worker-receipt", receipt)
+	require.EqualValues(t, 1, count)
 }
 
 func TestUploadOverwriteOptionsOnTheWire(t *testing.T) {
