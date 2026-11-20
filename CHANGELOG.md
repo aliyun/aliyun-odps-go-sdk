@@ -4,7 +4,8 @@
 
 - Require Go 1.26 and use Apache Arrow Go v18 for public Arrow types.
 - Add Storage API V2 clients for reading SQL instance and table results and for staging, resuming, committing, and aborting batch writes.
-- Commit selected Storage API V2 stream versions and use the Storage quota when discovering the Tunnel endpoint.
+- Validate all Storage API V2 stream versions before explicit commits and use the Storage quota when discovering the Tunnel endpoint.
+- Match the Storage API V2 wire format for table snapshots, Arrow streams, and write-session resumption.
 - Move table preview to Storage API V2. Replace the former Table Tunnel Arrow methods with the Storage API V2 session methods.
 - Decode both boolean and string `Transactional` metadata.
 - Accept successful creation and replacement responses for multipart resource uploads.

@@ -331,34 +331,44 @@ func TestEmulatorWriteAndCommitLostAcknowledgement(t *testing.T) {
 	serviceError(t, upload.CommitStreams(ctx, key), http.StatusConflict, "InvalidState")
 	require.NoError(t, stream.Close(ctx))
 
-	discarded, err := upload.CreateStream(ctx, storage.Stream{ID: "discarded", Version: 1})
+	secondKey := storage.Stream{ID: "second", Version: 1}
+	second, err := upload.CreateStream(ctx, secondKey)
 	require.NoError(t, err)
-	_, err = discarded.WriteBatch(ctx, 0, testBatch(t, 99, "exclude this stream"))
+	_, err = second.WriteBatch(ctx, 0, testBatch(t, 99, "second stream"))
 	require.NoError(t, err)
-	require.NoError(t, discarded.Close(ctx))
+	require.NoError(t, second.Close(ctx))
 
 	coordinator, err := e.storage.GetTableWriteSession(ctx, table, upload.Session())
 	require.NoError(t, err)
-	serviceError(t, coordinator.CommitStreams(ctx, storage.Stream{ID: key.ID, Version: 2}), http.StatusConflict, "InvalidState")
+	require.ErrorContains(t, coordinator.CommitStreams(ctx, key), "must match all streams")
+	require.ErrorContains(t, coordinator.CommitStreams(ctx, storage.Stream{ID: key.ID, Version: 2}, secondKey), "must match all streams")
+	uncommitted, err := e.storage.CreateTableReadSession(ctx, table, storage.TableReadOptions{})
+	require.NoError(t, err)
+	require.Zero(t, uncommitted.RecordCount())
+
 	commitLost := e.fault(t, table, "commit", map[string]any{"type": "lost_ack"})
-	require.Error(t, coordinator.CommitStreams(ctx, key))
+	require.Error(t, coordinator.CommitStreams(ctx, key, secondKey))
 	commitLost()
 	reopened, err := e.storage.GetTableWriteSession(ctx, table, upload.Session())
 	require.NoError(t, err)
 	require.Equal(t, "COMMITTED", strings.ToUpper(reopened.Status()))
-	require.NoError(t, reopened.CommitStreams(ctx, key))
+	require.NoError(t, reopened.CommitStreams(ctx, key, secondKey))
 
 	snapshot, err := e.storage.CreateTableReadSession(ctx, table, storage.TableReadOptions{})
 	require.NoError(t, err)
-	require.EqualValues(t, 1, snapshot.RecordCount())
+	require.EqualValues(t, 2, snapshot.RecordCount())
 	reader, err := snapshot.OpenReader(ctx, nil)
 	require.NoError(t, err)
 	defer reader.Release()
-	require.True(t, reader.Next(), "%v", reader.Err())
-	require.EqualValues(t, 7, reader.RecordBatch().Column(0).(*array.Int64).Value(0))
-	require.Equal(t, "only once", reader.RecordBatch().Column(1).(*array.String).Value(0))
-	require.False(t, reader.Next())
+	var rows []string
+	for reader.Next() {
+		batch := reader.RecordBatch()
+		for i := 0; i < int(batch.NumRows()); i++ {
+			rows = append(rows, batch.Column(0).ValueStr(i)+"/"+batch.Column(1).ValueStr(i))
+		}
+	}
 	require.NoError(t, reader.Err())
+	require.ElementsMatch(t, []string{"7/only once", "99/second stream"}, rows)
 }
 
 func TestEmulatorPartitionOverwrite(t *testing.T) {

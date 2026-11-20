@@ -38,16 +38,33 @@ type TableReadOptions struct {
 }
 
 type tableReadRequest struct {
-	TableReadOptions
-	SplitOptions struct {
-		SplitMode string
+	RequiredDataColumns      []string
+	RequiredPartitionColumns []string
+	RequiredPartitions       []string
+	RequiredBucketIDs        []int `json:"RequiredBucketIds"`
+	SplitOptions             struct {
+		SplitMode      string
+		SplitUnit      string
+		SplitNumber    int
+		CrossPartition bool
 	}
+	ArrowOptions            struct{ TimestampUnit, DatetimeUnit string }
+	FilterPredicate         string
+	FilterPredicateFallback bool
+	SplitMaxFileNum         int
+	IncrementalRead         bool
 }
 
 type tableReadStreamRequest struct {
-	MaxBatchRows int
-	DataFormat   struct{ Type, Version string }
+	MaxBatchRows         int
+	SkipRowNum           int
+	MaxBatchRawSize      int64
+	DataFormat           struct{ Type, Version string }
+	DataColumns          []string
+	DataColumnsUnordered bool
 }
+
+const tableReadBatchRows = 4096
 
 // InstanceReadOptions selects the result in a SQL instance.
 type InstanceReadOptions struct {
@@ -105,8 +122,26 @@ func (c *Client) CreateTableReadSession(ctx context.Context, table Table, opts T
 	if err != nil {
 		return nil, err
 	}
-	input := tableReadRequest{TableReadOptions: opts}
+	// The Storage API expects explicit defaults and empty arrays in this request.
+	input := tableReadRequest{
+		RequiredDataColumns:      append([]string{}, opts.Columns...),
+		RequiredPartitionColumns: append([]string{}, opts.PartitionColumns...),
+		RequiredPartitions:       make([]string, 0, len(opts.Partitions)),
+		RequiredBucketIDs:        []int{},
+	}
+	for _, spec := range opts.Partitions {
+		partition, err := normalizePartitionSpec(spec)
+		if err != nil {
+			return nil, err
+		}
+		input.RequiredPartitions = append(input.RequiredPartitions, partition)
+	}
 	input.SplitOptions.SplitMode = "RowOffset"
+	input.SplitOptions.SplitUnit = "ByteSize"
+	input.SplitOptions.SplitNumber = tableReadBatchRows
+	input.SplitOptions.CrossPartition = true
+	input.ArrowOptions.TimestampUnit = "nano"
+	input.ArrowOptions.DatetimeUnit = "milli"
 	return c.tableReadSession(ctx, operation{action: "TableCreateReadSession", target: target}, input)
 }
 
@@ -130,7 +165,7 @@ func (c *Client) tableReadSession(ctx context.Context, op operation, input any) 
 	if err != nil {
 		return nil, err
 	}
-	stream := tableReadStreamRequest{MaxBatchRows: 4096}
+	stream := tableReadStreamRequest{MaxBatchRows: tableReadBatchRows, DataColumns: []string{}}
 	stream.DataFormat.Type = "Arrow"
 	stream.DataFormat.Version = "V5"
 	return c.newReadSession(op, "TableRead", reply.SessionID, reply.TableStatus, reply.RecordCount, headers, stream)

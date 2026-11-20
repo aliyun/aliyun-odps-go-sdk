@@ -150,6 +150,26 @@ func validateIdentifier(kind, name string) error {
 	return nil
 }
 
+func normalizePartitionSpec(spec string) (string, error) {
+	parts := strings.Split(strings.ReplaceAll(spec, ",", "/"), "/")
+	for i, part := range parts {
+		name, value, ok := strings.Cut(part, "=")
+		name = strings.TrimSpace(name)
+		value = strings.TrimSpace(value)
+		if value != "" && (value[0] == '\'' || value[0] == '"') {
+			if len(value) < 2 || value[len(value)-1] != value[0] {
+				return "", fmt.Errorf("storage: unmatched quotes in partition component %q", part)
+			}
+			value = value[1 : len(value)-1]
+		}
+		if !ok || name == "" || value == "" || strings.ContainsAny(value, "'\"=") {
+			return "", fmt.Errorf("storage: invalid partition component %q: expected column=value", part)
+		}
+		parts[i] = name + "=" + value
+	}
+	return strings.Join(parts, "/"), nil
+}
+
 type operation struct {
 	action string
 	target string

@@ -208,6 +208,59 @@ func makeIPC(t *testing.T, batch arrow.RecordBatch) []byte {
 	return buf.Bytes()
 }
 
+func TestTableReadUsesFullStorageRequest(t *testing.T) {
+	payload := makeIPC(t, makeArrowBatch(t, 7))
+	client := localClient(t, func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		assert.NoError(t, err)
+		switch r.URL.Query().Get("Action") {
+		case "TableCreateReadSession":
+			assert.JSONEq(t, `{
+				"RequiredDataColumns":["id"], "RequiredPartitionColumns":[], "RequiredPartitions":["ds=x"],
+				"RequiredBucketIds":[], "SplitOptions":{"SplitMode":"RowOffset","SplitUnit":"ByteSize","SplitNumber":4096,"CrossPartition":true},
+				"ArrowOptions":{"TimestampUnit":"nano","DatetimeUnit":"milli"}, "FilterPredicate":"",
+				"FilterPredicateFallback":false, "SplitMaxFileNum":0, "IncrementalRead":false
+			}`, string(body))
+			fmt.Fprint(w, `{"SessionId":"read","RecordCount":1,"SessionStatus":"NORMAL"}`)
+		case "TableRead":
+			assert.JSONEq(t, `{
+				"MaxBatchRows":4096, "SkipRowNum":0, "MaxBatchRawSize":0,
+				"DataFormat":{"Type":"Arrow","Version":"V5"}, "DataColumns":[], "DataColumnsUnordered":false
+			}`, string(body))
+			_, _ = w.Write(payload)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
+	ctx := t.Context()
+	session, err := client.CreateTableReadSession(ctx, Table{Name: "table"}, TableReadOptions{
+		Columns: []string{"id"}, Partitions: []string{"ds='x'"},
+	})
+	require.NoError(t, err)
+	r, err := session.OpenReader(ctx, nil)
+	require.NoError(t, err)
+	defer r.Release()
+	require.True(t, r.Next())
+	require.EqualValues(t, 7, r.RecordBatch().Column(0).(*array.Int64).Value(0))
+	require.False(t, r.Next())
+	require.NoError(t, r.Err())
+}
+
+func TestInvalidPartitionSpecsNeverReachStorage(t *testing.T) {
+	client := localClient(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("invalid partition specs must be rejected before sending a request")
+		w.WriteHeader(http.StatusBadRequest)
+	})
+	table := Table{Name: "table"}
+	for _, spec := range []string{"ds", "=x", "ds=''", "ds='x", "ds='", "ds=x=y", "ds=x,", "ds='x,y=z'"} {
+		_, err := client.CreateTableReadSession(t.Context(), table, TableReadOptions{Partitions: []string{spec}})
+		require.Error(t, err, "read partition %q", spec)
+		_, err = client.CreateTableWriteSession(t.Context(), table, TableWriteOptions{Partition: spec})
+		require.Error(t, err, "write partition %q", spec)
+	}
+}
+
 func TestOpenEmptyInstanceResult(t *testing.T) {
 	schema := makeArrowBatch(t).Schema()
 	var payload bytes.Buffer
@@ -313,7 +366,7 @@ func TestWriteSessionWireFormat(t *testing.T) {
 		case "TableCreateWriteSession":
 			body, err := io.ReadAll(r.Body)
 			assert.NoError(t, err)
-			assert.JSONEq(t, `{"PartialPartitionSpec":"ds=20261119","Flags":{"overwrite":"true"}}`, string(body))
+			assert.JSONEq(t, `{"PartialPartitionSpec":"ds=20261119/hour=00","Flags":{"overwrite":"true"}}`, string(body))
 			fmt.Fprint(w, `{"SessionId":"s"}`)
 		case "TableGetWriteStream":
 			assert.Equal(t, "s", args.Get("SessionId"))
@@ -338,7 +391,9 @@ func TestWriteSessionWireFormat(t *testing.T) {
 	})
 
 	ctx := t.Context()
-	session, err := client.CreateTableWriteSession(ctx, Table{Name: "table"}, TableWriteOptions{Partition: "ds=20261119", Overwrite: true})
+	session, err := client.CreateTableWriteSession(ctx, Table{Name: "table"}, TableWriteOptions{
+		Partition: `ds='20261119', hour="00"`, Overwrite: true,
+	})
 	require.NoError(t, err)
 	stream, err := session.GetStream(ctx, Stream{ID: "worker", Version: 2})
 	require.NoError(t, err)
@@ -355,7 +410,7 @@ func TestCommitStreamsRequiresExplicitVersions(t *testing.T) {
 		assert.Equal(t, "route-1", r.Header.Get(routeTokenHeader))
 		switch params.Get("Action") {
 		case "TableGetWriteSession":
-			fmt.Fprint(w, `{"SessionId":"session-1","SessionStatus":"NORMAL"}`)
+			fmt.Fprint(w, `{"Streams":{"shard-a":3,"shard-b":17}}`)
 		case "TableCommitWriteSession":
 			commits.Add(1)
 			body, err := io.ReadAll(r.Body)
@@ -374,8 +429,15 @@ func TestCommitStreamsRequiresExplicitVersions(t *testing.T) {
 	require.ErrorContains(t, session.CommitStreams(ctx, Stream{}), "stream ID is required")
 	require.ErrorContains(t, session.CommitStreams(ctx, Stream{ID: "shard-a", Version: -1}), "nonnegative")
 	require.ErrorContains(t, session.CommitStreams(ctx, Stream{ID: "shard-a"}, Stream{ID: "shard-a", Version: 3}), "only be committed once")
+	streamA := Stream{ID: "shard-a", Version: 3}
+	streamB := Stream{ID: "shard-b", Version: 17}
+	require.ErrorContains(t, session.CommitStreams(ctx, streamA), "must match all streams")
+	require.ErrorContains(t, session.CommitStreams(ctx, streamA, Stream{ID: streamB.ID, Version: 18}), "must match all streams")
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	require.ErrorIs(t, session.CommitStreams(canceled, streamA, streamB), context.Canceled)
 	require.Zero(t, commits.Load())
-	require.NoError(t, session.CommitStreams(ctx, Stream{ID: "shard-b", Version: 17}, Stream{ID: "shard-a", Version: 3}))
+	require.NoError(t, session.CommitStreams(ctx, streamB, streamA))
 	require.EqualValues(t, 1, commits.Load())
 }
 

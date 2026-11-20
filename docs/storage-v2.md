@@ -49,13 +49,15 @@ session descriptor with `GetInstanceReadSession` to reopen a result. See the
   offset. `InitialOffset` on a resumed stream is the server's durable offset.
 - After an ambiguous transport error, resend the same batch at the same offset.
   A different batch at that offset is rejected.
-- Close the participating streams and call `CommitStreams(ctx, streams...)`
-  with their original `storage.Stream` descriptors. This sends the stream IDs
-  and versions required by some transactional tables. `Commit(ctx)` lets the
-  service select all closed streams on tables that support implicit selection.
-  Call `Abort` to discard an open upload.
+- Finish creating, writing, and closing every stream in the session. Call
+  `CommitStreams(ctx, streams...)` with all original `storage.Stream`
+  descriptors. The SDK checks the complete set against the server before
+  sending the IDs and versions required by some transactional tables. Use a
+  separate session for each group of rows you want to commit independently.
+  `Commit(ctx)` commits all closed streams on tables that support implicit
+  selection. Call `Abort` to discard an open upload.
 
-Save the session descriptor, including its routing token, and the selected
+Save the session descriptor, including its routing token, and all
 stream descriptors before submitting a commit. If the outcome is uncertain,
 reopen the same session and repeat the commit with the same descriptors. For a
 partitioned upload, supply the partition spec in `TableWriteOptions.Partition`.
@@ -86,9 +88,9 @@ and data transmission quota used by the application.
 1. Submit a SQL query with known values, including a null and a decimal. Read
    its full result and a row range through Storage API V2, and compare them with
    the SQL result.
-2. Write two streams into a test table, close both, then reopen the session and
-   commit one stream by ID and version. Query the table and check that the
-   selected rows appear exactly once. Repeat on a transactional or Delta table
-   and, for a partitioned target, check the neighboring partitions.
+2. Write two streams into a test table, close both, and reopen the session.
+   Verify that a commit listing just one stream is rejected. Commit with both
+   IDs and versions and check that each row appears exactly once. Repeat on a
+   transactional table and check neighboring partitions for a partitioned target.
 3. Retry a write at its original row offset and repeat the same commit after
    reopening. Compare the final row count and values with the inputs.

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"net/http"
 	"strconv"
@@ -17,7 +18,7 @@ import (
 
 // TableWriteOptions configures a batch upload and its atomic commit.
 type TableWriteOptions struct {
-	Partition string
+	Partition string // Partition spec, for example ds='20261120',hour='00'.
 	Overwrite bool
 }
 
@@ -27,6 +28,7 @@ type WriteSession struct {
 	session Session
 	target  string
 	status  string
+	streams map[string]int64
 }
 
 // Session returns the descriptor for reopening the upload.
@@ -37,10 +39,18 @@ func (s *WriteSession) Status() string { return s.status }
 
 // CreateTableWriteSession opens a batch upload.
 func (c *Client) CreateTableWriteSession(ctx context.Context, table Table, opts TableWriteOptions) (*WriteSession, error) {
+	partition := ""
+	if opts.Partition != "" {
+		var err error
+		partition, err = normalizePartitionSpec(opts.Partition)
+		if err != nil {
+			return nil, err
+		}
+	}
 	input := struct {
 		PartialPartitionSpec string
 		Flags                map[string]string
-	}{opts.Partition, map[string]string{"overwrite": strconv.FormatBool(opts.Overwrite)}}
+	}{partition, map[string]string{"overwrite": strconv.FormatBool(opts.Overwrite)}}
 	return c.tableWriteSession(ctx, table, "TableCreateWriteSession", Session{}, input)
 }
 
@@ -62,20 +72,33 @@ func (c *Client) tableWriteSession(ctx context.Context, table Table, action stri
 		op.params.Del("SessionId")
 	}
 	op.params.Set("WriteMode", "Batch")
+	return c.requestWriteSession(ctx, op, input)
+}
+
+func (c *Client) requestWriteSession(ctx context.Context, op operation, input any) (*WriteSession, error) {
 	reply := struct {
-		ID     string `json:"SessionId"`
-		Status string `json:"SessionStatus"`
+		ID      string `json:"SessionId"`
+		Status  string `json:"SessionStatus"`
+		Streams map[string]int64
 	}{}
 	headers, err := c.jsonRequest(ctx, http.MethodPost, op, input, &reply)
 	if err != nil {
 		return nil, err
 	}
-	if reply.ID == "" {
-		return nil, fmt.Errorf("storage %s: missing session ID", action)
+	// TableGetWriteSession returns stream state and can omit the requested ID.
+	id := op.params.Get("SessionId")
+	if id == "" {
+		id = reply.ID
+	}
+	if id == "" {
+		return nil, fmt.Errorf("storage %s: missing session ID", op.action)
 	}
 	return &WriteSession{
-		client: c, target: target, status: reply.Status,
-		session: Session{ID: reply.ID, RouteToken: updatedRoute(headers, session.RouteToken)},
+		client:  c,
+		target:  op.target,
+		status:  reply.Status,
+		session: Session{ID: id, RouteToken: updatedRoute(headers, op.route)},
+		streams: reply.Streams,
 	}, nil
 }
 
@@ -100,9 +123,10 @@ func (s *WriteSession) Commit(ctx context.Context) error {
 	return err
 }
 
-// CommitStreams publishes the specified closed stream versions. Save the stream
-// descriptors with the session descriptor so a coordinator can repeat the same
-// commit after reopening the session.
+// CommitStreams commits a session with explicit stream versions. Finish creating
+// and closing streams before calling it. The descriptors must match the entire
+// session because some deployments publish every closed stream. Use a separate
+// session for each independently committed set of rows.
 func (s *WriteSession) CommitStreams(ctx context.Context, streams ...Stream) error {
 	if len(streams) == 0 {
 		return fmt.Errorf("storage: at least one stream is required to commit")
@@ -114,19 +138,26 @@ func (s *WriteSession) CommitStreams(ctx context.Context, streams ...Stream) err
 		StreamIDs:      make([]string, len(streams)),
 		StreamVersions: make([]int64, len(streams)),
 	}
-	seen := make(map[string]struct{}, len(streams))
+	versions := make(map[string]int64, len(streams))
 	for i, stream := range streams {
 		if err := stream.validate(); err != nil {
 			return err
 		}
-		if _, duplicate := seen[stream.ID]; duplicate {
+		if _, duplicate := versions[stream.ID]; duplicate {
 			return fmt.Errorf("storage: stream %q can only be committed once per request", stream.ID)
 		}
-		seen[stream.ID] = struct{}{}
+		versions[stream.ID] = stream.Version
 		input.StreamIDs[i] = stream.ID
 		input.StreamVersions[i] = stream.Version
 	}
-	_, err := s.client.jsonRequest(ctx, http.MethodPost, s.operation("TableCommitWriteSession"), input, nil)
+	current, err := s.client.requestWriteSession(ctx, s.operation("TableGetWriteSession"), struct{}{})
+	if err != nil {
+		return err
+	}
+	if !maps.Equal(current.streams, versions) {
+		return fmt.Errorf("storage: commit descriptors must match all streams and versions in the write session")
+	}
+	_, err = s.client.jsonRequest(ctx, http.MethodPost, current.operation("TableCommitWriteSession"), input, nil)
 	return err
 }
 
