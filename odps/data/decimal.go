@@ -48,7 +48,7 @@ func (d *Decimal) Scale() int {
 }
 
 func (d *Decimal) Value() string {
-	return d.value
+	return d.String()
 }
 
 // NewDecimal value means readable string of the decimal, because MaxCompute uses string as the serialization method of decimal

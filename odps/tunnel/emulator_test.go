@@ -287,7 +287,7 @@ func TestEmulatorProtobufUploadLostAcknowledgements(t *testing.T) {
 
 func TestEmulatorProtobufInstanceDownload(t *testing.T) {
 	e := newTunnelFixture(t)
-	instance := e.sql(t, "select cast(7 as bigint) as id union all select cast(9 as bigint) as id order by id")
+	instance := e.sql(t, "select cast(7 as bigint) as id, 'seven' as note union all select cast(9 as bigint) as id, 'nine' as note order by id")
 	opts := []tunnel.InstanceOption{
 		tunnel.InstanceSessionCfg.EnableLimit(),
 		tunnel.InstanceSessionCfg.WithTaskName(instance.TaskNameCommitted()),
@@ -309,7 +309,23 @@ func TestEmulatorProtobufInstanceDownload(t *testing.T) {
 	require.NoError(t, err)
 	rows, err := readProtobufRows(t, reader)
 	require.NoError(t, err)
-	require.Equal(t, []data.Record{{data.BigInt(9)}}, rows)
+	require.Equal(t, []data.Record{{data.BigInt(9), data.String("nine")}}, rows)
+
+	uncompressed, err := e.tunnel.CreateInstanceResultDownloadSession(emulatorProject, instance.Id())
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		columns []string
+		want    data.Record
+	}{
+		{[]string{"note"}, data.Record{data.String("seven")}},
+		{[]string{"note", "id"}, data.Record{data.String("seven"), data.BigInt(7)}},
+	} {
+		reader, err := uncompressed.OpenRecordReader(0, 1, 0, tc.columns)
+		require.NoError(t, err)
+		rows, err := readProtobufRows(t, reader)
+		require.NoError(t, err)
+		require.Equal(t, []data.Record{tc.want}, rows)
+	}
 
 	_, err = resumed.OpenRecordReader(0, -1, 0, nil)
 	requireTunnelError(t, err, http.StatusBadRequest, "InvalidParameter")
@@ -317,6 +333,67 @@ func TestEmulatorProtobufInstanceDownload(t *testing.T) {
 	requireTunnelError(t, err, http.StatusNotFound, "NoSuchDownload")
 	_, err = e.tunnel.CreateInstanceResultDownloadSession(emulatorProject, "missing")
 	requireTunnelError(t, err, http.StatusNotFound, "NoSuchInstance")
+}
+
+func TestEmulatorTunnelPreview(t *testing.T) {
+	e := newTunnelFixture(t)
+	ordinary := e.table(t, "", false)
+	table := e.service.Table(ordinary)
+	rows, err := e.tunnel.Preview(table, "", 1)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+	require.True(t, table.IsLoaded())
+	e.sql(t, fmt.Sprintf("insert into %s values (1,'first'), (2,'second')", ordinary))
+	rows, err = e.tunnel.Preview(table, "", 1)
+	require.NoError(t, err)
+	require.Equal(t, []data.Record{{data.BigInt(1), data.String("first")}}, rows)
+	_, err = e.tunnel.Preview(e.service.Table(ordinary+"_missing"), "", 1)
+	requireTunnelError(t, err, http.StatusNotFound, "NoSuchTable")
+	_, err = tunnel.NewTunnel(e.service, "http://%").Preview(table, "", 1)
+	require.ErrorContains(t, err, "invalid Tunnel endpoint")
+
+	partitioned := e.table(t, "", true)
+	e.sql(t, fmt.Sprintf("insert into %s partition (ds='p') values (4,'partition data')", partitioned))
+	table = e.service.Table(partitioned)
+	rows, err = e.tunnel.Preview(table, "", -1)
+	require.NoError(t, err)
+	require.Equal(t, []data.Record{{data.BigInt(4), data.String("partition data"), data.String("p")}}, rows)
+	rows, err = e.tunnel.Preview(table, "ds='p'", 15000)
+	require.NoError(t, err)
+	require.Equal(t, []data.Record{{data.BigInt(4), data.String("partition data"), data.String("p")}}, rows)
+	_, err = e.tunnel.Preview(table, "invalid_partition", 1)
+	require.Error(t, err)
+}
+
+func TestEmulatorProtobufPartitionCompressionAndIsolation(t *testing.T) {
+	e := newTunnelFixture(t)
+	name := e.table(t, "", true)
+	e.sql(t, fmt.Sprintf("insert into %s partition (ds='append') values (1,'old')", name))
+	e.sql(t, fmt.Sprintf("insert into %s partition (ds='keep') values (2,'keep')", name))
+	transfer := tunnel.NewTunnel(e.service)
+	partition := tunnel.SessionCfg.WithPartitionKey("ds=append")
+	upload, err := transfer.CreateUploadSession(emulatorProject, name,
+		partition, tunnel.SessionCfg.WithSnappyFramedCompressor())
+	require.NoError(t, err)
+	require.Equal(t, e.endpoint, transfer.GetEndpoint())
+	require.NoError(t, putProtobufBlock(t, upload, 0, data.Record{data.BigInt(3), data.String("new")}))
+
+	read := func(t *testing.T, value string) []data.Record {
+		t.Helper()
+		snapshot, err := transfer.CreateDownloadSession(emulatorProject, name,
+			tunnel.SessionCfg.WithPartitionKey(value), tunnel.SessionCfg.WithSnappyFramedCompressor())
+		require.NoError(t, err)
+		reader, err := snapshot.OpenRecordReader(0, snapshot.RecordCount(), nil)
+		require.NoError(t, err)
+		require.Equal(t, tunnel.SnappyFramedName, reader.HttpRes().Header.Get("Content-Encoding"))
+		rows, err := readProtobufRows(t, reader)
+		require.NoError(t, err)
+		return rows
+	}
+	require.Equal(t, []data.Record{{data.BigInt(1), data.String("old")}}, read(t, "ds=append"))
+	require.NoError(t, upload.Commit([]int{0}))
+	require.Equal(t, []data.Record{{data.BigInt(1), data.String("old")}, {data.BigInt(3), data.String("new")}}, read(t, "ds=append"))
+	require.Equal(t, []data.Record{{data.BigInt(2), data.String("keep")}}, read(t, "ds=keep"))
 }
 
 func TestEmulatorProtobufReadFaults(t *testing.T) {
@@ -405,6 +482,8 @@ func TestEmulatorProtobufStreamRetryAndReset(t *testing.T) {
 	require.ErrorContains(t, writer.Append(data.Record{data.BigInt(1)}), "schema not match")
 	_, _, _, err = writer.Flush()
 	require.ErrorContains(t, err, "unsuccessful append")
+	writer.Reset()
+	require.ErrorContains(t, writer.Append(data.Record{data.String("wrong type"), data.String("label")}), "schema not match")
 	writer.Reset()
 
 	first := data.Record{data.BigInt(1), data.String("retry")}

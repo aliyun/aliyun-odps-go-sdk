@@ -123,7 +123,7 @@ func (r *Resource) Load() error {
 	client := r.OdpsIns.restClient
 	rb := common.ResourceBuilder{ProjectName: r.ProjectName}
 	resource := rb.Resource(r.Name())
-	r.beLoaded = true
+	r.beLoaded = false
 
 	queryArgs := make(url.Values, 4)
 	if r.SchemaName() != "" {
@@ -132,7 +132,9 @@ func (r *Resource) Load() error {
 	queryArgs.Set("meta", "")
 	err := client.GetWithParseFunc(resource, queryArgs, nil, func(res *http.Response) error {
 		header := res.Header
-		r.Model.SchemaName = header.Get(common.HttpHeaderOdpsSchemaName)
+		if schema := header.Get(common.HttpHeaderOdpsSchemaName); schema != "" {
+			r.Model.SchemaName = schema
+		}
 		if name := header.Get(common.HttpHeaderOdpsResourceName); name != "" {
 			r.Model.Name = name
 		}
@@ -152,6 +154,7 @@ func (r *Resource) Load() error {
 		}
 		return nil
 	})
+	r.beLoaded = err == nil
 	return errors.WithStack(err)
 }
 
@@ -204,14 +207,10 @@ func (r *Resource) SetResourceType(resourceType ResourceType) {
 func (r *Resource) Exist() (bool, error) {
 	err := r.Load()
 	var httpErr restclient.HttpError
-	if errors.As(err, &httpErr) {
-		if httpErr.Status == "404 Not Found" {
-			return false, nil
-		}
-		return false, err
+	if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+		return false, nil
 	}
-
-	return true, nil
+	return err == nil, err
 }
 
 // TableResource is a table resource

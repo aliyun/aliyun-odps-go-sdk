@@ -7,7 +7,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"strconv"
 	"strings"
@@ -83,8 +82,7 @@ func (r *Resources) List(f func(*Resource, error), filters ...RFileFunc) {
 
 // Get get a resource
 func (r *Resources) Get(resourceName string) *Resource {
-	resource := NewResource(resourceModel{Name: resourceName}, r.ProjectName, r.OdpsIns)
-	return resource
+	return NewResource(resourceModel{Name: resourceName, SchemaName: r.schemaName}, r.ProjectName, r.OdpsIns)
 }
 
 // CreateFileResource create a file resource
@@ -98,8 +96,12 @@ func (r *Resources) CreateFileResource(projectName, schemaName string, lfr Reade
 	if lfr.Name() == "" {
 		return errors.New("resource name cannot be empty")
 	}
-	if lfr.Reader() == nil {
+	reader := lfr.Reader()
+	if reader == nil {
 		return errors.New("reader cannot be nil")
+	}
+	if r.ChunkSize <= 0 {
+		return errors.New("resource chunk size must be positive")
 	}
 
 	tmpContent := make([]byte, r.ChunkSize)
@@ -108,12 +110,15 @@ func (r *Resources) CreateFileResource(projectName, schemaName string, lfr Reade
 	hash := md5.New()
 
 	for {
-		n, err := lfr.Reader().Read(tmpContent)
-		if err != nil {
-			if err == io.EOF {
+		n, err := reader.Read(tmpContent)
+		if err != nil && !errors.Is(err, io.EOF) {
+			return err
+		}
+		if n == 0 {
+			if err != nil {
 				break
 			}
-			return err
+			continue
 		}
 		hash.Write(tmpContent[:n])
 
@@ -129,13 +134,15 @@ func (r *Resources) CreateFileResource(projectName, schemaName string, lfr Reade
 		tmp.SetReader(tmpReader)
 		tmp.SetIsTempResource(true)
 		tmpFiles = append(tmpFiles, tmpName)
-		err = r.createTempPartFile(projectName, schemaName, *tmp, tmpReader, int64(n))
-		if err != nil {
-			return errors.WithStack(err)
+		if uploadErr := r.createTempPartFile(projectName, schemaName, *tmp, tmpReader, int64(n)); uploadErr != nil {
+			return errors.WithStack(uploadErr)
 		}
 
 		cnt++
 		totalBytes += int64(n)
+		if err != nil {
+			break
+		}
 	}
 
 	md5sum := hex.EncodeToString(hash.Sum(nil))
@@ -268,12 +275,7 @@ func (r *Resources) Delete(resourceName string) error {
 		return errors.WithStack(err)
 	}
 	client.HttpTimeout = 60 * time.Second
-	_, err = client.Do(req)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return nil
+	return errors.WithStack(client.DoWithParseFunc(req, nil))
 }
 
 // CreateTableResource create a table resource
@@ -318,17 +320,7 @@ func (r *Resources) CreateTableResource(projectName, schemaName string, tr Table
 		return errors.WithStack(err)
 	}
 	client.HttpTimeout = 60 * time.Second
-	resp, err := client.Do(req)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	if resp.StatusCode != 201 {
-		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
-		data, _ := ioutil.ReadAll(resp.Body)
-		return errors.WithStack(errors.New(string(data)))
-	}
-
-	return nil
+	return errors.WithStack(client.DoWithParseFunc(req, nil))
 }
 
 // RFileFunc is a function to filter resources
@@ -337,9 +329,9 @@ type RFileFunc func(url.Values)
 // ResourceFilter is a filter for resources
 var ResourceFilter = struct {
 	// Filter out resources with name prefix
-	NamePrefix func(string) TFilterFunc
+	NamePrefix func(string) RFileFunc
 }{
-	NamePrefix: func(name string) TFilterFunc {
+	NamePrefix: func(name string) RFileFunc {
 		return func(values url.Values) {
 			values.Set("name", name)
 		}

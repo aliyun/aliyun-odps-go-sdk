@@ -26,14 +26,12 @@ import (
 var odpsDataType = reflect.TypeOf((*DataType)(nil)).Elem()
 
 func TryConvertGoToOdpsType(i interface{}) (DataType, error) {
+	if typ, ok := i.(DataType); ok {
+		return typ, nil
+	}
 	t, ok := i.(reflect.Type)
-	if !ok {
-		tt := reflect.TypeOf(i)
-		if tt.Implements(odpsDataType) {
-			return i.(DataType), nil
-		}
-
-		return nil, errors.Errorf("cannot convert %s to odps type", tt.Name())
+	if !ok || t == nil {
+		return nil, errors.Errorf("cannot convert %T to odps type", i)
 	}
 
 	if t.Implements(odpsDataType) {

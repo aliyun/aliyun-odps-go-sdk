@@ -138,6 +138,25 @@ func TestStreamUploadMetadataRouting(t *testing.T) {
 	}
 }
 
+func TestUploadOverwriteOptionsOnTheWire(t *testing.T) {
+	client := tunnelContractClient(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "/projects/test_project/schemas/reporting/tables/fixture", r.URL.Path)
+		query := r.URL.Query()
+		assert.True(t, query.Has("uploads"))
+		assert.Equal(t, "ds=20261120", query.Get("partition"))
+		assert.Equal(t, "true", query.Get("create_partition"))
+		assert.Equal(t, "true", query.Get("overwrite"))
+		_, _ = fmt.Fprint(w, `{"UploadID":"fixture","Status":"NORMAL","IsOverwrite":true,"Schema":{"columns":[{"name":"id","type":"bigint"}]}}`)
+	})
+	session, err := CreateUploadSession("test_project", "fixture", "", client,
+		SessionCfg.WithSchemaName("reporting"), SessionCfg.WithPartitionKey("ds='20261120'"), SessionCfg.WithCreatePartition(),
+		SessionCfg.Overwrite())
+	require.NoError(t, err)
+	require.True(t, session.Overwrite)
+	require.Equal(t, "fixture", session.Id)
+}
+
 func TestTunnelSessionStatusRoundTrip(t *testing.T) {
 	for _, tc := range []struct {
 		name string

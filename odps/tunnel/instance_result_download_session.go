@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 
@@ -145,6 +146,7 @@ func (is *InstanceResultDownloadSession) OpenRecordReader(
 	start, count, sizeLimit int,
 	columnNames []string,
 ) (*RecordProtocReader, error) {
+	requestedColumns := columnNames
 	if len(columnNames) == 0 {
 		columnNames = make([]string, len(is.schema.Columns))
 		for i, c := range is.schema.Columns {
@@ -162,7 +164,7 @@ func (is *InstanceResultDownloadSession) OpenRecordReader(
 		columns[i] = c
 	}
 
-	res, err := is.newDownloadConnection(start, count, sizeLimit, columnNames)
+	res, err := is.newDownloadConnection(start, count, sizeLimit, requestedColumns)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -185,7 +187,7 @@ func (is *InstanceResultDownloadSession) newInitiationRequest() (*http.Request, 
 
 	if is.TaskName != "" {
 		queryArgs.Set("cached", "")
-		queryArgs.Set("taskname", "")
+		queryArgs.Set("taskname", is.TaskName)
 
 		if is.QueryId != -1 {
 			queryArgs.Set("queryid", strconv.Itoa(is.QueryId))
@@ -257,10 +259,6 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 ) (*http.Response, error) {
 	queryArgs := make(url.Values, 6)
 
-	//if len(columnNames) > 0 {
-	//	queryArgs.Set("columns", strings.Join(columnNames, ","))
-	//}
-
 	if is.LimitEnabled {
 		queryArgs.Set("instance_tunnel_limit_enabled", "")
 	}
@@ -271,7 +269,7 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 	queryArgs.Set("data", "")
 	if is.IsLongPolling {
 		queryArgs.Set("cached", "")
-		queryArgs.Set("taskname", "")
+		queryArgs.Set("taskname", is.TaskName)
 
 		if is.QueryId != -1 {
 			queryArgs.Set("queryid", strconv.Itoa(is.QueryId))
@@ -282,6 +280,9 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 		}
 	} else {
 		queryArgs.Set("downloadid", is.Id)
+		if len(columnNames) > 0 {
+			queryArgs.Set("columns", strings.Join(columnNames, ","))
+		}
 	}
 
 	queryArgs.Set("rowrange", fmt.Sprintf("(%d,%d)", start, count))

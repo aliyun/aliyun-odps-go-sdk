@@ -395,27 +395,23 @@ func (r *RecordProtocReader) readArray(t datatype.DataType) (*data.Array, error)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	arrayData := make([]data.Data, arraySize)
+	array := data.NewArrayWithType(datatype.NewArrayType(t))
 
-	for i := uint32(0); i < arraySize; i++ {
-		b, err := r.protocReader.ReadBool()
+	for range arraySize {
+		isNull, err := r.protocReader.ReadBool()
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
-
-		if b {
-			arrayData[i] = nil
-		} else {
-			arrayData[i], err = r.readField(t)
-			if err != nil {
-				return nil, errors.WithStack(err)
-			}
+		if isNull {
+			array.UnSafeAppend(nil)
+			continue
 		}
+		value, err := r.readField(t)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		array.UnSafeAppend(value)
 	}
-
-	at := datatype.NewArrayType(t)
-	array := data.NewArrayWithType(at)
-	array.UnSafeAppend(arrayData...)
 	return array, nil
 }
 
@@ -438,7 +434,9 @@ func (r *RecordProtocReader) readMap(t datatype.MapType) (*data.Map, error) {
 	for i, n := 0, keys.Len(); i < n; i++ {
 		key := keys.Index(i)
 		value := values.Index(i)
-		dm.Set(key, value)
+		if err := dm.Set(key, value); err != nil {
+			return nil, errors.Wrap(err, "invalid protobuf map entry")
+		}
 	}
 
 	return dm, nil

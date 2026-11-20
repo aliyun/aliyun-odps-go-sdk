@@ -25,6 +25,7 @@ func TestScaledDecimalFormatting(t *testing.T) {
 	} {
 		decimal := data.NewDecimalFromValue(12, test.scale, big.NewInt(test.unscaled))
 		require.Equal(t, test.want, decimal.String())
+		require.Equal(t, test.want, decimal.Value())
 		require.Equal(t, test.want+"BD", decimal.Sql())
 		require.Equal(t, 12, decimal.Precision())
 		require.Equal(t, test.scale, decimal.Scale())

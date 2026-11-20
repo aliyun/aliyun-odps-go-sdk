@@ -5,12 +5,14 @@ package odps_test
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -438,4 +440,86 @@ func TestEmulatorFileResourceLifecycle(t *testing.T) {
 
 	require.ErrorContains(t, resources.CreateFileResource("", "", odps.NewFileResource(""), false), "name")
 	require.ErrorContains(t, resources.CreateFileResource("", "", odps.NewFileResource(name), false), "reader")
+}
+
+type resourceEOFReader struct {
+	*strings.Reader
+}
+
+func (r resourceEOFReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	if r.Len() == 0 {
+		return n, io.EOF
+	}
+	return n, err
+}
+
+func TestEmulatorResourceKeepsFinalReadWithEOF(t *testing.T) {
+	service := emulatorService(t)
+	resources := odps.NewResources(service)
+	resources.ChunkSize = 4
+	name := fmt.Sprintf("go_sdk_tail_%d.py", time.Now().UnixNano())
+	file := odps.NewPyResource(name)
+	file.SetReader(resourceEOFReader{strings.NewReader("abcdefg")})
+	require.NoError(t, resources.CreateFileResource("", "", file, false))
+	t.Cleanup(func() { require.NoError(t, resources.Delete(name)) })
+	loaded := resources.Get(name)
+	require.NoError(t, loaded.Load())
+	require.Equal(t, odps.ResourceTypePy, loaded.ResourceType())
+	require.EqualValues(t, 7, loaded.Model.ResourceSize)
+	require.Equal(t, "7ac66c0f148de9519b8bd264312c4d64", loaded.Model.ContentMD5)
+
+	failed := odps.NewFileResource(name + "_failed")
+	failed.SetReader(iotest.ErrReader(io.ErrClosedPipe))
+	require.ErrorIs(t, resources.CreateFileResource("", "", failed, false), io.ErrClosedPipe)
+	exists, err := resources.Get(failed.Name()).Exist()
+	require.NoError(t, err)
+	require.False(t, exists)
+	resources.ChunkSize = 0
+	require.ErrorContains(t, resources.CreateFileResource("", "", failed, false), "chunk size")
+}
+
+func TestEmulatorTableResourcesAndPagination(t *testing.T) {
+	service := emulatorService(t)
+	resources := odps.NewResources(service)
+	project, schema := service.DefaultProjectName(), service.CurrentSchemaName()
+	prefix := fmt.Sprintf("go_sdk_table_res_%d_", time.Now().UnixNano())
+	names := []string{prefix + "a", prefix + "b"}
+	table := prefix + "source"
+	tables := service.Tables()
+	definition := tableschema.NewSchemaBuilder().Name(table).Column(
+		tableschema.Column{Name: "id", Type: datatype.BigIntType},
+	).PartitionColumn(tableschema.Column{Name: "ds", Type: datatype.StringType}).Build()
+	require.NoError(t, tables.Create(definition, false, nil, nil))
+	t.Cleanup(func() { require.NoError(t, tables.Delete(table, true)) })
+	require.NoError(t, tables.Get(table).AddPartition(false, "ds=sample"))
+
+	resource := odps.NewTableResource(project, table, "ds='sample'")
+	require.ErrorContains(t, resources.CreateTableResource("", "", resource, false), "resource name")
+	for _, name := range names {
+		resource.SetName(name)
+		require.NoError(t, resources.CreateTableResource("", "", resource, false))
+		t.Cleanup(func() { require.NoError(t, resources.Delete(name)) })
+	}
+	requireEmulatorServiceError(t, resources.CreateTableResource(project, schema, resource, false),
+		http.StatusBadRequest, "ResourceAlreadyExists")
+	resource.SetComment("updated metadata")
+	require.NoError(t, resources.CreateTableResource(project, schema, resource, true))
+	got := resources.Get(resource.Name())
+	require.NoError(t, got.Load())
+	require.Equal(t, schema, got.SchemaName())
+	require.Equal(t, odps.ResourceTypeTable, got.ResourceType())
+	require.Equal(t, project+"."+table+" partition(ds='sample')", got.Model.SourceTableName)
+	require.Equal(t, "updated metadata", got.Comment())
+
+	var listed []string
+	resources.List(func(item *odps.Resource, err error) {
+		require.NoError(t, err)
+		listed = append(listed, item.Name())
+	}, odps.ResourceFilter.NamePrefix(prefix), func(args url.Values) { args.Set("maxitems", "1") })
+	require.Equal(t, names, listed)
+	resources.List(func(item *odps.Resource, err error) {
+		require.Nil(t, item)
+		requireEmulatorServiceError(t, err, http.StatusBadRequest, "InvalidParameter")
+	}, func(args url.Values) { args.Set("maxitems", "invalid") })
 }
