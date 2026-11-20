@@ -16,6 +16,7 @@ import (
 	"unicode"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 )
 
@@ -27,7 +28,7 @@ const (
 // ClientOptions selects the project and Tunnel route used by a Client.
 type ClientOptions struct {
 	Project        string // Defaults to the ODPS client's project.
-	TunnelEndpoint string // If empty, resolve the endpoint for Project and QuotaName.
+	TunnelEndpoint string // If set, use this address directly.
 	QuotaName      string // Used when resolving a Tunnel endpoint.
 
 	HTTPTimeout          time.Duration // Zero inherits the ODPS client's setting.
@@ -56,10 +57,11 @@ func NewClient(ctx context.Context, service *odps.Odps, options ClientOptions) (
 	if err := validateIdentifier("project", project); err != nil {
 		return nil, err
 	}
+	source := service.RestClient()
 	endpoint := options.TunnelEndpoint
 	if endpoint == "" {
 		var err error
-		endpoint, err = service.Project(project).GetTunnelEndpointContext(ctx, options.QuotaName)
+		endpoint, err = discoverEndpoint(ctx, source, project, options.QuotaName)
 		if err != nil {
 			return nil, fmt.Errorf("storage: resolve Tunnel endpoint for %q: %w", project, err)
 		}
@@ -75,7 +77,6 @@ func NewClient(ctx context.Context, service *odps.Odps, options ClientOptions) (
 	if schema == "" {
 		schema = "default"
 	}
-	source := service.RestClient()
 	rest := restclient.NewOdpsRestClient(service.Account(), u.String())
 	rest.SetDefaultProject(project)
 	rest.SetUserAgent(source.UserAgent())
@@ -92,6 +93,29 @@ func NewClient(ctx context.Context, service *odps.Odps, options ClientOptions) (
 		rest.SetUserAgent(options.UserAgent)
 	}
 	return &Client{project: project, schema: schema, rest: rest}, nil
+}
+
+func discoverEndpoint(ctx context.Context, client restclient.RestClient, project, quota string) (string, error) {
+	client.SetDefaultProject(project)
+	resource := common.NewResourceBuilder(project)
+	params := make(url.Values, 1)
+	if strings.TrimSpace(quota) != "" {
+		params.Set("quota", quota)
+	}
+	req, err := client.NewRequestWithUrlQuery(http.MethodGet, resource.Tunnel(), nil, params)
+	if err != nil {
+		return "", err
+	}
+	resp, err := client.Do(req.WithContext(ctx))
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	host, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return req.URL.Scheme + "://" + strings.TrimSpace(string(host)), nil
 }
 
 // Close releases idle HTTP connections. Release active Arrow readers separately.

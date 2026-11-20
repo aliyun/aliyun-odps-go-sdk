@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -46,10 +47,15 @@ func TestClientConfigurationAndDiscovery(t *testing.T) {
 	require.ErrorContains(t, err, "credentials")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/projects/test_project/tunnel", r.URL.Path)
-		assert.Equal(t, "named", r.URL.Query().Get("quotaName"))
+		assert.Equal(t, http.MethodGet, r.Method)
+		project := r.URL.Query().Get("curr_project")
+		assert.Contains(t, []string{"test_project", "another_project"}, project)
+		assert.Equal(t, "/api/projects/"+project+"/tunnel", r.URL.Path)
+		assert.Equal(t, "named", r.URL.Query().Get("quota"))
+		assert.False(t, r.URL.Query().Has("quotaName"))
+		assert.False(t, r.URL.Query().Has("service"))
 		assert.Contains(t, r.Header.Get("Authorization"), "test-ak")
-		fmt.Fprint(w, r.Host)
+		fmt.Fprintln(w, r.Host)
 	}))
 	t.Cleanup(server.Close)
 	service := odps.NewOdps(account.NewAliyunAccount("test-ak", "test-sk"), server.URL+"/api")
@@ -63,6 +69,13 @@ func TestClientConfigurationAndDiscovery(t *testing.T) {
 	require.Equal(t, "default", client.schema)
 	require.Equal(t, service.RestClient().HttpTimeout, client.rest.HttpTimeout)
 	require.Equal(t, service.RestClient().TcpConnectionTimeout, client.rest.TcpConnectionTimeout)
+
+	otherProject, err := NewClient(ctx, service, ClientOptions{Project: "another_project", QuotaName: "named"})
+	require.NoError(t, err)
+	t.Cleanup(otherProject.Close)
+	require.Equal(t, server.URL, otherProject.rest.Endpoint())
+	require.Equal(t, "another_project", otherProject.project)
+	require.Equal(t, "test_project", service.DefaultProjectName())
 
 	for _, endpoint := range []string{"http://%", "http:/path", "ftp://example.test", "http://u@example.test", "http://example.test?q=v", "http://example.test#hash"} {
 		_, err := NewClient(ctx, service, ClientOptions{TunnelEndpoint: endpoint})
@@ -85,6 +98,28 @@ func TestClientConfigurationAndDiscovery(t *testing.T) {
 	cancel()
 	_, err = NewClient(canceled, service, ClientOptions{})
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestEndpointDiscoveryRejectsIncompleteResponses(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.False(t, r.URL.Query().Has("quota"))
+		w.Header().Set("Content-Length", "100")
+		fmt.Fprint(w, r.Host)
+	}))
+	t.Cleanup(server.Close)
+	credentials := account.NewAliyunAccount("test-ak", "test-sk")
+	for _, tc := range []struct {
+		endpoint string
+		want     string
+	}{
+		{"http://%", "invalid URL escape"},
+		{server.URL, "unexpected EOF"},
+	} {
+		service := odps.NewOdps(credentials, tc.endpoint)
+		_, err := NewClient(t.Context(), service, ClientOptions{Project: "test_project"})
+		require.ErrorContains(t, err, "resolve Tunnel endpoint")
+		require.ErrorContains(t, err, tc.want)
+	}
 }
 
 func TestSessionDescriptorsAndRejectedRequests(t *testing.T) {
@@ -276,6 +311,39 @@ func TestWriteSessionWireFormat(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 10, stream.InitialOffset())
 	require.ErrorIs(t, session.Commit(ctx), io.ErrUnexpectedEOF)
+}
+
+func TestCommitStreamsRequiresExplicitVersions(t *testing.T) {
+	var commits atomic.Int32
+	client := localClient(t, func(w http.ResponseWriter, r *http.Request) {
+		params := r.URL.Query()
+		assert.Equal(t, "Batch", params.Get("WriteMode"))
+		assert.Equal(t, "session-1", params.Get("SessionId"))
+		assert.Equal(t, "route-1", r.Header.Get(routeTokenHeader))
+		switch params.Get("Action") {
+		case "TableGetWriteSession":
+			fmt.Fprint(w, `{"SessionId":"session-1","SessionStatus":"NORMAL"}`)
+		case "TableCommitWriteSession":
+			commits.Add(1)
+			body, err := io.ReadAll(r.Body)
+			assert.NoError(t, err)
+			assert.JSONEq(t, `{"StreamIds":["shard-b","shard-a"],"StreamVersions":[17,3]}`, string(body))
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			t.Errorf("unexpected request %s", r.URL)
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	})
+	ctx := t.Context()
+	session, err := client.GetTableWriteSession(ctx, Table{Name: "table"}, Session{ID: "session-1", RouteToken: "route-1"})
+	require.NoError(t, err)
+	require.ErrorContains(t, session.CommitStreams(ctx), "at least one stream")
+	require.ErrorContains(t, session.CommitStreams(ctx, Stream{}), "stream ID is required")
+	require.ErrorContains(t, session.CommitStreams(ctx, Stream{ID: "shard-a", Version: -1}), "nonnegative")
+	require.ErrorContains(t, session.CommitStreams(ctx, Stream{ID: "shard-a"}, Stream{ID: "shard-a", Version: 3}), "only be committed once")
+	require.Zero(t, commits.Load())
+	require.NoError(t, session.CommitStreams(ctx, Stream{ID: "shard-b", Version: 17}, Stream{ID: "shard-a", Version: 3}))
+	require.EqualValues(t, 1, commits.Load())
 }
 
 func TestRequestEncodingErrors(t *testing.T) {

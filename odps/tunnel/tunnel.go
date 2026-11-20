@@ -50,6 +50,7 @@ import (
 type Tunnel struct {
 	odpsIns              *odps.Odps
 	endpoint             string
+	explicitEndpoint     bool
 	quotaName            string
 	httpTimeout          time.Duration
 	tcpConnectionTimeout time.Duration
@@ -65,8 +66,9 @@ func NewTunnel(odpsIns *odps.Odps, endpoint ...string) *Tunnel {
 	tunnel := Tunnel{
 		odpsIns: odpsIns,
 	}
-	if len(endpoint) > 0 {
+	if len(endpoint) > 0 && endpoint[0] != "" {
 		tunnel.endpoint = endpoint[0]
+		tunnel.explicitEndpoint = true
 	}
 
 	return &tunnel
@@ -217,9 +219,13 @@ func (t *Tunnel) Preview(table *odps.Table, partitionValue string, limit int64) 
 		}
 	}
 	ctx := context.Background()
+	var endpoint string
+	if t.explicitEndpoint {
+		endpoint = t.endpoint
+	}
 	client, err := storage.NewClient(ctx, t.odpsIns, storage.ClientOptions{
 		Project:              table.ProjectName(),
-		TunnelEndpoint:       t.endpoint,
+		TunnelEndpoint:       endpoint,
 		QuotaName:            t.quotaName,
 		HTTPTimeout:          t.httpTimeout,
 		TCPConnectionTimeout: t.tcpConnectionTimeout,

@@ -92,10 +92,41 @@ func (s *WriteSession) operation(action string) operation {
 	return op
 }
 
-// Commit publishes all closed streams. Repeat a commit to resolve an ambiguous
-// transport failure, using the same session descriptor.
+// Commit publishes all closed streams on tables that support implicit stream
+// selection. Use CommitStreams when the table requires explicit stream versions.
+// Repeat the same commit on the same session after an ambiguous transport failure.
 func (s *WriteSession) Commit(ctx context.Context) error {
 	_, err := s.client.jsonRequest(ctx, http.MethodPost, s.operation("TableCommitWriteSession"), struct{}{}, nil)
+	return err
+}
+
+// CommitStreams publishes the specified closed stream versions. Save the stream
+// descriptors with the session descriptor so a coordinator can repeat the same
+// commit after reopening the session.
+func (s *WriteSession) CommitStreams(ctx context.Context, streams ...Stream) error {
+	if len(streams) == 0 {
+		return fmt.Errorf("storage: at least one stream is required to commit")
+	}
+	input := struct {
+		StreamIDs      []string `json:"StreamIds"`
+		StreamVersions []int64
+	}{
+		StreamIDs:      make([]string, len(streams)),
+		StreamVersions: make([]int64, len(streams)),
+	}
+	seen := make(map[string]struct{}, len(streams))
+	for i, stream := range streams {
+		if err := stream.validate(); err != nil {
+			return err
+		}
+		if _, duplicate := seen[stream.ID]; duplicate {
+			return fmt.Errorf("storage: stream %q can only be committed once per request", stream.ID)
+		}
+		seen[stream.ID] = struct{}{}
+		input.StreamIDs[i] = stream.ID
+		input.StreamVersions[i] = stream.Version
+	}
+	_, err := s.client.jsonRequest(ctx, http.MethodPost, s.operation("TableCommitWriteSession"), input, nil)
 	return err
 }
 
@@ -109,6 +140,13 @@ func (s *WriteSession) Abort(ctx context.Context) error {
 type Stream struct {
 	ID      string `json:"StreamId"`
 	Version int64  `json:"StreamVersion"`
+}
+
+func (s Stream) validate() error {
+	if s.ID == "" || s.Version < 0 {
+		return fmt.Errorf("storage: stream ID is required and version must be nonnegative")
+	}
+	return nil
 }
 
 // WriteStream stages Arrow batches using explicit, replayable row offsets.
@@ -134,8 +172,8 @@ func (s *WriteSession) GetStream(ctx context.Context, stream Stream) (*WriteStre
 }
 
 func (s *WriteSession) openStream(ctx context.Context, stream Stream, action string) (*WriteStream, error) {
-	if stream.ID == "" || stream.Version < 0 {
-		return nil, fmt.Errorf("storage: stream ID is required and version must be nonnegative")
+	if err := stream.validate(); err != nil {
+		return nil, err
 	}
 	op := s.operation(action)
 	input := struct {

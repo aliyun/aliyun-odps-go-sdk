@@ -27,6 +27,48 @@ func tunnelContractClient(t *testing.T, handler http.HandlerFunc) restclient.Res
 	return client
 }
 
+func TestPreviewUsesStorageQuotaAndHonorsExplicitEndpoint(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query()
+		switch r.URL.Path {
+		case "/api/projects/test_project/tunnel":
+			assert.Equal(t, http.MethodGet, r.Method)
+			if query.Has("service") {
+				fmt.Fprint(w, r.Host+"/legacy")
+				return
+			}
+			assert.Equal(t, "dedicated", query.Get("quota"))
+			fmt.Fprint(w, r.Host+"/dedicated")
+		case "/api/projects/test_project/tables/fixture":
+			fmt.Fprint(w, `<Table><Name>fixture</Name><Project>test_project</Project><Schema>{"columns":[{"name":"id","type":"bigint"}]}</Schema></Table>`)
+		case "/dedicated/api/storage/v3", "/override/api/storage/v3":
+			assert.Equal(t, "TablePreview", query.Get("Action"))
+			w.Header().Set("Content-Type", "application/xml")
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprintf(w, `<Error><Code>FixtureAccessDenied</Code><Message>%s</Message></Error>`, r.URL.Path)
+		default:
+			t.Errorf("unexpected request %s", r.URL)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+	service := odps.NewOdps(account.NewAliyunAccount("test-ak", "test-sk"), server.URL+"/api")
+	service.SetDefaultProjectName("test_project")
+	table := service.Table("fixture")
+	discovered, err := NewTunnelFromProject(service.DefaultProject())
+	require.NoError(t, err)
+	require.Equal(t, server.URL+"/legacy", discovered.GetEndpoint())
+	discovered.SetQuotaName("dedicated")
+	_, err = discovered.Preview(table, "", 1)
+	require.ErrorContains(t, err, "/dedicated/api/storage/v3")
+	require.Equal(t, server.URL+"/legacy", discovered.GetEndpoint())
+
+	explicit := NewTunnel(service, server.URL+"/override")
+	explicit.SetQuotaName("dedicated")
+	_, err = explicit.Preview(table, "", 1)
+	require.ErrorContains(t, err, "/override/api/storage/v3")
+}
+
 func TestSessionRequestConstructionErrors(t *testing.T) {
 	service := odps.NewOdps(account.NewAliyunAccount("test-ak", "test-sk"), "http://%")
 	_, err := NewTunnelFromProject(service.Project("test_project"))

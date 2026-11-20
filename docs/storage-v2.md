@@ -1,9 +1,9 @@
 # Storage API V2
 
 Storage API V2 reads and writes Apache Arrow IPC. A client shares credentials
-with an existing `*odps.Odps`. It connects to that project's Tunnel endpoint,
-which can be resolved from the project and quota or supplied with
-`storage.ClientOptions.TunnelEndpoint`.
+with an existing `*odps.Odps`. Set `storage.ClientOptions.QuotaName` to select a
+quota during Tunnel endpoint discovery. Set `TunnelEndpoint` to connect directly
+to a specific address.
 
 ## Read a SQL result
 
@@ -48,13 +48,18 @@ session descriptor with `GetInstanceReadSession` to reopen a result. See the
   streams with `CreateStream`. Write each batch at the previously acknowledged
   offset. `InitialOffset` on a resumed stream is the server's durable offset.
 - After an ambiguous transport error, resend the same batch at the same offset.
-  A different batch at that offset is rejected. Close each stream and call
-  `Commit` to publish the staged rows. Call `Abort` to discard an open upload.
+  A different batch at that offset is rejected.
+- Close the participating streams and call `CommitStreams(ctx, streams...)`
+  with their original `storage.Stream` descriptors. This sends the stream IDs
+  and versions required by some transactional tables. `Commit(ctx)` lets the
+  service select all closed streams on tables that support implicit selection.
+  Call `Abort` to discard an open upload.
 
-Keep the session descriptor, including any routing token, when reopening a
-read or write session. For a partitioned upload, supply the partition spec in
-`TableWriteOptions.Partition`. Set `Overwrite` when the commit should replace
-the target's rows.
+Save the session descriptor, including its routing token, and the selected
+stream descriptors before submitting a commit. If the outcome is uncertain,
+reopen the same session and repeat the commit with the same descriptors. For a
+partitioned upload, supply the partition spec in `TableWriteOptions.Partition`.
+Set `Overwrite` when the commit should replace the target's rows.
 
 Use `TableReadOptions.PartitionColumns` to include partition keys in Arrow
 results. `PreviewTable` accepts a partition filter and streams a sample of data
@@ -71,3 +76,19 @@ columns.
 
 The row-oriented `OpenRecordReader` and `OpenRecordWriter` use the Protobuf
 Tunnel APIs. `odps/storage` exposes an `array.RecordReader` for Arrow consumers.
+
+## Verify a deployment
+
+Run the [Emulator suite](../README.md) for local protocol and fault regression
+tests. In a MaxCompute test project, repeat the following with the authentication
+and data transmission quota used by the application.
+
+1. Submit a SQL query with known values, including a null and a decimal. Read
+   its full result and a row range through Storage API V2, and compare them with
+   the SQL result.
+2. Write two streams into a test table, close both, then reopen the session and
+   commit one stream by ID and version. Query the table and check that the
+   selected rows appear exactly once. Repeat on a transactional or Delta table
+   and, for a partitioned target, check the neighboring partitions.
+3. Retry a write at its original row offset and repeat the same commit after
+   reopening. Compare the final row count and values with the inputs.

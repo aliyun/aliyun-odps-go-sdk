@@ -64,7 +64,7 @@ func newEmulator(t *testing.T) emulator {
 	service := odps.NewOdps(account.NewAliyunAccount("test-ak", "test-sk"), endpoint+"/api")
 	service.SetDefaultProjectName("test_project")
 	service.SetCurrentSchemaName("default")
-	client, err := storage.NewClient(t.Context(), service, storage.ClientOptions{TunnelEndpoint: endpoint})
+	client, err := storage.NewClient(t.Context(), service, storage.ClientOptions{})
 	require.NoError(t, err)
 	t.Cleanup(client.Close)
 	return emulator{endpoint: endpoint, service: service, storage: client}
@@ -285,11 +285,14 @@ func (e emulator) fault(t *testing.T, table storage.Table, action string, effect
 func TestEmulatorWriteAndCommitLostAcknowledgement(t *testing.T) {
 	e := newEmulator(t)
 	ctx := t.Context()
-	table := e.table(t, "id bigint, note string")
+	table := e.createTable(t, "(id bigint, note string) tblproperties ('transactional'='true')")
+	metadata := e.service.Table(table.Name)
+	require.NoError(t, metadata.Load())
+	require.True(t, metadata.Transactional())
 	upload, err := e.storage.CreateTableWriteSession(ctx, table, storage.TableWriteOptions{})
 	require.NoError(t, err)
 	throttled := e.fault(t, table, "create_stream", map[string]any{"type": "http_error", "status": 429})
-	key := storage.Stream{ID: "retry", Version: 0}
+	key := storage.Stream{ID: "retry", Version: 3}
 	_, err = upload.CreateStream(ctx, key)
 	serviceError(t, err, http.StatusTooManyRequests, "FlowExceeded")
 	throttled()
@@ -304,12 +307,25 @@ func TestEmulatorWriteAndCommitLostAcknowledgement(t *testing.T) {
 	offset, err := stream.WriteBatch(ctx, 0, batch)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, offset)
+	serviceError(t, upload.CommitStreams(ctx, key), http.StatusConflict, "InvalidState")
 	require.NoError(t, stream.Close(ctx))
 
+	discarded, err := upload.CreateStream(ctx, storage.Stream{ID: "discarded", Version: 1})
+	require.NoError(t, err)
+	_, err = discarded.WriteBatch(ctx, 0, testBatch(t, 99, "exclude this stream"))
+	require.NoError(t, err)
+	require.NoError(t, discarded.Close(ctx))
+
+	coordinator, err := e.storage.GetTableWriteSession(ctx, table, upload.Session())
+	require.NoError(t, err)
+	serviceError(t, coordinator.CommitStreams(ctx, storage.Stream{ID: key.ID, Version: 2}), http.StatusConflict, "InvalidState")
 	commitLost := e.fault(t, table, "commit", map[string]any{"type": "lost_ack"})
-	require.Error(t, upload.Commit(ctx))
+	require.Error(t, coordinator.CommitStreams(ctx, key))
 	commitLost()
-	require.NoError(t, upload.Commit(ctx))
+	reopened, err := e.storage.GetTableWriteSession(ctx, table, upload.Session())
+	require.NoError(t, err)
+	require.Equal(t, "COMMITTED", strings.ToUpper(reopened.Status()))
+	require.NoError(t, reopened.CommitStreams(ctx, key))
 
 	snapshot, err := e.storage.CreateTableReadSession(ctx, table, storage.TableReadOptions{})
 	require.NoError(t, err)
