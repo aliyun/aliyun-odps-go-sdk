@@ -19,7 +19,6 @@ package odps
 import (
 	"context"
 	"encoding/xml"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -186,8 +185,7 @@ func (p *Project) load(ctx context.Context) error {
 	p.beLoaded = true
 
 	if err != nil {
-		var response restclient.HttpError
-		if errors.As(err, &response) && response.StatusCode == http.StatusNotFound {
+		if isNotFound(err) {
 			p.exists = false
 		}
 
@@ -197,6 +195,11 @@ func (p *Project) load(ctx context.Context) error {
 	p.exists = true
 	p.model = *model
 	return nil
+}
+
+func isNotFound(err error) bool {
+	var response restclient.HttpError
+	return errors.As(err, &response) && response.StatusCode == http.StatusNotFound
 }
 
 // IsLoaded whether `Load()` has been called
@@ -346,8 +349,6 @@ func (p *Project) GetTunnelEndpointContext(ctx context.Context, quotaNames ...st
 	resource := p.rb.Tunnel()
 	queryArgs := make(url.Values, 1)
 	queryArgs.Set("service", "")
-	// queryArgs.Set("current_project", p.Name())
-
 	if len(quotaNames) > 0 {
 		quotaName := quotaNames[0]
 		if quotaName != "" {
@@ -360,18 +361,23 @@ func (p *Project) GetTunnelEndpointContext(ctx context.Context, quotaNames ...st
 		return "", errors.WithStack(err)
 	}
 
-	schema := req.URL.Scheme
 	var tunnelEndpoint string
 	err = client.DoWithParseFunc(req.WithContext(ctx), func(res *http.Response) error {
 		b, err := io.ReadAll(res.Body)
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		tunnelEndpoint = string(b)
+		tunnelEndpoint = req.URL.Scheme + "://" + strings.TrimSpace(string(b))
 		return nil
 	})
-
-	return fmt.Sprintf("%s://%s", schema, tunnelEndpoint), errors.WithStack(err)
+	if err != nil {
+		return "", errors.WithStack(err)
+	}
+	endpoint, err := url.Parse(tunnelEndpoint)
+	if err != nil || endpoint.Hostname() == "" {
+		return "", errors.New("invalid Tunnel endpoint in discovery response")
+	}
+	return tunnelEndpoint, nil
 }
 
 // Update the project properties, the properties are different in different versioned odps.

@@ -29,7 +29,6 @@ import (
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 )
 
@@ -113,6 +112,13 @@ func (t *Table) IsLoadedExtended() bool {
 }
 
 func (t *Table) Load() error {
+	if err := t.loadBasic(); err != nil {
+		return err
+	}
+	return t.LoadExtendedInfo()
+}
+
+func (t *Table) loadBasic() error {
 	client := t.odpsIns.restClient
 	resource := t.ResourceUrl()
 	queryArgs := make(url.Values, 4)
@@ -120,19 +126,22 @@ func (t *Table) Load() error {
 		queryArgs.Set("curr_schema", t.SchemaName())
 	}
 
-	err := client.GetWithModel(resource, queryArgs, nil, &t.model)
+	model := tableModel{Name: t.Name(), ProjectName: t.ProjectName(), SchemaName: t.SchemaName()}
+	err := client.GetWithModel(resource, queryArgs, nil, &model)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	err = json.Unmarshal([]byte(t.model.Schema), &t.tableSchema)
+	var schema tableschema.TableSchema
+	err = json.Unmarshal([]byte(model.Schema), &schema)
 	if err != nil {
 		return errors.WithStack(err)
 	}
+	t.model = model
+	t.tableSchema = schema
 	t.beLoaded = true
-
-	// LoadExtendedInfo会加载其他额外信息，主要是table schema信息
-	return errors.WithStack(t.LoadExtendedInfo())
+	t.beLoadedExtended = false
+	return nil
 }
 
 func (t *Table) LoadExtendedInfo() error {
@@ -309,23 +318,14 @@ func calculateMaxLabel(labels []string) string {
 	return fmt.Sprintf("%s%d", category, maxLevel)
 }
 
+// Exists checks existence using basic table metadata.
 func (t *Table) Exists() (bool, error) {
-	err := t.Load()
+	err := t.loadBasic()
 
-	var httpErr restclient.HttpError
-	if errors.As(err, &httpErr) {
-		if httpErr.Status == "404 Not Found" {
-			return false, nil
-		}
-
-		return false, err
+	if isNotFound(err) {
+		return false, nil
 	}
-
-	if err != nil {
-		return false, errors.WithStack(err)
-	}
-
-	return true, nil
+	return err == nil, err
 }
 
 func (t *Table) LastDDLTime() time.Time {
@@ -409,28 +409,7 @@ func (t *Table) ColumnMaskInfos() ([]ColumnMaskInfo, error) {
 }
 
 func (t *Table) Delete() error {
-	var sqlBuilder strings.Builder
-	sqlBuilder.WriteString("drop table")
-	sqlBuilder.WriteString(" if exists")
-
-	sqlBuilder.WriteRune(' ')
-
-	hints := make(map[string]string)
-	if t.SchemaName() == "" {
-		hints["odps.namespace.schema"] = "false"
-	} else {
-		hints["odps.namespace.schema"] = "true"
-	}
-	sqlBuilder.WriteString(t.getFullName())
-	sqlBuilder.WriteString(";")
-
-	sqlTask := NewSqlTask("SQLDropTableTask", sqlBuilder.String(), hints)
-	instances := NewInstances(t.odpsIns, t.ProjectName())
-	i, err := instances.CreateTask(t.ProjectName(), &sqlTask)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	return errors.WithStack(i.WaitForSuccess())
+	return t.waitDDL("SQLDropTableTask", "drop table if exists "+t.getFullName()+";")
 }
 
 func (t *Table) ExecSqlWithHints(taskName, sql string, hints map[string]string) (*Instance, error) {
@@ -456,12 +435,6 @@ func partitionValueToSpec(value string) (string, error) {
 func (t *Table) AddPartitions(ifNotExists bool, partitionValues []string) error {
 	var sb strings.Builder
 	sb.WriteString("alter table ")
-	hints := make(map[string]string)
-	if t.SchemaName() == "" {
-		hints["odps.namespace.schema"] = "false"
-	} else {
-		hints["odps.namespace.schema"] = "true"
-	}
 	sb.WriteString(t.getFullName())
 	sb.WriteString(" add")
 	if ifNotExists {
@@ -480,12 +453,7 @@ func (t *Table) AddPartitions(ifNotExists bool, partitionValues []string) error 
 
 	sb.WriteString(";")
 
-	i, err := t.ExecSqlWithHints("SQLAddPartitionTask", sb.String(), hints)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return errors.WithStack(i.WaitForSuccess())
+	return t.waitDDL("SQLAddPartitionTask", sb.String())
 }
 
 // AddPartition Example: AddPartition(true, "region=10026/name=abc")
@@ -497,12 +465,6 @@ func (t *Table) AddPartition(ifNotExists bool, partitionValue string) error {
 func (t *Table) DeletePartitions(ifExists bool, partitionValues []string) error {
 	var sb strings.Builder
 	sb.WriteString("alter table ")
-	hints := make(map[string]string)
-	if t.SchemaName() == "" {
-		hints["odps.namespace.schema"] = "false"
-	} else {
-		hints["odps.namespace.schema"] = "true"
-	}
 	sb.WriteString(t.getFullName())
 	sb.WriteString(" drop")
 	if ifExists {
@@ -526,17 +488,7 @@ func (t *Table) DeletePartitions(ifExists bool, partitionValues []string) error 
 
 	sb.WriteString(";")
 
-	ins, err := t.ExecSqlWithHints("SQLDropPartitionTask", sb.String(), hints)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	err = ins.WaitForSuccess()
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return nil
+	return t.waitDDL("SQLDropPartitionTask", sb.String())
 }
 
 // DeletePartition Example: DeletePartition(true, "region=10026/name=abc")
@@ -826,7 +778,8 @@ func (t *Table) AlterColumnType(columnName string, columnType datatype.DataType)
 }
 
 func (t *Table) generateAlterColumnTypeSQL(columnName string, columnType datatype.DataType) string {
-	return fmt.Sprintf("alter table %s change column %s %s %s;", t.getFullName(), columnName, columnName, columnType)
+	name := common.QuoteRef(columnName)
+	return fmt.Sprintf("alter table %s change column %s %s %s;", t.getFullName(), name, name, columnType)
 }
 
 func (t *Table) ChangeColumnName(oldColumnName string, newColumnName string) error {
@@ -834,25 +787,20 @@ func (t *Table) ChangeColumnName(oldColumnName string, newColumnName string) err
 }
 
 func (t *Table) generateChangeColumnNameSQL(oldColumnName string, newColumnName string) string {
-	return fmt.Sprintf("alter table %s change column %s rename to %s;", t.getFullName(), oldColumnName, newColumnName)
+	return fmt.Sprintf("alter table %s change column %s rename to %s;", t.getFullName(), common.QuoteRef(oldColumnName), common.QuoteRef(newColumnName))
 }
 
 func (t *Table) executeSql(sql string) error {
-	hints := make(map[string]string)
-	if t.SchemaName() == "" {
-		hints["odps.namespace.schema"] = "false"
-	} else {
-		hints["odps.namespace.schema"] = "true"
-	}
-	ins, err := t.ExecSqlWithHints("AnonymousSQLTask", sql, hints)
+	return t.waitDDL("AnonymousSQLTask", sql)
+}
+
+func (t *Table) waitDDL(taskName, sql string) error {
+	hints := map[string]string{"odps.namespace.schema": strconv.FormatBool(t.SchemaName() != "")}
+	ins, err := t.ExecSqlWithHints(taskName, sql, hints)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	err = ins.WaitForSuccess()
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	return nil
+	return ins.WaitForSuccess()
 }
 
 func (t *Table) getFullName() string {

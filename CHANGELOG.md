@@ -26,6 +26,8 @@
 - Make LogView discovery safe for concurrent requests and use the instance project's region.
 - Preserve full DECIMAL precision and report integer conversions that would lose data.
 - Apply the configured Deflate level and close the streaming request when a compressor fails.
+- Check table and project existence using basic metadata and submit schema changes in the target project.
+- Read and write the service's project protection XML and retain compatibility with older responses.
 - Apply SQL context cancellation to HTTP requests and retry delays, and preserve the instance ID when available.
 - Add MaxCompute Emulator regressions for Arrow, offset retries, and lost write and commit responses.
 

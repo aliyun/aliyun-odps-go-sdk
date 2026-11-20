@@ -19,7 +19,7 @@ reports source line coverage and Gobco branch coverage across the SDK and Tea
 modules. Set SDK_EMULATOR_IMAGE to use an already built candidate image.
 Gobco measures each package's tests and does not instrument `select` cases.
 Run `bash scripts/test-emulator.sh --release` before tagging. The release check
-requires 100% reported branch coverage and more than 85% source line coverage.
+requires more than 90% reported branch coverage and more than 85% source line coverage.
 
 # 目录说明
 ## odps

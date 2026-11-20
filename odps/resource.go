@@ -10,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 )
 
 // ResourceType is  resource type
@@ -206,8 +205,7 @@ func (r *Resource) SetResourceType(resourceType ResourceType) {
 // Exist check whether resource exist
 func (r *Resource) Exist() (bool, error) {
 	err := r.Load()
-	var httpErr restclient.HttpError
-	if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+	if isNotFound(err) {
 		return false, nil
 	}
 	return err == nil, err

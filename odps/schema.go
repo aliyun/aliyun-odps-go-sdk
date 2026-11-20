@@ -9,7 +9,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 )
 
 // Schema represent the namespace schema in odps projects
@@ -47,8 +46,7 @@ func (s *Schema) Tables() *Tables {
 // Exists check if the schema exists
 func (s *Schema) Exists() (bool, error) {
 	err := s.Load()
-	var httpErr restclient.HttpError
-	if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+	if isNotFound(err) {
 		return false, nil
 	}
 	return err == nil, err
@@ -73,18 +71,7 @@ func (s *Schema) generateChangeOwnerSQL(newOwner string) string {
 }
 
 func (s *Schema) executeSQL(sql string) error {
-	hints := make(map[string]string)
-	hints["odps.namespace.schema"] = "true"
-
-	ins, err := s.odpsIns.ExecSQlWithHints(sql, hints)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	err = ins.WaitForSuccess()
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	return nil
+	return s.Tables().runDDL("AnonymousSQLTask", sql, map[string]string{"odps.namespace.schema": "true"}, nil)
 }
 
 // Name return the schema name

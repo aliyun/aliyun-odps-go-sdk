@@ -19,7 +19,6 @@ package security
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"encoding/xml"
 	"io/ioutil"
 	"net/http"
@@ -77,10 +76,7 @@ func (sm *Manager) CheckPermissionV1(p Permission) (*PermissionCheckResult, erro
 		PermissionCheckResult
 	}
 
-	body, err := json.Marshal(p)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
+	body, _ := p.MarshalJSON()
 
 	req, err := client.NewRequest(common.HttpMethod.PostMethod, resource, bytes.NewReader(body))
 	if err != nil {

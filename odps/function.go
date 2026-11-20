@@ -2,14 +2,12 @@ package odps
 
 import (
 	"encoding/xml"
-	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/pkg/errors"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 )
 
 // Function is a function
@@ -72,8 +70,7 @@ func (f *Function) Load() error {
 // Exist check if the function exists
 func (f *Function) Exist() (bool, error) {
 	err := f.Load()
-	var httpErr restclient.HttpError
-	if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+	if isNotFound(err) {
 		return false, nil
 	}
 

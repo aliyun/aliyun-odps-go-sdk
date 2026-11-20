@@ -53,6 +53,9 @@ func NewPermission(
 }
 
 func (perm *Permission) SetColumns(columns []string) {
+	if perm.Params == nil {
+		perm.Params = make(map[string]string)
+	}
 	j, _ := json.Marshal(columns)
 	perm.Params["odps:SelectColumn"] = string(j)
 }

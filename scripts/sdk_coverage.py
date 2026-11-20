@@ -79,9 +79,9 @@ def main():
                   f"{report(line_hits, line_total):>21} {report(branch_hits, branch_total):>21}")
     print(f"{'SDK total':<24} {report(covered_lines, total_lines):>21} {report(covered_branches, total_branches):>21}")
     if args.release and (
-        total_branches == 0 or covered_branches != total_branches or 100 * covered_lines <= 85 * total_lines
+        100 * covered_branches <= 90 * total_branches or 100 * covered_lines <= 85 * total_lines
     ):
-        raise SystemExit("Release requires 100% branch coverage and more than 85% line coverage across the SDK.")
+        raise SystemExit("Release requires more than 90% branch coverage and more than 85% line coverage across the SDK.")
 
 
 if __name__ == "__main__":

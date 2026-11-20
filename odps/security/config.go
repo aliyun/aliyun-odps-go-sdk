@@ -17,7 +17,6 @@
 package security
 
 import (
-	"bytes"
 	"encoding/xml"
 	"net/url"
 
@@ -36,6 +35,7 @@ type Config struct {
 }
 
 type securityConfigModel struct {
+	XMLName                          xml.Name `xml:"SecurityConfiguration"`
 	CheckPermissionUsingAcl          bool
 	CheckPermissionUsingPolicy       bool
 	LabelSecurity                    bool
@@ -55,8 +55,9 @@ type securityConfigModel struct {
 	EnableDownloadPrivilege          bool
 	GrammarVersion                   string
 	ProjectProtection                struct {
-		Protected  string
-		Exceptions string
+		Protected       string `xml:"Protected,attr,omitempty"`
+		LegacyProtected string `xml:"Protected,omitempty"`
+		Exceptions      string
 	} `xml:"ProjectProtection"`
 }
 
@@ -90,6 +91,10 @@ func (sc *Config) Load() error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
+	if model.ProjectProtection.Protected == "" {
+		model.ProjectProtection.Protected = model.ProjectProtection.LegacyProtected
+	}
+	model.ProjectProtection.LegacyProtected = ""
 	sc.model = model
 	sc.beLoaded = true
 	return nil
@@ -103,21 +108,11 @@ func (sc *Config) Update(supervisionToken string) error {
 	queryArgs := make(url.Values, 1)
 	queryArgs.Set("security_configuration", "")
 
-	bodyXml, err := xml.Marshal(sc.model)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	req, err := client.NewRequestWithUrlQuery(common.HttpMethod.PutMethod, resource, bytes.NewReader(bodyXml), queryArgs)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
+	var headers map[string]string
 	if supervisionToken != "" {
-		req.Header.Set(common.HttpHeaderOdpsSupervisionToken, supervisionToken)
+		headers = map[string]string{common.HttpHeaderOdpsSupervisionToken: supervisionToken}
 	}
-
-	return errors.WithStack(client.DoWithParseFunc(req, nil))
+	return client.DoXmlWithParseFunc(common.HttpMethod.PutMethod, resource, queryArgs, headers, &sc.model, nil)
 }
 
 func (sc *Config) CheckPermissionUsingAcl() bool {

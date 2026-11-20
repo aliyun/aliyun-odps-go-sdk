@@ -48,6 +48,31 @@ import (
 // CredentialModel.
 func strp(value string) *string { return &value }
 
+func TestApplicationSigningHeadersAndProviderSigningFailure(t *testing.T) {
+	const endpoint = "http://example.test/api"
+	request := newSignedRequest(t, http.MethodGet, endpoint+"/projects/p")
+	app := NewAppAccount("id", "secret")
+	if err := app.SignRequest(request, endpoint); err != nil {
+		t.Fatal(err)
+	}
+	assert.Contains(t, request.Header.Get(common.HttpHeaderAuthorization), "ODPS id:")
+	assert.Contains(t, request.Header.Get(common.HttpHeaderAppAuthentication), "account_provider:aliyun,signature_method:hmac-sha1,access_id:id,signature:")
+
+	request = newSignedRequest(t, http.MethodGet, endpoint+"/projects/p")
+	appSTS := NewAppStsAccount("id", "secret", "token")
+	if err := appSTS.SignRequest(request, endpoint); err != nil {
+		t.Fatal(err)
+	}
+	assert.Contains(t, request.Header.Get(common.HttpHeaderSTSAuthentication), "access_id:id,signature:")
+	assert.Equal(t, "token", request.Header.Get(common.HttpHeaderSTSToken))
+
+	provider := NewStsAccountWithProvider(&fakeCredentialProvider{model: generation{accessId: "id", accessKey: "secret", token: "token"}.model()})
+	request = newSignedRequest(t, http.MethodGet, endpoint+"/projects/p")
+	assert.ErrorContains(t, provider.SignRequest(request, "http://%invalid"), "invalid signing endpoint")
+	assert.Empty(t, request.Header.Get(common.HttpHeaderAuthorization))
+	assert.Empty(t, request.Header.Get(common.HttpHeaderAuthorizationSTSToken))
+}
+
 // fixedDate is the Date header these tests sign with. The signature covers it,
 // so a fixed value is what lets a test compare "the same request signed with
 // generation N" against the account's own output.

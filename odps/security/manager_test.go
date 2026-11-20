@@ -3,6 +3,7 @@
 package security_test
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -88,7 +89,8 @@ func TestSecurityManagerLoadsAndUpdatesConfig(t *testing.T) {
 			body, err := io.ReadAll(r.Body)
 			assert.NoError(t, err)
 			assert.Contains(t, string(body), "<EnableDownloadPrivilege>true</EnableDownloadPrivilege>")
-			assert.Contains(t, string(body), "<Protected>false</Protected>")
+			assert.Contains(t, string(body), "<SecurityConfiguration>")
+			assert.Contains(t, string(body), "<ProjectProtection Protected=\"false\">")
 			w.WriteHeader(http.StatusOK)
 		default:
 			t.Errorf("unexpected method %s", r.Method)
@@ -127,6 +129,64 @@ func TestSecurityManagerLoadsAndUpdatesConfig(t *testing.T) {
 	require.False(t, updated.ProjectProtection())
 	require.True(t, updated.CheckDownloadPrivilege())
 	require.Equal(t, int32(2), fullReads.Load())
+}
+
+func TestSecurityConfigurationUsesProtectedAttribute(t *testing.T) {
+	var updates atomic.Int32
+	manager := testManager(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.True(t, r.URL.Query().Has("security_configuration"))
+		if r.Method == http.MethodGet {
+			fmt.Fprint(w, `<SecurityConfiguration><ProjectProtection Protected="true"><Exceptions>policy</Exceptions></ProjectProtection></SecurityConfiguration>`)
+			return
+		}
+		assert.Equal(t, http.MethodPut, r.Method)
+		assert.Empty(t, r.Header.Get("odps-x-supervision-token"))
+		var body struct {
+			XMLName           xml.Name `xml:"SecurityConfiguration"`
+			ProjectProtection struct {
+				Protected  string `xml:"Protected,attr"`
+				Exceptions string
+			}
+		}
+		assert.NoError(t, xml.NewDecoder(r.Body).Decode(&body))
+		assert.Equal(t, "false", body.ProjectProtection.Protected)
+		assert.Empty(t, body.ProjectProtection.Exceptions)
+		if updates.Add(1) == 2 {
+			w.WriteHeader(http.StatusForbidden)
+		}
+	})
+	config, err := manager.GetSecurityConfig(false)
+	require.NoError(t, err)
+	require.True(t, config.ProjectProtection())
+	require.Equal(t, "policy", config.ProjectProtectionExceptionPolicy())
+	config.DisableProjectProtection()
+	require.NoError(t, manager.SetSecurityConfig(config, ""))
+	require.Error(t, manager.SetSecurityConfig(config, ""))
+}
+
+func TestSecurityRequestsPropagateInvalidEndpointAndTokenRejection(t *testing.T) {
+	client := restclient.NewOdpsRestClient(account2.NewAliyunAccount("id", "secret"), "http://%invalid")
+	manager := security.NewSecurityManager(client, "fixture")
+	permission := security.Permission{ProjectName: "fixture", ObjectType: security.ObjectTypeTable,
+		ObjectName: "sample", ActionType: security.ActionTypeSelect}
+	permission.SetColumns([]string{"id"})
+	require.Equal(t, `["id"]`, permission.Params["odps:SelectColumn"])
+	_, err := manager.CheckPermissionV1(permission)
+	require.ErrorContains(t, err, "invalid URL escape")
+	require.ErrorContains(t, manager.SetPolicy("{}"), "invalid URL escape")
+	_, err = manager.GenerateAuthorizationTokenContext(context.Background(), "{}")
+	require.ErrorContains(t, err, "invalid URL escape")
+	config := security.NewSecurityConfig(client, false, "fixture")
+	require.ErrorContains(t, config.Update(""), "invalid URL escape")
+
+	rejecting := testManager(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.True(t, r.URL.Query().Has("sign_bearer_token"))
+		w.WriteHeader(http.StatusForbidden)
+	})
+	_, err = rejecting.GenerateAuthorizationToken("{}")
+	var response restclient.HttpError
+	require.ErrorAs(t, err, &response)
+	require.Equal(t, http.StatusForbidden, response.StatusCode)
 }
 
 func TestSecurityManagerListsUsersAndRoles(t *testing.T) {
