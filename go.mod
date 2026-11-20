@@ -1,6 +1,6 @@
 module github.com/aliyun/aliyun-odps-go-sdk
 
-go 1.26.0
+go 1.26.11
 
 require (
 	github.com/aliyun/credentials-go v1.3.10

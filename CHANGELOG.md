@@ -2,7 +2,7 @@
 
 ## 1.0.0 (unreleased)
 
-- Require Go 1.26 and use Apache Arrow Go v18 for public Arrow types.
+- Require Go 1.26.11 or later and use Apache Arrow Go v18 for public Arrow types.
 - Add Storage API V2 clients for reading SQL instance and table results and for staging, resuming, committing, and aborting batch writes.
 - Validate all Storage API V2 stream versions before explicit commits and use the Storage quota when discovering the Tunnel endpoint.
 - Match the Storage API V2 wire format for table snapshots, Arrow streams, and write-session resumption.

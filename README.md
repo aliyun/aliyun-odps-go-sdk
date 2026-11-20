@@ -5,14 +5,14 @@ Use this SDK to submit SQL, manage MaxCompute metadata, and transfer data. The
 for Protobuf transfers.
 
 # Install
-Go 1.26 or later is required.
+Go 1.26.11 or later is required.
 ```shell
 go get github.com/aliyun/aliyun-odps-go-sdk
 ```
 
 ## Tests
 
-Run `bash scripts/test-emulator.sh` with Go 1.26, Docker, and Python 3.9 or later.
+Run `bash scripts/test-emulator.sh` with Go 1.26.11 or later, Docker, and Python 3.9 or later.
 The script builds a pinned MaxCompute Emulator and starts two loopback fixtures
 for protocol and strict authentication tests. It builds the examples and
 reports source line coverage and Gobco branch coverage across the SDK and Tea
