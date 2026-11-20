@@ -23,10 +23,9 @@ import (
 )
 
 type PositionArgQuery struct {
-	query        string
 	queryPieces  []string
 	argPositions []int
-	lastArgSet   int
+	argCount     int
 }
 
 func NewPositionArgQuery(query string) PositionArgQuery {
@@ -47,40 +46,29 @@ func NewPositionArgQuery(query string) PositionArgQuery {
 		s = index[1]
 	}
 
-	if s < len(query)-1 {
+	if s < len(query) {
 		queryPieces = append(queryPieces, query[s:])
 	}
 
 	return PositionArgQuery{
-		query:        query,
 		queryPieces:  queryPieces,
 		argPositions: argPositions,
 	}
 }
 
-func (p *PositionArgQuery) SetArgs(args ...interface{}) {
-	n := min(len(args), len(p.argPositions))
-
-	for i := 0; i < n; i++ {
+func (p *PositionArgQuery) SetArgs(args ...any) {
+	p.argCount = len(args)
+	for i := range min(len(args), len(p.argPositions)) {
 		arg := args[i]
 		argPosition := p.argPositions[i]
 		p.queryPieces[argPosition] = fmt.Sprintf("%v", arg)
 	}
-
-	p.lastArgSet = n
 }
 
 func (p *PositionArgQuery) toSql() (string, error) {
-	if p.lastArgSet < len(p.argPositions) {
-		return "", fmt.Errorf("%dth arg is not set for \"%s\"", p.lastArgSet+1, p.query)
+	if p.argCount != len(p.argPositions) {
+		return "", fmt.Errorf("expected %d positional SQL arguments, got %d", len(p.argPositions), p.argCount)
 	}
 
 	return strings.Join(p.queryPieces, ""), nil
-}
-
-func min(x, y int) int {
-	if x <= y {
-		return x
-	}
-	return y
 }

@@ -11,7 +11,7 @@ BLOCK = re.compile(r"(.+):(\d+)\.(\d+),(\d+)\.(\d+) (\d+) (\d+)")
 BRANCH_SUMMARY = re.compile(r"^Branch coverage: (\d+)/(\d+)$", re.MULTILINE)
 
 
-def line_counts(profile, module):
+def line_counts(profile, module, directory):
     """Count each source line once, even when it contains overlapping Go blocks."""
     counts = defaultdict(dict)
     sources = {}
@@ -21,7 +21,7 @@ def line_counts(profile, module):
         if path == filename or int(statements) == 0:
             continue
         if path not in sources:
-            sources[path] = Path(path).read_bytes().splitlines()
+            sources[path] = (directory / path).read_bytes().splitlines()
         lines = sources[path]
         start_line, start_col, end_line, end_col = map(int, (start_line, start_col, end_line, end_col))
         package = str(Path(path).parent)
@@ -59,17 +59,24 @@ def main():
     parser.add_argument("reports", type=Path)
     parser.add_argument("--release", action="store_true")
     args = parser.parse_args()
-    module = subprocess.check_output(["go", "list", "-m"], text=True).strip()
-    paths = subprocess.check_output(["go", "list", "./..."], text=True).splitlines()
-    packages = [path.removeprefix(module + "/") for path in paths]
-    lines = line_counts(args.reports / "go.cover", module)
-    branches = branch_counts(args.reports, packages)
-
+    covered_lines = total_lines = covered_branches = total_branches = 0
     print(f"{'Package':<24} {'Source lines':>21} {'Gobco branches':>21}")
-    for package in packages:
-        print(f"{package:<24} {report(*lines.get(package, (0, 0))):>21} {report(*branches[package]):>21}")
-    covered_lines, total_lines = map(sum, zip(*lines.values()))
-    covered_branches, total_branches = map(sum, zip(*branches.values()))
+    for directory in (Path("."), Path("tea")):
+        output = args.reports / directory
+        module = subprocess.check_output(["go", "list", "-m"], text=True, cwd=directory).strip()
+        paths = subprocess.check_output(["go", "list", "./..."], text=True, cwd=directory).splitlines()
+        packages = [path.removeprefix(module + "/") for path in paths]
+        lines = line_counts(output / "go.cover", module, directory)
+        branches = branch_counts(output, packages)
+        for package in packages:
+            line_hits, line_total = lines.get(package, (0, 0))
+            branch_hits, branch_total = branches[package]
+            covered_lines += line_hits
+            total_lines += line_total
+            covered_branches += branch_hits
+            total_branches += branch_total
+            print(f"{str(directory / package):<24} "
+                  f"{report(line_hits, line_total):>21} {report(branch_hits, branch_total):>21}")
     print(f"{'SDK total':<24} {report(covered_lines, total_lines):>21} {report(covered_branches, total_branches):>21}")
     if args.release and (
         total_branches == 0 or covered_branches != total_branches or 100 * covered_lines <= 85 * total_lines

@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"net/http"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -150,6 +151,10 @@ func TestProtobufPayloadSizeAndVarintBoundaries(t *testing.T) {
 	truncated = append(truncated, 'a')
 	_, err := NewProtocStreamReader(bytes.NewReader(truncated)).ReadBytes()
 	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+	transportErr := errors.New("download stream interrupted")
+	failed := io.MultiReader(bytes.NewReader(truncated), iotest.ErrReader(transportErr))
+	_, err = NewProtocStreamReader(failed).ReadBytes()
+	require.ErrorIs(t, err, transportErr)
 	_, err = NewProtocStreamReader(bytes.NewReader(protowire.AppendVarint(nil, math.MaxUint64))).ReadBytes()
 	require.ErrorContains(t, err, "length exceeds int64")
 	_, err = NewProtocStreamReader(bytes.NewReader(protowire.AppendVarint(nil, math.MaxUint32+1))).ReadUInt32()
@@ -158,6 +163,31 @@ func TestProtobufPayloadSizeAndVarintBoundaries(t *testing.T) {
 	require.ErrorContains(t, err, "overflows")
 	_, _, err = NewProtocStreamReader(bytes.NewReader([]byte{0})).ReadTag()
 	require.ErrorContains(t, err, "failed to read a tag")
+}
+
+func TestProtobufPrimitiveReaders(t *testing.T) {
+	negative64 := int64(-257)
+	negative32 := int32(negative64)
+	signed := protowire.AppendVarint(nil, uint64(negative64))
+	zigzag := protowire.AppendVarint(nil, protowire.EncodeZigZag(negative64))
+	checkProtobufPrimitive(t, []byte{1}, (*ProtocStreamReader).ReadBool, true)
+	checkProtobufPrimitive(t, signed, (*ProtocStreamReader).ReadInt32, negative32)
+	checkProtobufPrimitive(t, signed, (*ProtocStreamReader).ReadInt64, negative64)
+	checkProtobufPrimitive(t, zigzag, (*ProtocStreamReader).ReadSInt32, negative32)
+	checkProtobufPrimitive(t, protowire.AppendFixed32(nil, uint32(negative32)), (*ProtocStreamReader).ReadSFixed32, negative32)
+	checkProtobufPrimitive(t, protowire.AppendFixed64(nil, uint64(negative64)), (*ProtocStreamReader).ReadSFixed64, negative64)
+	checkProtobufPrimitive(t, protowire.AppendVarint(nil, math.MaxUint32), (*ProtocStreamReader).ReadUInt32, uint32(math.MaxUint32))
+}
+
+func checkProtobufPrimitive[T comparable](t *testing.T, payload []byte, read func(*ProtocStreamReader) (T, error), want T) {
+	t.Helper()
+	got, err := read(NewProtocStreamReader(bytes.NewReader(payload)))
+	require.NoError(t, err)
+	require.Equal(t, want, got)
+	for n := range len(payload) {
+		_, err := read(NewProtocStreamReader(bytes.NewReader(payload[:n])))
+		require.Error(t, err, "truncated at byte %d of %d", n, len(payload))
+	}
 }
 
 func TestProtobufRecordAndTrailerValidation(t *testing.T) {

@@ -51,6 +51,15 @@ func TestEmulatorDriverReadsProtobufResults(t *testing.T) {
 	require.False(t, rows.Next())
 	require.NoError(t, rows.Err())
 
+	query := "select cast(? as bigint) + cast(? as bigint);"
+	var sum int64
+	require.NoError(t, db.QueryRowContext(t.Context(), query, int64(31), int64(11)).Scan(&sum))
+	require.EqualValues(t, 42, sum)
+	_, err = db.ExecContext(t.Context(), query, int64(31))
+	require.ErrorContains(t, err, "expected 2 positional SQL arguments, got 1")
+	_, err = db.ExecContext(t.Context(), query, int64(31), int64(11), int64(0))
+	require.ErrorContains(t, err, "expected 2 positional SQL arguments, got 3")
+
 	_, err = db.QueryContext(t.Context(), "select from")
 	require.Error(t, err)
 }

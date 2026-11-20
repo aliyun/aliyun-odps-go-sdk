@@ -107,7 +107,7 @@ func buildCanonicalResource(resource *string, params map[string]*string) string 
 				builder.WriteString("&")
 			}
 			builder.WriteString(key)
-			if value, exists := params[key]; exists && *value != "" {
+			if value := params[key]; value != nil && *value != "" {
 				builder.WriteString("=" + *value)
 			}
 		}

@@ -14,23 +14,52 @@ reports="$(mktemp -d "$report_root/odps-sdk-coverage.XXXXXX")"
 reports="$(cd "$reports" && pwd)"
 echo "Test reports: $reports"
 
-image='maxcompute/maxcompute-emulator:1.2.0@sha256:c4f708449e309cdb6900641b7d90097e6c9b2633a943dac382c27683fc3daf5f'
-container="$(docker run --rm --detach --platform linux/amd64 \
-  --publish 127.0.0.1::8080 "$image" \
-  --listen 0.0.0.0:8080 --test-mode --test-network --max-sessions 1024)"
-trap 'docker stop "$container" >/dev/null || true' EXIT
-endpoint="http://$(docker port "$container" 8080/tcp)"
-curl --fail --silent --show-error --max-time 3 --retry 10 --retry-delay 1 --retry-all-errors "$endpoint/readyz"
-printf '\n'
+source_commit='6ad22011621665e2debad2ea7648b0b15d423db8'
+platform="${SDK_EMULATOR_PLATFORM:-linux/amd64}"
+image="${SDK_EMULATOR_IMAGE:-maxcompute-emulator:sdk-${source_commit:0:12}}"
+if [[ -z "${SDK_EMULATOR_IMAGE:-}" ]]; then
+  docker build --platform "$platform" --target release -t "$image" \
+    "https://github.com/dingxin-tech/maxcompute-emulator.git#$source_commit"
+fi
 
-export MAXCOMPUTE_EMULATOR_ENDPOINT="$endpoint"
+container=
+strict_container=
+cleanup() {
+  if [[ -n "$strict_container" ]]; then docker stop "$strict_container" >/dev/null || true; fi
+  if [[ -n "$container" ]]; then docker stop "$container" >/dev/null || true; fi
+}
+trap cleanup EXIT
+
+container="$(docker run --rm --detach --platform "$platform" --publish 127.0.0.1::8080 \
+  "$image" --listen 0.0.0.0:8080 --test-mode --test-network --max-sessions 1024)"
+
+cat > "$reports/strict-auth.json" <<'EOF'
+{
+  "fixture-go-sdk": {
+    "secret": "local-go-sdk-fixture",
+    "read": ["test_project.*"],
+    "write": ["test_project.*"]
+  }
+}
+EOF
+chmod 644 "$reports/strict-auth.json"
+strict_container="$(docker run --rm --detach --platform "$platform" --publish 127.0.0.1::8080 \
+  --mount "type=bind,source=$reports/strict-auth.json,target=/fixture-auth.json,readonly" \
+  "$image" --listen 0.0.0.0:8080 --test-mode --test-network \
+  --auth-mode strict --auth-config /fixture-auth.json --quotas go-batch)"
+
+export MAXCOMPUTE_EMULATOR_ENDPOINT="http://$(docker port "$container" 8080/tcp)"
+export MAXCOMPUTE_EMULATOR_AUTH_ENDPOINT="http://$(docker port "$strict_container" 8080/tcp)"
+for endpoint in "$MAXCOMPUTE_EMULATOR_ENDPOINT" "$MAXCOMPUTE_EMULATOR_AUTH_ENDPOINT"; do
+  curl --fail --silent --show-error --max-time 3 --retry 10 --retry-delay 1 --retry-all-errors "$endpoint/readyz"
+  printf '\n'
+done
+
 export GOTOOLCHAIN=local GOWORK=off
 unset MAXCOMPUTE_LIVE_TESTS ALIBABA_CLOUD_ACCESS_KEY_ID ALIBABA_CLOUD_ACCESS_KEY_SECRET ALIBABA_CLOUD_SECURITY_TOKEN
 unset odps_endpoint tunnel_endpoint tunnel_odps_endpoint
 
 go build -mod=readonly ./...
-go test -mod=readonly -count=1 -timeout=90s -race -covermode=atomic \
-  -coverpkg=./... -coverprofile="$reports/go.cover" ./...
 (cd examples && go build -mod=readonly ./...)
 
 branch_tool="${SDK_GOBCO:-$reports/tools/gobco}"
@@ -39,17 +68,25 @@ if [[ ! -x "$branch_tool" ]]; then
   branch_tool="$reports/tools/gobco"
 fi
 
-module="$(go list -m)"
-packages="$(go list ./...)"
-while IFS= read -r package; do
-  path="${package#"$module/"}"
-  log="$reports/${path//\//-}.branches.log"
-  stats="$reports/${path//\//-}.branches.json"
-  if ! "$branch_tool" -branch -stats "$stats" -test=-count=1 -test=-timeout=90s "./$path" > "$log" 2>&1; then
-    cat "$log" >&2
-    echo "Branch coverage failed for $path" >&2
-    exit 1
-  fi
-done <<< "$packages"
+run_coverage() {
+  local output="$1" module packages package path log stats
+  mkdir -p "$output"
+  go test -mod=readonly -count=1 -timeout=90s -race -covermode=atomic \
+    -coverpkg=./... -coverprofile="$output/go.cover" ./...
+  module="$(go list -m)"
+  packages="$(go list ./...)"
+  while IFS= read -r package; do
+    path="${package#"$module/"}"
+    log="$output/${path//\//-}.branches.log"
+    stats="$output/${path//\//-}.branches.json"
+    if ! "$branch_tool" -branch -stats "$stats" -test=-count=1 -test=-timeout=90s "./$path" > "$log" 2>&1; then
+      cat "$log" >&2
+      echo "Branch coverage failed for $package" >&2
+      return 1
+    fi
+  done <<< "$packages"
+}
 
+run_coverage "$reports"
+(cd tea && run_coverage "$reports/tea")
 python3 scripts/sdk_coverage.py "$reports" "$@"

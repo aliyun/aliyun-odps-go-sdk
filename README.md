@@ -13,8 +13,10 @@ go get github.com/aliyun/aliyun-odps-go-sdk
 ## Tests
 
 Run `bash scripts/test-emulator.sh` with Go 1.26, Docker, and Python 3.9 or later.
-The script uses a pinned MaxCompute Emulator on loopback, builds the examples,
-and reports source line coverage and Gobco branch coverage for the SDK module.
+The script builds a pinned MaxCompute Emulator and starts two loopback fixtures
+for protocol and strict authentication tests. It builds the examples and
+reports source line coverage and Gobco branch coverage across the SDK and Tea
+modules. Set SDK_EMULATOR_IMAGE to use an already built candidate image.
 Gobco measures each package's tests and does not instrument `select` cases.
 Run `bash scripts/test-emulator.sh --release` before tagging. The release check
 requires 100% reported branch coverage and more than 85% source line coverage.

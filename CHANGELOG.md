@@ -11,6 +11,9 @@
 - Accept successful creation and replacement responses for multipart resource uploads.
 - Preserve a resource's name when the metadata response omits it.
 - Return an explicit error for unsupported `database/sql` transactions and prepared statements.
+- Bind multiple positional `database/sql` arguments in order and reject mismatched argument counts.
+- Serialize credential refresh within each Aliyun STS account used by concurrent requests.
+- Treat a nil Tea API query value as a flag during request signing.
 - Apply SQL context cancellation to HTTP requests and retry delays, and preserve the instance ID when available.
 - Add MaxCompute Emulator regressions for Arrow, offset retries, and lost write and commit responses.
 

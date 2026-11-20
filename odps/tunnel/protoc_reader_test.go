@@ -20,11 +20,15 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 )
+
+// The golden packets were captured with the client running in UTC+8.
+var protobufFixtureLocation = time.FixedZone("UTC+8", 8*60*60)
 
 var structTypeProtocData = []byte{
 	0x0a, 0x00, 0x16, 0x00, 0x05, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x00, 0xc8, 0x01, 0x00, 0x00,
@@ -232,9 +236,15 @@ func TestProtocReadSimpleType(t *testing.T) {
 		for i, n := 0, record.Len(); i < n; i++ {
 			got := record[i]
 			gotStr := got.String()
+			switch temporal := got.(type) {
+			case data.DateTime:
+				gotStr = temporal.Time().In(protobufFixtureLocation).Format(data.DateTimeFormat)
+			case data.Timestamp:
+				gotStr = temporal.Time().In(protobufFixtureLocation).Format(data.TimeStampFormat)
+			}
 			expectedStr := expected[i].value
 
-			if i != 5 && i != 6 && strings.TrimSpace(got.String()) != expected[i].value {
+			if i != 5 && i != 6 && strings.TrimSpace(gotStr) != expectedStr {
 				t.Fatalf(
 					"%dth column should be %s, but get %s",
 					i+1, expectedStr, gotStr,

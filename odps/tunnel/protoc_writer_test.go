@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
@@ -151,8 +152,9 @@ func TestEncodeProtocSimpleType(t *testing.T) {
 	char, _ := data.NewVarChar(100, "char")
 	s := data.String("alibaba")
 	date, _ := data.NewDate("2022-10-19")
-	datetime, _ := data.NewDateTime("2022-10-19 17:00:00")
-	timestamp, _ := data.NewTimestamp("2022-10-19 17:00:00.000")
+	instant := time.Date(2022, time.October, 19, 17, 0, 0, 0, protobufFixtureLocation)
+	datetime := data.DateTime(instant)
+	timestamp := data.Timestamp(instant)
 
 	structData := data.NewStructWithTyp(stColumnType)
 	arrayType := stColumnType.FieldType("arr").(datatype.ArrayType)
@@ -225,7 +227,7 @@ func TestEncodeProtocComplexType(t *testing.T) {
 
 	pw := newRecordProtocWriter(bw, columns, false)
 	name := data.String("alibaba")
-	birthday, _ := data.NewDateTime("2022-10-19 17:00:00")
+	birthday := data.DateTime(time.Date(2022, time.October, 19, 17, 0, 0, 0, protobufFixtureLocation))
 	extra := data.NewStructWithTyp(extraColumnType)
 	arrayType := extraColumnType.FieldType("address").(datatype.ArrayType)
 	address := data.NewArrayWithType(arrayType)

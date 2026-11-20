@@ -244,11 +244,12 @@ func namedArgQueryToSql(query string, args []driver.NamedValue) (string, error) 
 }
 
 func positionArgQueryToSql(query string, args []driver.Value) (string, error) {
-	positionArgQuery := NewPositionArgQuery(query)
-	for _, arg := range args {
-		positionArgQuery.SetArgs(arg)
+	values := make([]any, len(args))
+	for i, arg := range args {
+		values[i] = arg
 	}
-
+	positionArgQuery := NewPositionArgQuery(query)
+	positionArgQuery.SetArgs(values...)
 	return positionArgQuery.toSql()
 }
 

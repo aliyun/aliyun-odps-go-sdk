@@ -19,6 +19,7 @@ package account
 import (
 	"errors"
 	"net/http"
+	"sync"
 
 	"github.com/aliyun/credentials-go/credentials"
 
@@ -115,12 +116,13 @@ func stsTokenHeaderValue(cred *credentials.CredentialModel) (string, bool) {
 }
 
 type stsAliyunCredentialProvider struct {
+	mu               sync.Mutex
 	aliyunCredential credentials.Credential
 	regionId         string
 }
 
 func (sp *stsAliyunCredentialProvider) _signRequest(req *http.Request, endpoint string) error {
-	cred, err := sp.aliyunCredential.GetCredential()
+	cred, err := sp.Credential()
 	if err != nil {
 		return err
 	}
@@ -129,6 +131,9 @@ func (sp *stsAliyunCredentialProvider) _signRequest(req *http.Request, endpoint 
 }
 
 func (sp *stsAliyunCredentialProvider) Credential() (*credentials.CredentialModel, error) {
+	// The credentials-go providers may mutate their cache during refresh.
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
 	return sp.aliyunCredential.GetCredential()
 }
 
