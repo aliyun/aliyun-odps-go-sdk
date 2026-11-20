@@ -101,3 +101,33 @@ func TestGoTypeConversionRejectsUnsupportedNestedFields(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, datatype.NewArrayType(datatype.SmallIntType), arr)
 }
+
+func TestGoTypeConversionRequiresValuesForParameterizedTypes(t *testing.T) {
+	for _, concrete := range []datatype.DataType{
+		datatype.NewDecimalType(18, 4),
+		datatype.NewCharType(12),
+		datatype.NewArrayType(datatype.StringType),
+	} {
+		_, err := datatype.TryConvertGoToOdpsType(reflect.TypeOf(concrete))
+		require.ErrorContains(t, err, "concrete DataType value")
+		inferred, err := datatype.TryConvertGoToOdpsType(concrete)
+		require.NoError(t, err)
+		require.Equal(t, concrete, inferred)
+	}
+	inferred, err := datatype.TryConvertGoToOdpsType(reflect.TypeFor[int]())
+	require.NoError(t, err)
+	require.Equal(t, datatype.IntType, inferred)
+}
+
+func TestTypeEqualityWithMissingAndNullTypes(t *testing.T) {
+	require.False(t, datatype.IsTypeEqual(nil, datatype.IntType))
+	require.False(t, datatype.IsTypeEqual(datatype.IntType, nil))
+	require.False(t, datatype.IsTypeEqual(datatype.NullType, datatype.IntType))
+	require.True(t, datatype.IsTypeEqual(datatype.NullType, datatype.NullType))
+	for _, concrete := range []datatype.DataType{
+		datatype.NewArrayType(datatype.IntType), datatype.NewMapType(datatype.StringType, datatype.IntType),
+	} {
+		require.True(t, datatype.IsTypeEqual(concrete, datatype.NullType))
+		require.True(t, datatype.IsTypeEqual(datatype.NullType, concrete))
+	}
+}

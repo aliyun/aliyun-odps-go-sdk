@@ -18,7 +18,6 @@ package datatype
 
 import (
 	"reflect"
-	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -35,10 +34,7 @@ func TryConvertGoToOdpsType(i interface{}) (DataType, error) {
 	}
 
 	if t.Implements(odpsDataType) {
-		switch strings.ToLower(t.Name()) {
-		case "char", "varchar", "decimal", "array", "map", "struct":
-			return nil, errors.Errorf("char, varchar, decimal need extra parameter to specific concrete type")
-		}
+		return nil, errors.Errorf("a concrete DataType value is required for %s", t)
 	}
 
 	if t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Uint8 {
@@ -50,7 +46,7 @@ func TryConvertGoToOdpsType(i interface{}) (DataType, error) {
 		return BooleanType, nil
 	case reflect.Int8:
 		return TinyIntType, nil
-	case reflect.Int32:
+	case reflect.Int, reflect.Int32:
 		return IntType, nil
 	case reflect.Int16:
 		return SmallIntType, nil

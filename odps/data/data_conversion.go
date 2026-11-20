@@ -17,6 +17,7 @@
 package data
 
 import (
+	"math"
 	"reflect"
 
 	"github.com/pkg/errors"
@@ -47,7 +48,11 @@ func tryConvertGoToOdpsData(v reflect.Value) (Data, error) {
 	case reflect.Int8:
 		return TinyInt(v.Int()), nil
 	case reflect.Int, reflect.Int32:
-		return Int(v.Int()), nil
+		number := v.Int()
+		if number < math.MinInt32 || number > math.MaxInt32 {
+			return nil, errors.Errorf("value %d is out of range for INT (use int64 for BIGINT)", number)
+		}
+		return Int(number), nil
 	case reflect.Int16:
 		return SmallInt(v.Int()), nil
 	case reflect.Int64:

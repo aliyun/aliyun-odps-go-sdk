@@ -262,14 +262,11 @@ func (s *Struct) fillGoStruct(target reflect.Value) error {
 			goData = dt
 		}
 
-		goDataT := reflect.TypeOf(goData)
-
-		if goDataT.AssignableTo(field.Type) {
-			fv.Set(reflect.ValueOf(goData))
-		}
-
-		if goDataT.ConvertibleTo(field.Type) {
-			fv.Set(reflect.ValueOf(goData).Convert(field.Type))
+		value := reflect.ValueOf(goData)
+		if value.Type().AssignableTo(field.Type) {
+			fv.Set(value)
+		} else if value.CanConvert(field.Type) {
+			fv.Set(value.Convert(field.Type))
 		}
 	}
 
