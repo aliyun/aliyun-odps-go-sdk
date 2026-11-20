@@ -324,13 +324,14 @@ func TestRestClientRetryContractTransportErrorKeepsOriginalError(t *testing.T) {
 	assert.False(t, stderrors.As(refusedErr, &httpErr))
 }
 
-// TestRestClientRetryContractTimeoutIsOneAttempt checks that a client timeout
-// or a request deadline bounds one attempt and is recognizable by callers.
+// TestRestClientRetryContractTimeoutIsOneAttempt pins that a timeout bounds the
+// call once. Client timeouts retain net/http's timeout classification, while
+// an explicit request-context deadline remains comparable to DeadlineExceeded.
 func TestRestClientRetryContractTimeoutIsOneAttempt(t *testing.T) {
-	t.Run("HTTP client timeout", func(t *testing.T) {
-		release, hits := retryContractBlockingServer(t)
+	t.Run("client timeout remains a transport timeout", func(t *testing.T) {
+		endpoint, hits := retryContractBlockingServer(t)
 
-		client := NewOdpsRestClient(MockAccount{}, release)
+		client := NewOdpsRestClient(MockAccount{}, endpoint)
 		client.HttpTimeout = 150 * time.Millisecond
 
 		var decoded struct {
@@ -347,7 +348,10 @@ func TestRestClientRetryContractTimeoutIsOneAttempt(t *testing.T) {
 		assert.Less(t, elapsed, 2*time.Second,
 			"one attempt at HttpTimeout=150ms; a longer call would mean an implicit retry")
 		assert.Equal(t, int32(1), atomic.LoadInt32(hits))
-		assert.Contains(t, err.Error(), "deadline exceeded")
+		var transportErr *url.Error
+		if assert.True(t, stderrors.As(err, &transportErr), "timeout must retain the transport error") {
+			assert.True(t, transportErr.Timeout(), "transport error must report a timeout")
+		}
 		assert.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 
