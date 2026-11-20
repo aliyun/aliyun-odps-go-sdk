@@ -229,11 +229,11 @@ func (ts *Tables) CreateWithDataHub(
 	sb.WriteString(sql)
 
 	if schema.Lifecycle > 0 {
-		sb.WriteString(fmt.Sprintf("\nlifecycle %d", schema.Lifecycle))
+		_, _ = fmt.Fprintf(&sb, "\nlifecycle %d", schema.Lifecycle)
 	}
 
-	sb.WriteString(fmt.Sprintf("\ninto %d shards", shardNum))
-	sb.WriteString(fmt.Sprintf("\nhubLifecycle %d", hubLifecycle))
+	_, _ = fmt.Fprintf(&sb, "\ninto %d shards", shardNum)
+	_, _ = fmt.Fprintf(&sb, "\nhubLifecycle %d", hubLifecycle)
 	sb.WriteRune(';')
 
 	return ts.runDDL("SQLCreateTableTaskWithDataHub", sb.String(), ts.namespaceHints(nil), nil)

@@ -20,7 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -248,8 +248,7 @@ func (instance *Instance) GetTaskDetail(taskName string) ([]byte, error) {
 	}
 	err := client.GetWithParseFunc(resource, queryArgs, headers, func(res *http.Response) error {
 		var err error
-		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
-		body, err = ioutil.ReadAll(res.Body)
+		body, err = io.ReadAll(res.Body)
 		return errors.WithStack(err)
 	})
 
@@ -297,8 +296,7 @@ func (instance *Instance) GetTaskQuotaJson(taskName string) (string, error) {
 
 	err := client.GetWithParseFunc(instance.resourceUrl, queryArgs, nil, func(res *http.Response) error {
 		var err error
-		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
-		body, err = ioutil.ReadAll(res.Body)
+		body, err = io.ReadAll(res.Body)
 		return errors.WithStack(err)
 	})
 	if err != nil {
@@ -318,8 +316,7 @@ func (instance *Instance) GetCachedInfo() (string, error) {
 
 	err := client.GetWithParseFunc(instance.resourceUrl, queryArgs, nil, func(res *http.Response) error {
 		var err error
-		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
-		body, err = ioutil.ReadAll(res.Body)
+		body, err = io.ReadAll(res.Body)
 		return errors.WithStack(err)
 	})
 	if err != nil {

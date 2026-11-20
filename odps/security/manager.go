@@ -20,7 +20,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/xml"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -133,8 +133,7 @@ func (sm *Manager) getPolicy(resource, policyType string) ([]byte, error) {
 
 	err := client.GetWithParseFunc(resource, queryArgs, nil, func(res *http.Response) error {
 		var err error
-		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
-		body, err = ioutil.ReadAll(res.Body)
+		body, err = io.ReadAll(res.Body)
 		return errors.WithStack(err)
 	})
 

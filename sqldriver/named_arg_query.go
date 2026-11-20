@@ -30,7 +30,7 @@ type NamedArgQuery struct {
 }
 
 func NewNamedArgQuery(query string) NamedArgQuery {
-	rgx := regexp.MustCompile("@[a-zA-Z]\\w*")
+	rgx := regexp.MustCompile(`@[a-zA-Z]\w*`)
 	indexes := rgx.FindAllStringIndex(query, -1)
 	argNames := rgx.FindAllString(query, -1)
 

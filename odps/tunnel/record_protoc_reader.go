@@ -443,26 +443,25 @@ func (r *RecordProtocReader) readMap(t datatype.MapType) (*data.Map, error) {
 }
 
 func (r *RecordProtocReader) readStruct(t datatype.StructType) (*data.Struct, error) {
-	sd := data.NewStructWithTyp(t)
+	record := data.NewStructWithTyp(t)
 
-	for _, ft := range t.Fields {
-		fn := ft.Name
-		b, err := r.protocReader.ReadBool()
+	for _, field := range t.Fields {
+		isNull, err := r.protocReader.ReadBool()
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
 
-		if b {
-			sd.SetField(fn, nil)
-		} else {
-			fd, err := r.readField(ft.Type)
+		var value data.Data
+		if !isNull {
+			value, err = r.readField(field.Type)
 			if err != nil {
 				return nil, errors.WithStack(err)
 			}
-
-			sd.SetField(fn, fd)
+		}
+		if err := record.SetField(field.Name, value); err != nil {
+			return nil, errors.Wrapf(err, "invalid protobuf struct field %q", field.Name)
 		}
 	}
 
-	return sd, nil
+	return record, nil
 }

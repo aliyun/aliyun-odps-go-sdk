@@ -396,7 +396,7 @@ func (u *UploadSession) newUploadConnection(blockId int) (*httpConnection, error
 	resChan := make(chan resOrErr, 1)
 
 	go func() {
-		defer reader.Close()
+		defer func() { _ = reader.Close() }()
 		res, err := u.RestClient.Do(req)
 		resChan <- resOrErr{err: err, res: res}
 	}()

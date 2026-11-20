@@ -246,10 +246,8 @@ func (client *RestClient) NewRequestWithParamsAndHeaders(method, resource string
 	if err != nil {
 		return nil, err
 	}
-	if headers != nil {
-		for name, value := range headers {
-			req.Header.Set(name, value)
-		}
+	for name, value := range headers {
+		req.Header.Set(name, value)
 	}
 	return req, nil
 }

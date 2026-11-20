@@ -233,7 +233,7 @@ func NewTableResource(projectName, tableName string, partition string) TableReso
 
 func (r *TableResource) getSourceTableName() string {
 	if r.Model.SourceTableName == "" && r.OdpsIns != nil {
-		_ = r.Resource.Load()
+		_ = r.Load()
 	}
 	return r.Model.SourceTableName
 }

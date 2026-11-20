@@ -703,7 +703,7 @@ func (t *Table) generateChangeClusterInfoSQL(clusterInfo tableschema.ClusterInfo
 	if len(clusterInfo.SortCols) > 0 {
 		sb.WriteString(" sorted by (")
 		for index, sortCol := range clusterInfo.SortCols {
-			sb.WriteString(fmt.Sprintf("%s %s", common.QuoteRef(sortCol.Name), string(sortCol.Order)))
+			_, _ = fmt.Fprintf(&sb, "%s %s", common.QuoteRef(sortCol.Name), string(sortCol.Order))
 			if index < len(clusterInfo.SortCols)-1 {
 				sb.WriteString(", ")
 			}
@@ -711,7 +711,7 @@ func (t *Table) generateChangeClusterInfoSQL(clusterInfo tableschema.ClusterInfo
 		sb.WriteString(")")
 	}
 	if clusterInfo.BucketNum > 0 {
-		sb.WriteString(fmt.Sprintf(" into %d buckets", clusterInfo.BucketNum))
+		_, _ = fmt.Fprintf(&sb, " into %d buckets", clusterInfo.BucketNum)
 	}
 	sb.WriteString(";")
 	return sb.String()
@@ -749,9 +749,9 @@ func (t *Table) generateAddColumnsSQL(columns []tableschema.Column, ifNotExists 
 	}
 	sb.WriteString("(")
 	for index, column := range columns {
-		sb.WriteString(fmt.Sprintf("%s %s", common.QuoteRef(column.Name), column.Type))
+		_, _ = fmt.Fprintf(&sb, "%s %s", common.QuoteRef(column.Name), column.Type)
 		if column.Comment != "" {
-			sb.WriteString(fmt.Sprintf(" comment %s", common.QuoteString(column.Comment)))
+			_, _ = fmt.Fprintf(&sb, " comment %s", common.QuoteString(column.Comment))
 		}
 		if index < len(columns)-1 {
 			sb.WriteString(", ")

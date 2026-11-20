@@ -637,7 +637,7 @@ func (schema *TableSchema) ToExternalSQLString(
 	builder.WriteString(baseSQL)
 
 	// stored by, 用于指定自定义格式StorageHandler的类名或其他外部表文件格式
-	builder.WriteString(fmt.Sprintf("\nstored by '%s'\n", schema.StorageHandler))
+	_, _ = fmt.Fprintf(&builder, "\nstored by '%s'\n", schema.StorageHandler)
 
 	// serde properties, 序列化属性参数
 	if len(serdeProperties) > 0 {
@@ -645,7 +645,7 @@ func (schema *TableSchema) ToExternalSQLString(
 		i, n := 0, len(serdeProperties)
 
 		for key, value := range serdeProperties {
-			builder.WriteString(fmt.Sprintf("%s=%s", common.QuoteString(key), common.QuoteString(value)))
+			_, _ = fmt.Fprintf(&builder, "%s=%s", common.QuoteString(key), common.QuoteString(value))
 			i += 1
 			if i < n {
 				builder.WriteString(", ")
@@ -656,7 +656,7 @@ func (schema *TableSchema) ToExternalSQLString(
 	}
 
 	// location, 外部表存放地址
-	builder.WriteString(fmt.Sprintf("location '%s'\n", schema.Location))
+	_, _ = fmt.Fprintf(&builder, "location '%s'\n", schema.Location)
 
 	// 自定义格式时类定义所在的jar
 	if len(jars) > 0 {
@@ -678,7 +678,7 @@ func (schema *TableSchema) ToExternalSQLString(
 		sortColsNum := len(schema.TblProperties)
 
 		for k, v := range schema.TblProperties {
-			builder.WriteString(fmt.Sprintf("%s=%s", common.QuoteString(k), common.QuoteString(v)))
+			_, _ = fmt.Fprintf(&builder, "%s=%s", common.QuoteString(k), common.QuoteString(v))
 			i++
 			if i < sortColsNum {
 				builder.WriteString(", ")
@@ -689,7 +689,7 @@ func (schema *TableSchema) ToExternalSQLString(
 	}
 
 	if schema.Lifecycle > 0 {
-		builder.WriteString(fmt.Sprintf("lifecycle %d", schema.Lifecycle))
+		_, _ = fmt.Fprintf(&builder, "lifecycle %d", schema.Lifecycle)
 	}
 
 	builder.WriteRune(';')

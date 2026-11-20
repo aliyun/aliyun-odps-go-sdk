@@ -46,7 +46,7 @@ type stsStringProvider struct {
 }
 
 func (sp *stsStringProvider) _signRequest(req *http.Request, endpoint string) error {
-	err := sp.AliyunAccount.SignRequest(req, endpoint)
+	err := sp.SignRequest(req, endpoint)
 	if err != nil {
 		return err
 	}

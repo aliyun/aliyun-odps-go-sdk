@@ -105,7 +105,7 @@ func (p *Partition) Value() string {
 
 	n := len(p.model.Value)
 	for i, c := range p.model.Value {
-		sb.WriteString(fmt.Sprintf("%s=%s", c.Name, c.Value))
+		_, _ = fmt.Fprintf(&sb, "%s=%s", c.Name, c.Value)
 		i += 1
 
 		if i < n {

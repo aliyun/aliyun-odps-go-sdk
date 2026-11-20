@@ -29,7 +29,7 @@ type PositionArgQuery struct {
 }
 
 func NewPositionArgQuery(query string) PositionArgQuery {
-	rgx := regexp.MustCompile("\\?")
+	rgx := regexp.MustCompile(`\?`)
 	indexes := rgx.FindAllStringIndex(query, -1)
 	queryPieces := make([]string, 0, 2*len(indexes)+1)
 	argPositions := make([]int, 0, len(indexes))
