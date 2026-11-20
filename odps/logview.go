@@ -17,6 +17,7 @@
 package odps
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -44,31 +45,31 @@ type LogView struct {
 }
 
 func NewLogView(odpsIns *Odps) *LogView {
-	var version int
+	return newLogView(context.Background(), odpsIns)
+}
+
+func newLogView(ctx context.Context, odpsIns *Odps) *LogView {
+	lv := &LogView{odpsIns: odpsIns, version: int(odpsIns.Options.LogViewVersion)}
 	if odpsIns.Options.LogViewVersion == options.Auto {
-		tempIns := &LogView{odpsIns: odpsIns}
-		jobInsightHost := tempIns.getJobInsightHost()
-		if jobInsightHost == nil {
-			version = 1
-		} else {
-			version = 2
+		lv.version = 1
+		if lv.getJobInsightHost(ctx) != nil {
+			lv.version = 2
 		}
-	} else {
-		version = int(odpsIns.Options.LogViewVersion)
 	}
-	return &LogView{odpsIns: odpsIns, version: version}
+	return lv
 }
 
 func (lv *LogView) LogViewHost() string {
+	ctx := context.Background()
 	if lv.version == 1 {
-		logViewHost := lv.getLogViewHost()
+		logViewHost := lv.getLogViewHost(ctx)
 		if logViewHost == nil {
 			return LogViewHostDefault
 		} else {
 			return *logViewHost
 		}
 	} else if lv.version == 2 {
-		jobInsightHost := lv.getJobInsightHost()
+		jobInsightHost := lv.getJobInsightHost(ctx)
 		if jobInsightHost == nil {
 			return JobInsightHostDefault
 		} else {
@@ -79,12 +80,12 @@ func (lv *LogView) LogViewHost() string {
 	}
 }
 
-func (lv *LogView) getLogViewHost() *string {
+func (lv *LogView) getLogViewHost(ctx context.Context) *string {
 	if lv.logViewHost != nil {
 		return lv.logViewHost
 	}
 	client := lv.odpsIns.RestClient()
-	err := client.GetWithParseFunc("/logview/host", nil, nil, func(res *http.Response) error {
+	err := client.GetWithParseFuncContext(ctx, "/logview/host", nil, nil, func(res *http.Response) error {
 		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
 		buf, err := ioutil.ReadAll(res.Body)
 		if err != nil {
@@ -104,12 +105,12 @@ func (lv *LogView) getLogViewHost() *string {
 	return lv.logViewHost
 }
 
-func (lv *LogView) getJobInsightHost() *string {
+func (lv *LogView) getJobInsightHost(ctx context.Context) *string {
 	if lv.jobInsightHost != nil {
 		return lv.jobInsightHost
 	}
 	client := lv.odpsIns.RestClient()
-	err := client.GetWithParseFunc("/webconsole/host", nil, nil, func(res *http.Response) error {
+	err := client.GetWithParseFuncContext(ctx, "/webconsole/host", nil, nil, func(res *http.Response) error {
 		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
 		buf, err := ioutil.ReadAll(res.Body)
 		if err != nil {
@@ -137,25 +138,38 @@ func (lv *LogView) SetJobInsightHost(jobInsightHost string) {
 }
 
 func (lv *LogView) GenerateLogView(instance *Instance, hours int) (string, error) {
+	return lv.generate(context.Background(), instance, hours)
+}
+
+// GenerateLogViewContext resolves and generates an instance's LogView URL using ctx.
+func (odps *Odps) GenerateLogViewContext(ctx context.Context, instance *Instance, hours int) (string, error) {
+	return newLogView(ctx, odps).generate(ctx, instance, hours)
+}
+
+func (lv *LogView) generate(ctx context.Context, instance *Instance, hours int) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if lv.version == 2 {
-		return lv.generateJobInsight(instance)
+		return lv.generateJobInsight(ctx, instance)
 	} else if lv.version == 1 {
-		return lv.generateLogView(instance, hours)
+		return lv.generateLogView(ctx, instance, hours)
 	} else {
 		return "", errors.New("Unknown LogView Version " + fmt.Sprint(lv.version))
 	}
 }
 
-func (lv *LogView) generateLogView(instance *Instance, hours int) (string, error) {
-	token, err := lv.generateInstanceToken(instance, hours)
+func (lv *LogView) generateLogView(ctx context.Context, instance *Instance, hours int) (string, error) {
+	token, err := lv.generateInstanceToken(ctx, instance, hours)
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
-	var logViewHost string
-	if lv.getLogViewHost() == nil {
-		logViewHost = LogViewHostDefault
-	} else {
-		logViewHost = *lv.getLogViewHost()
+	logViewHost := LogViewHostDefault
+	if host := lv.getLogViewHost(ctx); host != nil {
+		logViewHost = *host
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
 	}
 	logViewUrl, err := url.Parse(logViewHost)
 	if err != nil {
@@ -174,13 +188,11 @@ func (lv *LogView) generateLogView(instance *Instance, hours int) (string, error
 	return logViewUrl.String(), nil
 }
 
-func (lv *LogView) generateJobInsight(instance *Instance) (string, error) {
+func (lv *LogView) generateJobInsight(ctx context.Context, instance *Instance) (string, error) {
 	client := lv.odpsIns.RestClient()
-	var jobInsightHost string
-	if lv.getJobInsightHost() == nil {
-		jobInsightHost = JobInsightHostDefault
-	} else {
-		jobInsightHost = *lv.getJobInsightHost()
+	jobInsightHost := JobInsightHostDefault
+	if host := lv.getJobInsightHost(ctx); host != nil {
+		jobInsightHost = *host
 	}
 
 	jobInsightUrl, err := url.Parse(jobInsightHost)
@@ -188,7 +200,11 @@ func (lv *LogView) generateJobInsight(instance *Instance) (string, error) {
 		return "", errors.WithStack(err)
 	}
 
-	jobInsightUrl.Path = fmt.Sprintf("%s/job-insights", lv.odpsIns.RegionId())
+	regionID := lv.odpsIns.regionID(ctx)
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	jobInsightUrl.Path = fmt.Sprintf("%s/job-insights", regionID)
 	queryArgs := jobInsightUrl.Query()
 	queryArgs.Set("h", client.Endpoint())
 	queryArgs.Set("p", instance.ProjectName())
@@ -210,7 +226,7 @@ func (lv *LogView) GenerateLogViewV2(instance *Instance, regionID string) (strin
 	), nil
 }
 
-func (lv *LogView) generateInstanceToken(instance *Instance, hours int) (string, error) {
+func (lv *LogView) generateInstanceToken(ctx context.Context, instance *Instance, hours int) (string, error) {
 	policyTpl := `{
 	  "expires_in_hours": %d,
 	  "policy": {
@@ -224,5 +240,5 @@ func (lv *LogView) generateInstanceToken(instance *Instance, hours int) (string,
 
 	policy := fmt.Sprintf(policyTpl, hours, instance.ProjectName(), instance.Id())
 	sm := security.NewSecurityManager(lv.odpsIns.RestClient(), instance.ProjectName())
-	return sm.GenerateAuthorizationToken(policy)
+	return sm.GenerateAuthorizationTokenContext(ctx, policy)
 }

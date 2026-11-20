@@ -17,6 +17,7 @@
 package odps
 
 import (
+	"context"
 	"time"
 
 	"github.com/pkg/errors"
@@ -138,9 +139,13 @@ func (odps *Odps) Tenant() *Tenant {
 }
 
 func (odps *Odps) RegionId() string {
+	return odps.regionID(context.Background())
+}
+
+func (odps *Odps) regionID(ctx context.Context) string {
 	if odps.Options.RegionId == "cn" {
 		defaultProject := odps.DefaultProject()
-		err := defaultProject.Load()
+		err := defaultProject.load(ctx)
 		if err == nil {
 			odps.Options.RegionId = defaultProject.RegionId()
 		}
@@ -149,24 +154,32 @@ func (odps *Odps) RegionId() string {
 }
 
 func (odps *Odps) ExecSQlWithHints(sql string, hints map[string]string) (*Instance, error) {
+	return odps.ExecSQLContext(context.Background(), sql, hints)
+}
+
+func (odps *Odps) ExecSQl(sql string, hints ...map[string]string) (*Instance, error) {
+	return odps.ExecSQLContext(context.Background(), sql, hints...)
+}
+
+// ExecSQLContext submits a SQL instance using ctx. If the request is canceled
+// before its response arrives, the server may already have accepted the job.
+func (odps *Odps) ExecSQLContext(ctx context.Context, sql string, hints ...map[string]string) (*Instance, error) {
 	if odps.defaultProject == "" {
 		return nil, errors.New("default project has not been set for odps")
 	}
 	option := options.NewSQLTaskOptions()
-	option.Hints = hints
-	return odps.ExecSQlWithOption(sql, option)
-}
-
-func (odps *Odps) ExecSQl(sql string, hints ...map[string]string) (*Instance, error) {
-	if len(hints) == 0 {
-		return odps.ExecSQlWithHints(sql, nil)
+	if len(hints) > 0 {
+		option.Hints = hints[0]
 	}
-
-	return odps.ExecSQlWithHints(sql, hints[0])
+	return odps.execSQLWithOption(ctx, sql, option)
 }
 
 // ExecSQlWithOption Create a SQLTask with options.SQLTaskOptions
 func (odps *Odps) ExecSQlWithOption(sql string, option *options.SQLTaskOptions) (*Instance, error) {
+	return odps.execSQLWithOption(context.Background(), sql, option)
+}
+
+func (odps *Odps) execSQLWithOption(ctx context.Context, sql string, option *options.SQLTaskOptions) (*Instance, error) {
 	if option.Hints == nil {
 		option.Hints = make(map[string]string)
 	}
@@ -175,6 +188,6 @@ func (odps *Odps) ExecSQlWithOption(sql string, option *options.SQLTaskOptions) 
 	}
 	task := NewSQLTaskWithOptions(sql, option)
 	instances := NewInstances(odps, odps.defaultProject)
-	i, err := instances.CreateTask(odps.defaultProject, &task, option.InstanceOption)
+	i, err := instances.createTask(ctx, odps.defaultProject, &task, option.InstanceOption)
 	return i, errors.WithStack(err)
 }

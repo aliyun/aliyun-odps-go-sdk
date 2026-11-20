@@ -18,6 +18,7 @@ package tunnel
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"time"
@@ -100,7 +101,7 @@ const maxRetryAttempts = 3
 
 // retrySleep is a seam: Retry waits through it so tests can observe the backoff
 // without burning real wall-clock time.
-var retrySleep = time.Sleep
+var retrySleep = common.SleepContext
 
 // Retry calls f up to maxRetryAttempts times, waiting 1s and then 2s between
 // the attempts, and returns the error of the last attempt (or nil). Before, the
@@ -111,23 +112,24 @@ var retrySleep = time.Sleep
 // a service will answer the same way on the next attempt. Callers that must not
 // re-send a request on some failures have to check the error themselves.
 func Retry(f func() error) error {
-	// TODO: use tunnel retry strategy and add retry logger
-	sleepTime := int64(1)
+	return retryContext(context.Background(), f)
+}
+
+func retryContext(ctx context.Context, f func() error) error {
 	var err error
 	for i := 0; i < maxRetryAttempts; i++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		err = f()
 		if err == nil {
-			break
+			return nil
 		}
-
-		if i == maxRetryAttempts-1 {
-			// The loop is over: waiting now would only delay the error the
-			// caller is about to receive.
-			break
+		if i+1 < maxRetryAttempts {
+			if err := retrySleep(ctx, time.Second<<i); err != nil {
+				return err
+			}
 		}
-
-		sleepTime *= 1 << i
-		retrySleep(time.Duration(sleepTime) * time.Second)
 	}
 	return err
 }

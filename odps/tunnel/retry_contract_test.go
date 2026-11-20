@@ -17,6 +17,7 @@
 package tunnel
 
 import (
+	"context"
 	stderrors "errors"
 	"io"
 	"net/http"
@@ -46,7 +47,10 @@ func withRetryContractSleep(t *testing.T) *[]time.Duration {
 
 	var waits []time.Duration
 	original := retrySleep
-	retrySleep = func(d time.Duration) { waits = append(waits, d) }
+	retrySleep = func(ctx context.Context, d time.Duration) error {
+		waits = append(waits, d)
+		return ctx.Err()
+	}
 	t.Cleanup(func() { retrySleep = original })
 
 	return &waits

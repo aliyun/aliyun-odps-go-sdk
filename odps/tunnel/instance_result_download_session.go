@@ -17,6 +17,7 @@
 package tunnel
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -53,6 +54,15 @@ func CreateInstanceResultDownloadSession(
 	restClient restclient.RestClient,
 	opts ...InstanceOption,
 ) (*InstanceResultDownloadSession, error) {
+	return createInstanceResultDownloadSession(context.Background(), projectName, instanceId, quotaName, restClient, opts...)
+}
+
+func createInstanceResultDownloadSession(
+	ctx context.Context,
+	projectName, instanceId, quotaName string,
+	restClient restclient.RestClient,
+	opts ...InstanceOption,
+) (*InstanceResultDownloadSession, error) {
 	cfg := newInstanceSessionConfig(opts...)
 
 	session := InstanceResultDownloadSession{
@@ -75,7 +85,7 @@ func CreateInstanceResultDownloadSession(
 		return nil, errors.WithStack(err)
 	}
 
-	err = session.loadInformation(req)
+	err = session.loadInformation(req.WithContext(ctx))
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -146,6 +156,13 @@ func (is *InstanceResultDownloadSession) OpenRecordReader(
 	start, count, sizeLimit int,
 	columnNames []string,
 ) (*RecordProtocReader, error) {
+	return is.OpenRecordReaderContext(context.Background(), start, count, sizeLimit, columnNames)
+}
+
+// OpenRecordReaderContext uses ctx to open and read the requested row range.
+func (is *InstanceResultDownloadSession) OpenRecordReaderContext(
+	ctx context.Context, start, count, sizeLimit int, columnNames []string,
+) (*RecordProtocReader, error) {
 	requestedColumns := columnNames
 	if len(columnNames) == 0 {
 		columnNames = make([]string, len(is.schema.Columns))
@@ -164,7 +181,7 @@ func (is *InstanceResultDownloadSession) OpenRecordReader(
 		columns[i] = c
 	}
 
-	res, err := is.newDownloadConnection(start, count, sizeLimit, requestedColumns)
+	res, err := is.newDownloadConnection(ctx, start, count, sizeLimit, requestedColumns)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -254,6 +271,7 @@ func (is *InstanceResultDownloadSession) loadInformation(req *http.Request) erro
 }
 
 func (is *InstanceResultDownloadSession) newDownloadConnection(
+	ctx context.Context,
 	start, count, sizeLimit int,
 	columnNames []string,
 ) (*http.Response, error) {
@@ -305,9 +323,9 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 
 	var res *http.Response
 
-	err = Retry(func() error {
-		res, err = is.RestClient.Do(req)
-		return errors.WithStack(err)
+	err = retryContext(ctx, func() error {
+		res, err = is.RestClient.Do(req.Clone(ctx))
+		return err
 	})
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -315,6 +333,10 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 	contentEncoding := res.Header.Get("Content-Encoding")
 	if contentEncoding != "" {
 		res.Body = WrapByCompressor(res.Body, contentEncoding)
+	}
+	if err := ctx.Err(); err != nil {
+		_ = res.Body.Close()
+		return nil, err
 	}
 
 	return res, nil

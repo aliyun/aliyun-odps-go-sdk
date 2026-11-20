@@ -18,6 +18,7 @@ package security
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"io/ioutil"
@@ -368,6 +369,11 @@ func (sm *Manager) Run(query string, jsonOutput bool, supervisionToken string) (
 }
 
 func (sm *Manager) GenerateAuthorizationToken(policy string) (string, error) {
+	return sm.GenerateAuthorizationTokenContext(context.Background(), policy)
+}
+
+// GenerateAuthorizationTokenContext requests an authorization token using ctx.
+func (sm *Manager) GenerateAuthorizationTokenContext(ctx context.Context, policy string) (string, error) {
 	rb := sm.rb()
 	resource := rb.Authorization()
 	client := sm.restClient
@@ -386,7 +392,7 @@ func (sm *Manager) GenerateAuthorizationToken(policy string) (string, error) {
 	}
 	var resModel ResModel
 
-	err = client.DoWithModel(req, &resModel)
+	err = client.DoWithModel(req.WithContext(ctx), &resModel)
 	if err != nil {
 		return "", errors.WithStack(err)
 	}

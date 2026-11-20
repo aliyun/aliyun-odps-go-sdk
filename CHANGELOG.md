@@ -9,6 +9,8 @@
 - Decode both boolean and string `Transactional` metadata.
 - Accept successful creation and replacement responses for multipart resource uploads.
 - Preserve a resource's name when the metadata response omits it.
+- Return an explicit error for unsupported `database/sql` transactions and prepared statements.
+- Apply SQL context cancellation to HTTP requests and retry delays, and preserve the instance ID when available.
 - Add MaxCompute Emulator regressions for Arrow, offset retries, and lost write and commit responses.
 
 See the [Storage API V2 migration guide](docs/storage-v2.md) for the updated interfaces.

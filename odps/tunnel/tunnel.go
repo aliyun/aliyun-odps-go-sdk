@@ -172,18 +172,29 @@ func (t *Tunnel) AttachToExistedDownloadSession(
 func (t *Tunnel) CreateInstanceResultDownloadSession(
 	projectName, instanceId string, opts ...InstanceOption,
 ) (*InstanceResultDownloadSession, error) {
-	client, err := t.getRestClient(projectName)
+	return t.CreateInstanceResultDownloadSessionContext(context.Background(), projectName, instanceId, opts...)
+}
+
+// CreateInstanceResultDownloadSessionContext resolves the Tunnel route and starts an instance download using ctx.
+func (t *Tunnel) CreateInstanceResultDownloadSessionContext(
+	ctx context.Context, projectName, instanceId string, opts ...InstanceOption,
+) (*InstanceResultDownloadSession, error) {
+	client, err := t.getRestClientContext(ctx, projectName)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	session, err := CreateInstanceResultDownloadSession(projectName, instanceId, t.quotaName, client, opts...)
+	session, err := createInstanceResultDownloadSession(ctx, projectName, instanceId, t.quotaName, client, opts...)
 	return session, errors.WithStack(err)
 }
 
 func (t *Tunnel) getRestClient(projectName string) (restclient.RestClient, error) {
+	return t.getRestClientContext(context.Background(), projectName)
+}
+
+func (t *Tunnel) getRestClientContext(ctx context.Context, projectName string) (restclient.RestClient, error) {
 	if t.endpoint == "" {
 		project := t.odpsIns.Project(projectName)
-		endpoint, err := project.GetTunnelEndpoint(t.quotaName)
+		endpoint, err := project.GetTunnelEndpointContext(ctx, t.quotaName)
 		if err != nil {
 			return restclient.RestClient{}, errors.WithStack(err)
 		}

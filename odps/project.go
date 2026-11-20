@@ -120,7 +120,7 @@ type optionalParams struct {
 	extendedProperties bool
 }
 
-func (p *Project) _loadFromOdps(params optionalParams) (*projectModel, error) {
+func (p *Project) loadFromOdps(ctx context.Context, params optionalParams) (*projectModel, error) {
 	resource := p.rb.Project()
 	client := p.RestClient()
 
@@ -169,7 +169,7 @@ func (p *Project) _loadFromOdps(params optionalParams) (*projectModel, error) {
 		return nil
 	}
 
-	if err := client.GetWithParseFunc(resource, urlQuery, nil, parseFunc); err != nil {
+	if err := client.GetWithParseFuncContext(ctx, resource, urlQuery, nil, parseFunc); err != nil {
 		return nil, errors.WithStack(err)
 	}
 
@@ -178,7 +178,11 @@ func (p *Project) _loadFromOdps(params optionalParams) (*projectModel, error) {
 
 // Load should be called before get properties of project
 func (p *Project) Load() error {
-	model, err := p._loadFromOdps(optionalParams{})
+	return p.load(context.Background())
+}
+
+func (p *Project) load(ctx context.Context) error {
+	model, err := p.loadFromOdps(ctx, optionalParams{})
 	p.beLoaded = true
 
 	if err != nil {
@@ -244,7 +248,7 @@ func (p *Project) GetAllProperties() (common.Properties, error) {
 		return p.allProperties, nil
 	}
 
-	model, err := p._loadFromOdps(optionalParams{withAllProperties: true})
+	model, err := p.loadFromOdps(context.Background(), optionalParams{withAllProperties: true})
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -263,7 +267,7 @@ func (p *Project) GetDefaultCluster() (string, error) {
 		return p.model.DefaultCluster, nil
 	}
 
-	model, err := p._loadFromOdps(optionalParams{usedByGroupApi: true})
+	model, err := p.loadFromOdps(context.Background(), optionalParams{usedByGroupApi: true})
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
@@ -283,7 +287,7 @@ func (p *Project) GetClusters() ([]Cluster, error) {
 		return p.model.Clusters, nil
 	}
 
-	model, err := p._loadFromOdps(optionalParams{usedByGroupApi: true})
+	model, err := p.loadFromOdps(context.Background(), optionalParams{usedByGroupApi: true})
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -302,7 +306,7 @@ func (p *Project) GetExtendedProperties() (common.Properties, error) {
 		return p.model.ExtendedProperties, nil
 	}
 
-	model, err := p._loadFromOdps(optionalParams{extendedProperties: true})
+	model, err := p.loadFromOdps(context.Background(), optionalParams{extendedProperties: true})
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}

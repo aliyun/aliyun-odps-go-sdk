@@ -18,10 +18,10 @@ package restclient
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -255,6 +255,10 @@ func (client *RestClient) NewRequestWithParamsAndHeaders(method, resource string
 }
 
 func (client *RestClient) Do(req *http.Request) (*http.Response, error) {
+	if err := req.Context().Err(); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
 	req.Header.Set(common.HttpHeaderUserAgent, common.UserAgentValue)
 	req.Header.Set(common.HttpHeaderXOdpsUserAgent, client.UserAgent())
 	gmtTime := time.Now().In(common.GMT).Format(time.RFC1123)
@@ -279,7 +283,11 @@ func (client *RestClient) Do(req *http.Request) (*http.Response, error) {
 		return res, errors.WithStack(err)
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return res, errors.WithStack(NewHttpNotOk(res))
+		httpErr := NewHttpNotOk(res)
+		if err := req.Context().Err(); err != nil {
+			return res, errors.WithStack(err)
+		}
+		return res, errors.WithStack(httpErr)
 	}
 	return res, nil
 }
@@ -299,12 +307,7 @@ func (client *RestClient) DoWithParseRes(req *http.Request, parseFunc func(res *
 		return errors.WithStack(err)
 	}
 
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			log.Fatalf("close http error, url=%s", req.URL.String())
-		}
-	}(res.Body)
+	defer func() { _ = res.Body.Close() }()
 
 	if parseFunc == nil {
 		return nil
@@ -324,21 +327,31 @@ func (client *RestClient) DoWithModel(req *http.Request, model interface{}) erro
 }
 
 func (client *RestClient) GetWithModel(resource string, queryArgs url.Values, headers map[string]string, model interface{}) error {
+	return client.GetWithModelContext(context.Background(), resource, queryArgs, headers, model)
+}
+
+// GetWithModelContext fetches and decodes an XML model using ctx.
+func (client *RestClient) GetWithModelContext(ctx context.Context, resource string, queryArgs url.Values, headers map[string]string, model interface{}) error {
 	req, err := client.NewRequestWithParamsAndHeaders(common.HttpMethod.GetMethod, resource, nil, queryArgs, headers)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	return errors.WithStack(client.DoWithModel(req, model))
+	return errors.WithStack(client.DoWithModel(req.WithContext(ctx), model))
 }
 
 func (client *RestClient) GetWithParseFunc(resource string, queryArgs url.Values, headers map[string]string, parseFunc func(res *http.Response) error) error {
+	return client.GetWithParseFuncContext(context.Background(), resource, queryArgs, headers, parseFunc)
+}
+
+// GetWithParseFuncContext fetches and parses a response using ctx.
+func (client *RestClient) GetWithParseFuncContext(ctx context.Context, resource string, queryArgs url.Values, headers map[string]string, parseFunc func(res *http.Response) error) error {
 	req, err := client.NewRequestWithParamsAndHeaders(common.HttpMethod.GetMethod, resource, nil, queryArgs, headers)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	return errors.WithStack(client.DoWithParseFunc(req, parseFunc))
+	return errors.WithStack(client.DoWithParseFunc(req.WithContext(ctx), parseFunc))
 }
 
 func (client *RestClient) PutWithParseFunc(resource string, queryArgs url.Values, body io.Reader, parseFunc func(res *http.Response) error) error {
@@ -358,22 +371,34 @@ func (client *RestClient) DoXmlWithParseFunc(
 	bodyModel interface{},
 	parseFunc func(res *http.Response) error,
 ) error {
+	return client.DoXmlWithParseFuncContext(context.Background(), method, resource, queryArgs, headers, bodyModel, parseFunc)
+}
+
+// DoXmlWithParseFuncContext sends an XML request and parses the response using ctx.
+func (client *RestClient) DoXmlWithParseFuncContext(
+	ctx context.Context,
+	method string,
+	resource string,
+	queryArgs url.Values,
+	headers map[string]string,
+	bodyModel interface{},
+	parseFunc func(res *http.Response) error,
+) error {
 	bodyXml, err := xml.Marshal(bodyModel)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
 	req, err := client.NewRequestWithUrlQuery(method, resource, bytes.NewReader(bodyXml), queryArgs)
+	if err != nil {
+		return errors.WithStack(err)
+	}
 	req.Header.Set(common.HttpHeaderContentType, common.XMLContentType)
 	for name, value := range headers {
 		req.Header.Set(name, value)
 	}
 
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return errors.WithStack(client.DoWithParseFunc(req, parseFunc))
+	return errors.WithStack(client.DoWithParseFunc(req.WithContext(ctx), parseFunc))
 }
 
 func (client *RestClient) DoXmlWithParseRes(
@@ -390,13 +415,12 @@ func (client *RestClient) DoXmlWithParseRes(
 	}
 
 	req, err := client.NewRequestWithUrlQuery(method, resource, bytes.NewReader(bodyXml), queryArgs)
+	if err != nil {
+		return errors.WithStack(err)
+	}
 	req.Header.Set(common.HttpHeaderContentType, common.XMLContentType)
 	for name, value := range headers {
 		req.Header.Set(name, value)
-	}
-
-	if err != nil {
-		return errors.WithStack(err)
 	}
 
 	return errors.WithStack(client.DoWithParseRes(req, parseFunc))

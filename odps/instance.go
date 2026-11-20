@@ -101,6 +101,10 @@ func (instance *Instance) IsAsync() bool {
 }
 
 func (instance *Instance) Load() error {
+	return instance.load(context.Background())
+}
+
+func (instance *Instance) load(ctx context.Context) error {
 	client := instance.odpsIns.restClient
 
 	type ResModel struct {
@@ -121,7 +125,7 @@ func (instance *Instance) Load() error {
 		}
 		queryArgs.Set("instancestatus", "")
 	}
-	err := client.GetWithParseFunc(resource, queryArgs, headers, func(res *http.Response) error {
+	err := client.GetWithParseFuncContext(ctx, resource, queryArgs, headers, func(res *http.Response) error {
 		header := res.Header
 		instance.owner = header.Get(common.HttpHeaderOdpsOwner)
 		instance.startTime, _ = common.ParseRFC1123Date(header.Get(common.HttpHeaderOdpsStartTime))
@@ -172,6 +176,10 @@ func (instance *Instance) Terminate() error {
 
 // GetTasks 绝大部分时候返回一个Task(名字与提交的task名字相同)，返回多个task的情况我还没有遇到过
 func (instance *Instance) GetTasks() ([]TaskInInstance, error) {
+	return instance.getTasks(context.Background())
+}
+
+func (instance *Instance) getTasks(ctx context.Context) ([]TaskInInstance, error) {
 	urlQuery := make(url.Values)
 	urlQuery.Set("taskstatus", "")
 
@@ -183,7 +191,7 @@ func (instance *Instance) GetTasks() ([]TaskInInstance, error) {
 	var resModel ResModel
 	client := instance.odpsIns.restClient
 
-	err := client.GetWithModel(instance.resourceUrl, urlQuery, nil, &resModel)
+	err := client.GetWithModelContext(ctx, instance.resourceUrl, urlQuery, nil, &resModel)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -358,21 +366,9 @@ func (instance *Instance) WaitForSuccess() error {
 	return instance.WaitForSuccessContext(context.Background())
 }
 
-// WaitForSuccessContext behaves like WaitForSuccess, but it stops waiting and
-// returns ctx.Err() as soon as ctx is canceled or its deadline passes. The
-// returned error keeps the context error in its chain, so
-// errors.Is(err, context.Canceled) and errors.Is(err, context.DeadlineExceeded)
-// both work.
-//
-// Two boundaries are worth knowing:
-//
-//  1. Cancellation only stops the client from waiting. The MaxCompute instance
-//     keeps running on the server side, and it is not terminated here, because
-//     cancelling a running job is a destructive action that the caller should
-//     decide explicitly (see Instance.Terminate).
-//  2. An HTTP request that is already in flight is not aborted, so the call
-//     returns after the current status check finishes, which is bounded by one
-//     round trip plus one polling interval.
+// WaitForSuccessContext uses ctx for polling, in-flight HTTP requests, and
+// reading task errors. The context error remains accessible through errors.Is.
+// Call Instance.Terminate explicitly to stop a running MaxCompute instance.
 func (instance *Instance) WaitForSuccessContext(ctx context.Context) error {
 	if instance.isSync {
 		for _, result := range instance.taskResults {
@@ -393,18 +389,18 @@ func (instance *Instance) WaitForSuccessContext(ctx context.Context) error {
 	}
 
 	for {
-		err := instance.Load()
+		err := instance.load(ctx)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 
-		tasks, err := instance.GetTasks()
+		tasks, err := instance.getTasks(ctx)
 		if err != nil {
 			return errors.WithStack(err)
 		}
 
 		if len(tasks) == 0 {
-			if err := sleepContext(ctx, instancePollInterval); err != nil {
+			if err := common.SleepContext(ctx, instancePollInterval); err != nil {
 				return errors.WithStack(err)
 			}
 			continue
@@ -415,7 +411,7 @@ func (instance *Instance) WaitForSuccessContext(ctx context.Context) error {
 		for _, task := range tasks {
 			switch task.Status {
 			case TaskFailed, TaskCancelled, TaskSuspended:
-				results, err := instance.GetResult()
+				results, err := instance.getResult(ctx)
 				if err != nil {
 					return errors.Wrapf(err, "get task %s with status %s", task.Name, task.Status)
 				}
@@ -436,7 +432,7 @@ func (instance *Instance) WaitForSuccessContext(ctx context.Context) error {
 			break
 		}
 
-		if err := sleepContext(ctx, instancePollInterval); err != nil {
+		if err := common.SleepContext(ctx, instancePollInterval); err != nil {
 			return errors.WithStack(err)
 		}
 	}
@@ -444,31 +440,16 @@ func (instance *Instance) WaitForSuccessContext(ctx context.Context) error {
 	return nil
 }
 
-// sleepContext waits for d, or returns ctx.Err() if ctx is canceled before
-// that happens. A canceled context is reported with a non-nil error so the
-// caller can stop the polling loop.
-func sleepContext(ctx context.Context, d time.Duration) error {
-	if ctx == nil {
-		return nil
-	}
-
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
+func (instance *Instance) GetResult() ([]TaskResult, error) {
+	return instance.getResult(context.Background())
 }
 
-func (instance *Instance) GetResult() ([]TaskResult, error) {
+func (instance *Instance) getResult(ctx context.Context) ([]TaskResult, error) {
 	if instance.isSync {
 		return instance.taskResults, nil
 	}
 	if instance.MaxQA.IsMaxQA {
-		err := instance.Load()
+		err := instance.load(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -485,7 +466,7 @@ func (instance *Instance) GetResult() ([]TaskResult, error) {
 	}
 
 	var resModel ResModel
-	err := client.GetWithModel(instance.resourceUrl, queryArgs, nil, &resModel)
+	err := client.GetWithModelContext(ctx, instance.resourceUrl, queryArgs, nil, &resModel)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}

@@ -17,6 +17,7 @@
 package odps
 
 import (
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -48,7 +49,7 @@ const (
 // measures its retry budget through them, so backoff behaviour can be asserted
 // in tests without burning real wall-clock time.
 var (
-	instanceCreateSleep = time.Sleep
+	instanceCreateSleep = common.SleepContext
 	instanceCreateNow   = time.Now
 )
 
@@ -123,6 +124,10 @@ func (instances *Instances) CreateTaskWithPriority(projectName string, task Task
 
 // CreateTask Create a Task (maybe SQLTask) with options.CreateInstanceOptions
 func (instances *Instances) CreateTask(projectName string, task Task, createInstanceOptions ...*options.CreateInstanceOptions) (*Instance, error) {
+	return instances.createTask(context.Background(), projectName, task, createInstanceOptions...)
+}
+
+func (instances *Instances) createTask(ctx context.Context, projectName string, task Task, createInstanceOptions ...*options.CreateInstanceOptions) (*Instance, error) {
 	var instanceOptions *options.CreateInstanceOptions
 	if len(createInstanceOptions) != 0 {
 		instanceOptions = createInstanceOptions[0]
@@ -189,7 +194,7 @@ func (instances *Instances) CreateTask(projectName string, task Task, createInst
 	maxqaOptions := instanceOptions.MaxQAOptions
 	if maxqaOptions.UseMaxQA {
 		if maxqaOptions.SessionID == "" {
-			connInfo, err := getMaxQAConnInfo(instances.odpsIns, maxqaOptions.QuotaName, projectName, maxqaOptions.FallbackInfo)
+			connInfo, err := getMaxQAConnInfo(ctx, instances.odpsIns, maxqaOptions.QuotaName, projectName, maxqaOptions.FallbackInfo)
 			if err != nil {
 				return nil, err
 			}
@@ -211,7 +216,7 @@ func (instances *Instances) CreateTask(projectName string, task Task, createInst
 
 	// 循环，直到达到最大重试时间
 	for {
-		err := client.DoXmlWithParseFunc(common.HttpMethod.PostMethod, resource, queryArg, headers, &instanceCreationModel, func(res *http.Response) error {
+		err := client.DoXmlWithParseFuncContext(ctx, common.HttpMethod.PostMethod, resource, queryArg, headers, &instanceCreationModel, func(res *http.Response) error {
 			location := res.Header.Get(common.HttpHeaderLocation)
 
 			if location == "" {
@@ -224,9 +229,6 @@ func (instances *Instances) CreateTask(projectName string, task Task, createInst
 			}
 
 			instanceId = location[splitAt+1:]
-			if res.StatusCode == 409 {
-				return restclient.NewHttpNotOk(res)
-			}
 			if res.StatusCode == 201 {
 				maxqaQueryCookie = res.Header.Get(common.HttpHeaderMaxQAQueryCookie)
 				return nil
@@ -235,6 +237,10 @@ func (instances *Instances) CreateTask(projectName string, task Task, createInst
 			return errors.WithStack(decoder.Decode(&resModel))
 		})
 		if err != nil {
+			if ctxErr := ctx.Err(); instanceId != "" && ctxErr != nil && errors.Is(err, ctxErr) {
+				return NewInstance(instances.odpsIns, projectName, instanceId), err
+			}
+
 			// Only a 409 is retried here. Every other failure - transport
 			// error, timeout, 4xx/5xx that is not 409, a response the parse
 			// func could not read - returns to the caller without a second
@@ -250,8 +256,10 @@ func (instances *Instances) CreateTask(projectName string, task Task, createInst
 				if httpErr.Response != nil {
 					header = httpErr.Response.Header
 				}
-				instanceCreateSleep(instanceCreateRetryDelay(
-					header, instanceCreateMaxRetryDuration-elapsed))
+				delay := instanceCreateRetryDelay(header, instanceCreateMaxRetryDuration-elapsed)
+				if err := instanceCreateSleep(ctx, delay); err != nil {
+					return nil, err
+				}
 				continue
 			}
 			return nil, err
@@ -270,7 +278,7 @@ func (instances *Instances) CreateTask(projectName string, task Task, createInst
 			for _, task := range resModel.Tasks {
 				switch task.Status {
 				case TaskFailed, TaskCancelled, TaskSuspended:
-					results, err := instance.GetResult()
+					results, err := instance.getResult(ctx)
 					if err != nil {
 						return instance, errors.Wrapf(err, "get task %s with status %s", task.Name, task.Status)
 					}
@@ -465,7 +473,7 @@ type MaxQAConnInfo struct {
 	RegionID  string `json:"regionId"`
 }
 
-func getMaxQAConnInfo(ins *Odps, quotaName string, projectName string, fallbackInfo *options.FallbackInfo) (*MaxQAConnInfo, error) {
+func getMaxQAConnInfo(ctx context.Context, ins *Odps, quotaName string, projectName string, fallbackInfo *options.FallbackInfo) (*MaxQAConnInfo, error) {
 	resource := "/connection/mcqa"
 	queryArgs := make(url.Values, 3)
 	queryArgs.Set("project", projectName)
@@ -485,7 +493,7 @@ func getMaxQAConnInfo(ins *Odps, quotaName string, projectName string, fallbackI
 	if err != nil {
 		return nil, err
 	}
-	response, err := ins.restClient.Do(request)
+	response, err := ins.restClient.Do(request.WithContext(ctx))
 	if err != nil {
 		return nil, err
 	}
