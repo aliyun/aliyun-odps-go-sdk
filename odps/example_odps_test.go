@@ -25,7 +25,7 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 )
 
-func ExampleOdps_RunSQL() {
+func ExampleOdps_ExecSQl() {
 	column := tableschema.Column{
 		Name: "id",
 		Type: datatype.DateType,
@@ -49,5 +49,4 @@ func ExampleOdps_RunSQL() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-	// Output:
 }

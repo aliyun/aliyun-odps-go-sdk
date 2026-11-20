@@ -38,8 +38,6 @@ func ExampleInstances_List() {
 			))
 	}
 	ins.List(f, odps.InstanceFilter.TimeRange(startTime, endTime))
-
-	// Output:
 }
 
 func ExampleInstances_ListInstancesQueued() {
@@ -53,8 +51,6 @@ func ExampleInstances_ListInstancesQueued() {
 	for _, i := range instances {
 		println(fmt.Sprintf("%+v", i))
 	}
-
-	// Output:
 }
 
 func ExampleInstances_CreateTask() {
@@ -115,8 +111,6 @@ Loop:
 			"%s, %s, %s",
 			instance.StartTime().Format(timeFormat), instance.EndTime().Format(timeFormat), instance.Status(),
 		))
-
-	// Output:
 }
 
 func ExampleInstance_Terminate() {
@@ -140,8 +134,6 @@ func ExampleInstance_Terminate() {
 	}
 
 	println(fmt.Sprintf("%s, %s, %s", instance.StartTime(), instance.EndTime(), instance.Status()))
-
-	// Output:
 }
 
 func ExampleInstance_GetTaskProgress() {
@@ -173,8 +165,6 @@ func ExampleInstance_GetTaskProgress() {
 	}
 
 	println(string(body))
-
-	// Output:
 }
 
 func ExampleInstance_GetTaskSummary() {
@@ -192,8 +182,6 @@ func ExampleInstance_GetTaskSummary() {
 		log.Fatalf("%+v", err)
 	}
 	println(fmt.Sprintf("%s\n%s\n", taskSummary.JsonSummary, taskSummary.Summary))
-
-	// Output:
 }
 
 func ExampleInstance_GetCachedInfo() {
@@ -211,6 +199,4 @@ func ExampleInstance_GetCachedInfo() {
 	}
 
 	println(fmt.Sprintf("%+v", i))
-
-	// Output:
 }

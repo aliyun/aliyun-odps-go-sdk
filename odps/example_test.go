@@ -18,6 +18,8 @@ package odps_test
 
 import (
 	"log"
+	"os"
+	"testing"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
@@ -34,11 +36,8 @@ var (
 )
 
 func init() {
-	// The setup below creates tables and a schema on a live service. When no
-	// credentials are configured there is nothing to create them on, and
-	// panicking here would also keep the offline contract tests in this
-	// package from running at all, so skip the live setup instead.
-	if account == nil {
+	// These fixtures create tables and a schema on the live service.
+	if !liveServiceEnabled() {
 		return
 	}
 
@@ -50,6 +49,17 @@ func init() {
 	createTableWithComplexData()
 	createSaleDetailTable()
 	createTestSchema()
+}
+
+func requireLiveService(t *testing.T) {
+	t.Helper()
+	if !liveServiceEnabled() {
+		t.Skip("requires MAXCOMPUTE_LIVE_TESTS=1, a live endpoint, and credentials")
+	}
+}
+
+func liveServiceEnabled() bool {
+	return os.Getenv("MAXCOMPUTE_LIVE_TESTS") == "1" && account != nil && endpoint != ""
 }
 
 func createUserTable(tableName string) {

@@ -39,6 +39,9 @@ import (
 // tunnel_endpoint、MAXCOMPUTE_PROJECT）。
 func realServiceConfig(t *testing.T) *odps.Config {
 	t.Helper()
+	if os.Getenv("MAXCOMPUTE_LIVE_TESTS") != "1" {
+		t.Skip("requires MAXCOMPUTE_LIVE_TESTS=1")
+	}
 
 	endpoint := os.Getenv("odps_endpoint")
 	accessId := os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_ID")

@@ -26,7 +26,6 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
@@ -46,7 +45,7 @@ const (
 // DownloadSession is used to download table data, it can be created by Tunnel.
 // You can use RecordCount to get the count of total records, and can create
 // multiply RecordReader in parallel according the record count to download
-// the data in less time. The RecordArrowReader is the only RecordReader now.
+// the data in less time. Use package storage for Arrow data.
 //
 // Underneath the RecordReader is the http connection, when no data occurs in it during
 // 300s, the tunnel sever will closeRes it.
@@ -69,7 +68,6 @@ type DownloadSession struct {
 	status              DownLoadStatus
 	recordCount         int
 	shouldTransformDate bool
-	arrowSchema         *arrow.Schema
 }
 
 // CreateDownloadSession create a new download session before downing data.
@@ -80,7 +78,6 @@ type DownloadSession struct {
 // SessionCfg.WithDeflateCompressor, using deflate compressor with specific level
 // SessionCfg.WithSnappyFramedCompressor
 // SessionCfg.Overwrite, overwrite data
-// SessionCfg.DisableArrow, disable arrow reader, using protoc reader instead.
 // SessionCfg.ShardId, set the shard id of the table
 // SessionCfg.Async, enable the async mode of the session which can avoiding timeout when there are many small files
 func CreateDownloadSession(
@@ -123,7 +120,6 @@ func CreateDownloadSession(
 // SessionCfg.WithDeflateCompressor, using deflate compressor with specific level
 // SessionCfg.WithSnappyFramedCompressor
 // SessionCfg.Overwrite, overwrite data
-// SessionCfg.DisableArrow, disable arrow reader, using protoc reader instead.
 // SessionCfg.ShardId, set the shard id of the table
 // SessionCfg.Async, enable the async mode of the session which can avoiding timeout when there are many small files
 func AttachToExistedDownloadSession(
@@ -174,14 +170,6 @@ func (ds *DownloadSession) ShouldTransformDate() bool {
 	return ds.shouldTransformDate
 }
 
-func (ds *DownloadSession) ArrowSchema() *arrow.Schema {
-	if ds.arrowSchema != nil {
-		return ds.arrowSchema
-	}
-	ds.arrowSchema = ds.schema.ToArrowSchema()
-	return ds.arrowSchema
-}
-
 func (ds *DownloadSession) PartitionKey() string {
 	return ds.partitionKey
 }
@@ -194,36 +182,6 @@ func (ds *DownloadSession) SetPartitionKey(partitionKey string) {
 func (ds *DownloadSession) ResourceUrl() string {
 	rb := common.NewResourceBuilder(ds.ProjectName)
 	return rb.Table(ds.SchemaName, ds.TableName)
-}
-
-func (ds *DownloadSession) OpenRecordArrowReader(start, count int, columnNames []string) (*RecordArrowReader, error) {
-	arrowSchema := ds.arrowSchema
-	if len(columnNames) == 0 {
-		columnNames = make([]string, len(ds.schema.Columns))
-		for i, c := range ds.schema.Columns {
-			columnNames[i] = c.Name
-		}
-	}
-
-	arrowFields := make([]arrow.Field, 0, len(columnNames))
-	for _, columnName := range columnNames {
-		fs, ok := ds.arrowSchema.FieldsByName(columnName)
-		if !ok {
-			return nil, errors.Errorf("no column names %s in table %s", columnName, ds.TableName)
-		}
-
-		arrowFields = append(arrowFields, fs...)
-	}
-
-	arrowSchema = arrow.NewSchema(arrowFields, nil)
-
-	res, err := ds.newDownloadConnection(start, count, columnNames, true)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	reader := newRecordArrowReader(res, arrowSchema)
-	return &reader, nil
 }
 
 func (ds *DownloadSession) OpenRecordReader(start, count int, columnNames []string) (*RecordProtocReader, error) {
@@ -244,7 +202,7 @@ func (ds *DownloadSession) OpenRecordReader(start, count int, columnNames []stri
 		columns[i] = c
 	}
 
-	res, err := ds.newDownloadConnection(start, count, columnNames, false)
+	res, err := ds.newDownloadConnection(start, count, columnNames)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -339,12 +297,11 @@ func (ds *DownloadSession) loadInformation(req *http.Request) error {
 	ds.status = DownloadStatusFromStr(resModel.Status)
 	ds.recordCount = resModel.RecordCount
 	ds.schema = tableSchema
-	ds.arrowSchema = tableSchema.ToArrowSchema()
 
 	return nil
 }
 
-func (ds *DownloadSession) newDownloadConnection(start, count int, columnNames []string, useArrow bool) (*http.Response, error) {
+func (ds *DownloadSession) newDownloadConnection(start, count int, columnNames []string) (*http.Response, error) {
 	queryArgs := make(url.Values, 6)
 
 	if len(columnNames) > 0 {
@@ -360,10 +317,6 @@ func (ds *DownloadSession) newDownloadConnection(start, count int, columnNames [
 
 	if ds.partitionKey != "" {
 		queryArgs.Set("partition", ds.partitionKey)
-	}
-
-	if useArrow {
-		queryArgs.Set("arrow", "")
 	}
 
 	req, err := ds.RestClient.NewRequestWithUrlQuery(

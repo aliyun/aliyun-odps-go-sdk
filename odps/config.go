@@ -134,11 +134,7 @@ func NewConfigFromIni(iniPath string) (*Config, error) {
 	conf.Hints = make(map[string]string)
 	keys := section.Keys()
 	for _, key := range keys {
-		hint := key.Name()
-		if strings.HasPrefix(hint, "hints") {
-			splits := strings.SplitN(key.Name(), ".", 2)
-			hint = splits[1]
-		}
+		hint := strings.TrimPrefix(key.Name(), "hints.")
 		conf.Hints[hint] = key.Value()
 	}
 

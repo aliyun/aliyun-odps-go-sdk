@@ -287,14 +287,10 @@ func TestRestClientRetryContractTransportErrorKeepsOriginalError(t *testing.T) {
 	assert.False(t, stderrors.As(refusedErr, &httpErr))
 }
 
-// TestRestClientRetryContractTimeoutIsOneAttempt pins that a timeout bounds the
-// call once - the client does not retry on timeout - and records the two very
-// different shapes of the error, because a caller has to know them to react:
-// HttpTimeout (http.Client.Timeout) only says "timeout" in text and is not
-// comparable to context.DeadlineExceeded, while a deadline carried by the
-// request context stays comparable.
+// TestRestClientRetryContractTimeoutIsOneAttempt checks that a client timeout
+// or a request deadline bounds one attempt and is recognizable by callers.
 func TestRestClientRetryContractTimeoutIsOneAttempt(t *testing.T) {
-	t.Run("HttpTimeout is text-only", func(t *testing.T) {
+	t.Run("HTTP client timeout", func(t *testing.T) {
 		release, hits := retryContractBlockingServer(t)
 
 		client := NewOdpsRestClient(MockAccount{}, release)
@@ -314,14 +310,8 @@ func TestRestClientRetryContractTimeoutIsOneAttempt(t *testing.T) {
 		assert.Less(t, elapsed, 2*time.Second,
 			"one attempt at HttpTimeout=150ms; a longer call would mean an implicit retry")
 		assert.Equal(t, int32(1), atomic.LoadInt32(hits))
-		// The text says "deadline exceeded", but the error is produced by
-		// http.Client.Timeout and is NOT comparable to context.DeadlineExceeded:
-		// a caller that wants to tell a timeout from another transport failure
-		// has to match text, which is why the request-context form below is the
-		// one worth using in new code.
 		assert.Contains(t, err.Error(), "deadline exceeded")
-		assert.False(t, stderrors.Is(err, context.DeadlineExceeded),
-			"a Client.Timeout is not comparable to context.DeadlineExceeded, got %#v", err)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 
 	t.Run("request context deadline stays typed", func(t *testing.T) {

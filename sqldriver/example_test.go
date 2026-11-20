@@ -86,11 +86,9 @@ func Example() {
 
 		log.Println(ti, si, i, bi, b, f, d)
 	}
-
-	// Output:
 }
 
-func ExampleStructField() {
+func Example_structField() {
 	account := account2.AccountFromEnv()
 	endpoint := restclient.LoadEndpointFromEnv()
 
@@ -133,11 +131,9 @@ func ExampleStructField() {
 			log.Fatalf("%+v", err)
 		}
 	}
-
-	// Output:
 }
 
-func ExampleInsert() {
+func Example_insert() {
 	account := account2.AccountFromEnv()
 	endpoint := restclient.LoadEndpointFromEnv()
 
@@ -193,11 +189,9 @@ func ExampleInsert() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-
-	// Output:
 }
 
-func ExampleCreateTable() {
+func Example_createTable() {
 	account := account2.AccountFromEnv()
 	endpoint := restclient.LoadEndpointFromEnv()
 
@@ -238,6 +232,4 @@ func ExampleCreateTable() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-
-	// Output:
 }

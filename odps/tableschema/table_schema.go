@@ -24,12 +24,11 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/pkg/errors"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
-
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 )
 
 type TableSchema struct {
@@ -83,7 +82,7 @@ type TableSchema struct {
 
 type reservedJSON struct {
 	ClusterInfo
-	Transactional string   `json:"Transactional"`
+	Transactional any
 	PrimaryKeys   []string `json:"PrimaryKey"`
 }
 
@@ -315,7 +314,16 @@ func (schema *TableSchema) UnmarshalJSON(data []byte) error {
 		}
 		schema.ClusterInfo = reservedData.ClusterInfo
 		schema.PrimaryKeys = reservedData.PrimaryKeys
-		schema.Transactional = common.StringToBool(reservedData.Transactional)
+		switch flag := reservedData.Transactional.(type) {
+		case nil:
+			schema.Transactional = false
+		case bool:
+			schema.Transactional = flag
+		case string:
+			schema.Transactional = common.StringToBool(flag)
+		default:
+			return fmt.Errorf("expected boolean or string for Transactional, got %T", flag)
+		}
 	}
 	return nil
 }
@@ -692,17 +700,21 @@ func (schema *TableSchema) ToExternalSQLString(
 	return builder.String(), nil
 }
 
-func (schema *TableSchema) ToArrowSchema() *arrow.Schema {
+// ToArrowSchema maps data columns to the Storage API V2 Arrow representation.
+func (schema *TableSchema) ToArrowSchema() (*arrow.Schema, error) {
 	fields := make([]arrow.Field, len(schema.Columns))
 	for i, column := range schema.Columns {
-		arrowType, _ := TypeToArrowType(column.Type)
+		arrowType, err := TypeToArrowType(column.Type)
+		if err != nil {
+			return nil, fmt.Errorf("column %q: %w", column.Name, err)
+		}
 		fields[i] = arrow.Field{
 			Name:     column.Name,
 			Type:     arrowType,
 			Nullable: !column.NotNull,
 		}
 	}
-	return arrow.NewSchema(fields, nil)
+	return arrow.NewSchema(fields, nil), nil
 }
 
 func (schema *TableSchema) FieldByName(name string) (Column, bool) {

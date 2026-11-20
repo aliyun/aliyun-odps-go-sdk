@@ -2,14 +2,12 @@ package account_test
 
 import (
 	"net/http"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 )
 
 func TestNewAliyunAccount(t *testing.T) {
@@ -27,27 +25,22 @@ func TestNewAliyunAccount(t *testing.T) {
 }
 
 func TestSignatureV4(t *testing.T) {
-	var ak, sk, stsToken string
-	if accessId, found := os.LookupEnv("ALIBABA_CLOUD_ACCESS_KEY_ID"); found {
-		ak = accessId
-	}
-
-	if accessKey, found := os.LookupEnv("ALIBABA_CLOUD_ACCESS_KEY_SECRET"); found {
-		sk = accessKey
-	}
-	if token, found := os.LookupEnv("ALIBABA_CLOUD_SECURITY_TOKEN"); found {
-		stsToken = token
-	}
-	endpoint := restclient.LoadEndpointFromEnv()
-	aliyunAccount := account.NewStsAccount(ak, sk, stsToken, "cn-shanghai")
-	odpsIns := odps.NewOdps(aliyunAccount, endpoint)
-	odpsIns.SetDefaultProjectName("go_sdk_regression_testing")
-
-	err := odpsIns.DefaultProject().Load()
+	const endpoint = "https://example.test/api"
+	req, err := http.NewRequest(http.MethodGet, endpoint+"/projects/test_project", nil)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-	t.Log(odpsIns.DefaultProject().RegionId())
+	req.Header.Set("Date", "Mon, 05 Oct 2026 00:00:00 GMT")
+	signer := account.NewStsAccount("test-ak", "test-sk", "test-sts-token", "cn-shanghai")
+	if err := signer.SignRequest(req, endpoint); err != nil {
+		t.Fatal(err)
+	}
+	if got := req.Header.Get(common.HttpHeaderAuthorization); !strings.HasPrefix(got, "ODPS test-ak/") || !strings.Contains(got, "/cn-shanghai/odps/") {
+		t.Fatalf("unexpected signing scope: %q", got)
+	}
+	if got := req.Header.Get(common.HttpHeaderAuthorizationSTSToken); got != "test-sts-token" {
+		t.Fatalf("unexpected test session token: %q", got)
+	}
 }
 
 func TestRegionId(t *testing.T) {

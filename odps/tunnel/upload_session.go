@@ -26,7 +26,6 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
@@ -49,7 +48,7 @@ const (
 // UploadSession works as "insert into", multiply sessions for the same table or partition do not affect each other.
 // Session id is the unique identifier of a session。
 //
-// UploadSession uses OpenRecordArrowWriter to create a RecordArrowWriter or OpenRecordWriter to create a RecordProtocWriter
+// UploadSession uses OpenRecordWriter to open a Protobuf writer. Use package storage for Arrow uploads.
 // for writing data into a table. Each RecordWriter uses a http connection to transfer data with the tunnel server, and
 // each UploadSession can create multiply RecordWriters, so multiply http connections can be used to upload data
 // in parallel.
@@ -88,7 +87,6 @@ type UploadSession struct {
 	shouldTransformDate bool
 	schema              tableschema.TableSchema
 	status              UploadStatus
-	arrowSchema         *arrow.Schema
 	blockIds            []int
 }
 
@@ -183,14 +181,6 @@ func (u *UploadSession) Schema() tableschema.TableSchema {
 	return u.schema
 }
 
-func (u *UploadSession) ArrowSchema() *arrow.Schema {
-	if u.arrowSchema != nil {
-		return u.arrowSchema
-	}
-	u.arrowSchema = u.schema.ToArrowSchema()
-	return u.arrowSchema
-}
-
 func (u *UploadSession) Status() UploadStatus {
 	return u.status
 }
@@ -204,18 +194,8 @@ func (u *UploadSession) ResourceUrl() string {
 	return rb.Table(u.SchemaName, u.TableName)
 }
 
-func (u *UploadSession) OpenRecordArrowWriter(blockId int) (*RecordArrowWriter, error) {
-	conn, err := u.newUploadConnection(blockId, true)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	writer := newRecordArrowWriter(conn, u.arrowSchema)
-	return &writer, nil
-}
-
 func (u *UploadSession) OpenRecordWriter(blockId int) (*RecordProtocWriter, error) {
-	conn, err := u.newUploadConnection(blockId, false)
+	conn, err := u.newUploadConnection(blockId)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -337,7 +317,6 @@ func (u *UploadSession) loadInformation(req *http.Request) error {
 
 	u.status = UploadStatusFromStr(resModel.Status)
 	u.schema = tableSchema
-	u.arrowSchema = tableSchema.ToArrowSchema()
 	u.blockIds = make([]int, len(resModel.UploadedBlockList))
 	for i, b := range resModel.UploadedBlockList {
 		u.blockIds[i] = b.BlockID
@@ -395,15 +374,11 @@ func (u *UploadSession) newLoadRequest() (*http.Request, error) {
 	return req, nil
 }
 
-func (u *UploadSession) newUploadConnection(blockId int, useArrow bool) (*httpConnection, error) {
+func (u *UploadSession) newUploadConnection(blockId int) (*httpConnection, error) {
 	headers := getCommonHeaders()
 	queryArgs := make(url.Values, 4)
 	queryArgs.Set("uploadid", u.Id)
 	queryArgs.Set("blockid", strconv.Itoa(blockId))
-
-	if useArrow {
-		queryArgs.Set("arrow", "")
-	}
 
 	if u.partitionKey != "" {
 		queryArgs.Set("partition", u.partitionKey)

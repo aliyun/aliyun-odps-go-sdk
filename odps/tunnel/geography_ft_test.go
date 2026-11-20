@@ -19,7 +19,6 @@ package tunnel_test
 import (
 	"errors"
 	"io"
-	"os"
 	"testing"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
@@ -28,17 +27,15 @@ import (
 )
 
 // TestGeographyEndToEnd 真实环境往返：
-//   1. 建表（带 GEOGRAPHY 列）
-//   2. SQL INSERT 写入 ST_GEOGFROMTEXT 表达式得到的几何数据
-//   3. 通过 tunnel CreateDownloadSession 直接从表下载（protobuf）
-//   4. 校验列类型为 data.Geography 且 WKB 字节非空
+//  1. 建表（带 GEOGRAPHY 列）
+//  2. SQL INSERT 写入 ST_GEOGFROMTEXT 表达式得到的几何数据
+//  3. 通过 tunnel CreateDownloadSession 直接从表下载（protobuf）
+//  4. 校验列类型为 data.Geography 且 WKB 字节非空
 //
 // 注：MaxCompute 服务端 instance-result tunnel 暂不支持 GEOGRAPHY 列，必须走表下载。
 // 镜像 Java SDK GeographyTest.testInstanceTunnel.
 func TestGeographyEndToEnd(t *testing.T) {
-	if os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET") == "" {
-		t.Skip("ALIBABA_CLOUD_ACCESS_KEY_SECRET not set, skipping FT")
-	}
+	requireLiveTunnel(t)
 
 	tableName := "odps_sdk_geography_test_go"
 	hints := map[string]string{"odps.sql.type.system.odps2": "true"}

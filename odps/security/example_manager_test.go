@@ -40,8 +40,6 @@ func ExampleManager_GetSecurityConfig() {
 	}
 
 	println(fmt.Sprintf("%+v", sc))
-
-	// Output:
 }
 
 func ExampleManager_CheckPermissionV1() {
@@ -60,7 +58,6 @@ func ExampleManager_CheckPermissionV1() {
 	}
 
 	println(fmt.Sprintf("%v", r))
-	// Output:
 }
 
 func ExampleManager_CheckPermissionV0() {
@@ -77,7 +74,6 @@ func ExampleManager_CheckPermissionV0() {
 	}
 
 	println(fmt.Sprintf("%v", r))
-	// Output:
 }
 
 func ExampleManager_GetPolicy() {
@@ -88,7 +84,6 @@ func ExampleManager_GetPolicy() {
 	}
 
 	println(policy)
-	// Output:
 }
 
 func ExampleManager_ListUsers() {
@@ -101,8 +96,6 @@ func ExampleManager_ListUsers() {
 	for _, user := range users {
 		println(fmt.Sprintf("id=%s, name=%s", user.ID(), user.DisplayName()))
 	}
-
-	// Output:
 }
 
 func ExampleManager_RunQuery() {
@@ -113,6 +106,4 @@ func ExampleManager_RunQuery() {
 	}
 
 	println(fmt.Sprintf("ok: %s", result))
-
-	// Output:
 }

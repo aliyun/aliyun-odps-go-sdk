@@ -17,19 +17,17 @@
 package tunnel
 
 import (
-	"io"
-	"net/url"
-	"strconv"
+	"context"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow/ipc"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/storage"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 )
 
@@ -211,107 +209,73 @@ func (t *Tunnel) GetQuotaName() string {
 	return t.quotaName
 }
 
-// Preview table records from table tunnel, max 10000 rows, limit<0 means no limit
+// Preview reads a sample of table records using Storage API V2.
 func (t *Tunnel) Preview(table *odps.Table, partitionValue string, limit int64) ([]data.Record, error) {
-	if limit < 0 {
-		limit = -1
-	}
 	if !table.IsLoaded() {
-		err := table.Load()
-		if err != nil {
+		if err := table.Load(); err != nil {
 			return nil, err
 		}
 	}
-
-	projectName := table.ProjectName()
-	schemaName := table.SchemaName()
-	tableName := table.Name()
-
-	queryArgs := make(url.Values, 2)
-	queryArgs.Set("limit", strconv.FormatInt(limit, 10))
-	if partitionValue != "" {
-		partitionValue = strings.ReplaceAll(partitionValue, "'", "")
-		partitionValue = strings.ReplaceAll(partitionValue, "\"", "")
-		partitionValue = strings.ReplaceAll(partitionValue, "/", ",")
-		queryArgs.Set("partition", partitionValue)
-	}
-	resource := common.NewResourceBuilder(projectName)
-	var resourceUrl string
-	resourceUrl = resource.Table(schemaName, tableName)
-	resourceUrl += "/preview"
-
-	client, err := t.getRestClient(projectName)
+	ctx := context.Background()
+	client, err := storage.NewClient(ctx, t.odpsIns, storage.ClientOptions{
+		Project:              table.ProjectName(),
+		TunnelEndpoint:       t.endpoint,
+		QuotaName:            t.quotaName,
+		HTTPTimeout:          t.httpTimeout,
+		TCPConnectionTimeout: t.tcpConnectionTimeout,
+		UserAgent:            t.odpsUserAgent,
+		DisableKeepAlives:    t.DisableKeepAlives,
+	})
 	if err != nil {
 		return nil, err
 	}
-	req, err := client.NewRequestWithUrlQuery(
-		common.HttpMethod.GetMethod,
-		resourceUrl,
-		nil,
-		queryArgs,
-	)
+	defer client.Close()
+	reader, err := openPreviewReader(ctx, client, table, partitionValue, limit)
 	if err != nil {
 		return nil, err
 	}
+	defer reader.Release()
 
-	addCommonSessionHttpHeader(req.Header)
-
-	req.Header.Set(common.HttpHeaderContentLength, "0")
-
-	res, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer res.Body.Close()
-
-	contentEncoding := res.Header.Get(common.HttpHeaderContentEncoding)
-	if contentEncoding != "" {
-		res.Body = WrapByCompressor(res.Body, contentEncoding)
-	}
-
-	reader, err := ipc.NewReader(res.Body)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create Arrow IPC reader")
-	}
-
-	columns := table.Schema().Columns
-	partitionColumns := table.Schema().PartitionColumns
-	allColumns := append(columns, partitionColumns...)
-
-	var results []data.Record
-	var parseErr error
-
-	// Use defer/recover to catch any panic during Arrow data parsing
-	// This can happen when server returns corrupted Arrow IPC data
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				parseErr = errors.Errorf("panic during Arrow data parsing: %v", r)
-			}
-		}()
-
-		for {
-			arrowRecord, err := reader.Read()
-			isEOF := errors.Is(err, io.EOF)
-			if isEOF {
-				break
-			}
-			if err != nil {
-				parseErr = err
-				return
-			}
-			records, err := tableschema.ToMaxComputeRecords(arrowRecord, allColumns, tableschema.ArrowOptionConfig.WithExtendedMode())
-			if err != nil {
-				parseErr = err
-				return
-			}
-			results = append(results, records...)
-			arrowRecord.Retain()
+	schema := table.Schema()
+	columns := slices.Concat(schema.Columns, schema.PartitionColumns)
+	var records []data.Record
+	for reader.Next() {
+		rows, err := tableschema.ToMaxComputeRecords(reader.RecordBatch(), columns)
+		if err != nil {
+			return nil, err
 		}
-	}()
-
-	if parseErr != nil {
-		return nil, parseErr
+		records = append(records, rows...)
 	}
-	return results, nil
+	if err := reader.Err(); err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
+func openPreviewReader(ctx context.Context, client *storage.Client, table *odps.Table, partition string, limit int64) (*storage.ArrowReader, error) {
+	target := storage.Table{Schema: table.SchemaName(), Name: table.Name()}
+	partitionColumns := table.Schema().PartitionColumns
+	if len(partitionColumns) == 0 {
+		return client.PreviewTable(ctx, target, partition, limit)
+	}
+
+	// Storage preview returns data columns. Use a snapshot to include partition
+	// columns in the records returned by the original Tunnel API.
+	options := storage.TableReadOptions{PartitionColumns: make([]string, len(partitionColumns))}
+	for i, column := range partitionColumns {
+		options.PartitionColumns[i] = column.Name
+	}
+	if partition != "" {
+		partition = strings.NewReplacer("'", "", "\"", "", "/", ",").Replace(partition)
+		options.Partitions = []string{partition}
+	}
+	snapshot, err := client.CreateTableReadSession(ctx, target, options)
+	if err != nil {
+		return nil, err
+	}
+	const maxPreviewRows = 10000
+	if limit < 0 || limit > maxPreviewRows {
+		limit = maxPreviewRows
+	}
+	return snapshot.OpenReader(ctx, &storage.RowRange{Count: min(limit, snapshot.RecordCount())})
 }

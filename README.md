@@ -1,18 +1,29 @@
-# Note
-This SDK is used in production, including the control-plane surfaces (`SQLTask`, instance status and results, `Tables`/`Schemas`/`Table.Load`) and the Tunnel APIs.
+# MaxCompute Go SDK
 
-It is still under active development toward v1.0. CI coverage in this repository is not comprehensive yet, so before relying on a specific path, check the open issues: complex-type (`ARRAY`/`MAP`/`STRUCT`) NULL values in Tunnel records (#27) and truncated checksum detection (#82) are open, with fixes in review (#79, #83).
+Use this SDK to submit SQL, manage MaxCompute metadata, and transfer data. The
+1.0 API uses [Storage API V2](docs/storage-v2.md) for Arrow and `odps/tunnel`
+for Protobuf transfers.
 
 # Install
-required >= go1.15
+Go 1.26 or later is required.
 ```shell
 go get github.com/aliyun/aliyun-odps-go-sdk
 ```
+
+## Tests
+
+Run `bash scripts/test-emulator.sh` with Go 1.26, Docker, and Python 3.9 or later.
+The script uses a pinned MaxCompute Emulator on loopback, builds the examples,
+and reports source line coverage and Gobco branch coverage for the SDK module.
+Gobco measures each package's tests and does not instrument `select` cases.
+Run `bash scripts/test-emulator.sh --release` before tagging. The release check
+requires 100% reported branch coverage and more than 85% source line coverage.
 
 # 目录说明
 ## odps
  - odps sdk的主体目录, 包括子目录
  - tunnel: tunnel相关实现
+ - storage: Storage API V2 的实例和表 Arrow 读取及批量写入
  - account
  - common
  - data: odps数据值的go表示

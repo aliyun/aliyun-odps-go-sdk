@@ -17,9 +17,10 @@
 package odps
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -333,6 +334,11 @@ func (p *Project) SecurityManager() security.Manager {
 }
 
 func (p *Project) GetTunnelEndpoint(quotaNames ...string) (string, error) {
+	return p.GetTunnelEndpointContext(context.Background(), quotaNames...)
+}
+
+// GetTunnelEndpointContext resolves the project's Tunnel endpoint using ctx.
+func (p *Project) GetTunnelEndpointContext(ctx context.Context, quotaNames ...string) (string, error) {
 	client := p.odpsIns.restClient
 	resource := p.rb.Tunnel()
 	queryArgs := make(url.Values, 1)
@@ -353,9 +359,8 @@ func (p *Project) GetTunnelEndpoint(quotaNames ...string) (string, error) {
 
 	schema := req.URL.Scheme
 	var tunnelEndpoint string
-	err = client.DoWithParseFunc(req, func(res *http.Response) error {
-		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
-		b, err := ioutil.ReadAll(res.Body)
+	err = client.DoWithParseFunc(req.WithContext(ctx), func(res *http.Response) error {
+		b, err := io.ReadAll(res.Body)
 		if err != nil {
 			return errors.WithStack(err)
 		}

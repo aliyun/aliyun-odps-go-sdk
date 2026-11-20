@@ -1,0 +1,294 @@
+// Licensed under the Apache License, Version 2.0.
+
+package storage
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+	"sync/atomic"
+
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/ipc"
+)
+
+// Session identifies a read or write session that can be reopened.
+// Keep RouteToken with ID when a server supplies it.
+type Session struct {
+	ID         string
+	RouteToken string
+}
+
+func (s Session) operation(action, target string) operation {
+	return operation{action: action, target: target, route: s.RouteToken, params: url.Values{"SessionId": {s.ID}}}
+}
+
+// TableReadOptions restricts the columns and partitions in a table snapshot.
+// Required partition specs use the MaxCompute form "ds='20261001',hour='01'".
+type TableReadOptions struct {
+	Columns          []string `json:"RequiredDataColumns,omitempty"`
+	PartitionColumns []string `json:"RequiredPartitionColumns,omitempty"`
+	Partitions       []string `json:"RequiredPartitions,omitempty"`
+}
+
+type tableReadRequest struct {
+	TableReadOptions
+	SplitOptions struct {
+		SplitMode string
+	}
+}
+
+type tableReadStreamRequest struct {
+	MaxBatchRows int
+	DataFormat   struct{ Type, Version string }
+}
+
+// InstanceReadOptions selects the result in a SQL instance.
+type InstanceReadOptions struct {
+	TaskName    string `json:",omitempty"`
+	QueryID     *int64 `json:"QueryId,omitempty"`
+	EnableLimit bool
+}
+
+// RowRange selects Count rows starting at the zero-based Offset.
+type RowRange struct {
+	Offset int64
+	Count  int64
+}
+
+func (r RowRange) addTo(params url.Values) error {
+	if r.Offset < 0 || r.Count < 0 {
+		return fmt.Errorf("storage: offset and count must be nonnegative")
+	}
+	params.Set("Offset", strconv.FormatInt(r.Offset, 10))
+	params.Set("Count", strconv.FormatInt(r.Count, 10))
+	return nil
+}
+
+type readResponse struct {
+	SessionID   string `json:"SessionId"`
+	DownloadID  string `json:"DownloadID"`
+	RecordCount int64
+	Status      string
+	TableStatus string `json:"SessionStatus"`
+}
+
+// ReadSession is a snapshot of a table or SQL instance result.
+type ReadSession struct {
+	client  *Client
+	session Session
+	target  string
+	action  string
+	rows    int64
+	status  string
+	input   any
+}
+
+// Session returns the descriptor for reopening the snapshot.
+func (s *ReadSession) Session() Session { return s.session }
+
+// RecordCount returns the number of rows reported by the server.
+func (s *ReadSession) RecordCount() int64 { return s.rows }
+
+// Status returns the server's session status as reported at open time.
+func (s *ReadSession) Status() string { return s.status }
+
+// CreateTableReadSession opens a row-offset snapshot of a table.
+func (c *Client) CreateTableReadSession(ctx context.Context, table Table, opts TableReadOptions) (*ReadSession, error) {
+	target, err := c.tableTarget(table)
+	if err != nil {
+		return nil, err
+	}
+	input := tableReadRequest{TableReadOptions: opts}
+	input.SplitOptions.SplitMode = "RowOffset"
+	return c.tableReadSession(ctx, operation{action: "TableCreateReadSession", target: target}, input)
+}
+
+// GetTableReadSession reopens a table snapshot.
+func (c *Client) GetTableReadSession(ctx context.Context, table Table, session Session) (*ReadSession, error) {
+	target, err := c.tableTarget(table)
+	if err != nil {
+		return nil, err
+	}
+	if session.ID == "" {
+		return nil, fmt.Errorf("storage: session ID is required")
+	}
+	op := session.operation("TableGetReadSession", target)
+	op.params.Set("session_refresh", "false")
+	return c.tableReadSession(ctx, op, struct{}{})
+}
+
+func (c *Client) tableReadSession(ctx context.Context, op operation, input any) (*ReadSession, error) {
+	var reply readResponse
+	headers, err := c.jsonRequest(ctx, http.MethodPost, op, input, &reply)
+	if err != nil {
+		return nil, err
+	}
+	stream := tableReadStreamRequest{MaxBatchRows: 4096}
+	stream.DataFormat.Type = "Arrow"
+	stream.DataFormat.Version = "V5"
+	return c.newReadSession(op, "TableRead", reply.SessionID, reply.TableStatus, reply.RecordCount, headers, stream)
+}
+
+// CreateInstanceReadSession opens the result of a completed SQL instance.
+func (c *Client) CreateInstanceReadSession(ctx context.Context, id string, opts InstanceReadOptions) (*ReadSession, error) {
+	return c.instanceReadSession(ctx, http.MethodPost, "InstanceCreateReadSession", id, Session{}, opts)
+}
+
+// GetInstanceReadSession reopens an existing instance result snapshot.
+func (c *Client) GetInstanceReadSession(ctx context.Context, id string, session Session, opts InstanceReadOptions) (*ReadSession, error) {
+	if session.ID == "" {
+		return nil, fmt.Errorf("storage: session ID is required")
+	}
+	return c.instanceReadSession(ctx, http.MethodGet, "InstanceGetReadSession", id, session, opts)
+}
+
+func (c *Client) instanceReadSession(ctx context.Context, method, action, id string, session Session, opts InstanceReadOptions) (*ReadSession, error) {
+	if err := validateIdentifier("instance", id); err != nil {
+		return nil, err
+	}
+	if opts.TaskName == "" {
+		opts.TaskName = "AnonymousSQLTask"
+	}
+	op := session.operation(action, fmt.Sprintf("projects.%s.instances.%s", c.project, id))
+	var input any
+	if method == http.MethodPost {
+		input = struct{ EnableLimit bool }{opts.EnableLimit}
+		op.params.Del("SessionId")
+	}
+	var reply readResponse
+	headers, err := c.jsonRequest(ctx, method, op, input, &reply)
+	if err != nil {
+		return nil, err
+	}
+	return c.newReadSession(op, "InstanceRead", reply.DownloadID, reply.Status, reply.RecordCount, headers, opts)
+}
+
+func (c *Client) newReadSession(op operation, action, id, status string, count int64, headers http.Header, input any) (*ReadSession, error) {
+	if id == "" || count < 0 {
+		return nil, fmt.Errorf("storage %s: invalid session descriptor", op.action)
+	}
+	session := Session{ID: id, RouteToken: updatedRoute(headers, op.route)}
+	return &ReadSession{client: c, session: session, target: op.target, action: action, rows: count, status: status, input: input}, nil
+}
+
+// OpenReader streams a range of the snapshot. Pass nil for the entire snapshot.
+// The caller owns one reference and must call Release.
+func (s *ReadSession) OpenReader(ctx context.Context, rows *RowRange) (*ArrowReader, error) {
+	rangeToRead := RowRange{Count: s.rows}
+	if rows != nil {
+		rangeToRead = *rows
+	}
+	op := s.session.operation(s.action, s.target)
+	if err := rangeToRead.addTo(op.params); err != nil {
+		return nil, err
+	}
+	expected := min(rangeToRead.Count, max(s.rows-rangeToRead.Offset, 0))
+	return s.client.arrowRequest(ctx, op, s.input, expected)
+}
+
+// PreviewTable reads the first limit rows without creating a persistent snapshot.
+// A negative or zero limit uses the server default, and partition may be empty.
+func (c *Client) PreviewTable(ctx context.Context, table Table, partition string, limit int64) (*ArrowReader, error) {
+	target, err := c.tableTarget(table)
+	if err != nil {
+		return nil, err
+	}
+	op := operation{
+		action: "TablePreview", target: target,
+		params: url.Values{"Limit": {strconv.FormatInt(limit, 10)}},
+	}
+	if partition != "" {
+		op.params.Set("Partition", partition)
+	}
+	input := struct {
+		Partition string `json:",omitempty"`
+		Limit     int64
+	}{partition, limit}
+	return c.arrowRequest(ctx, op, input, -1)
+}
+
+func (c *Client) arrowRequest(ctx context.Context, op operation, input any, expected int64) (*ArrowReader, error) {
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.request(ctx, http.MethodPost, op, bytes.NewReader(encoded), map[string]string{
+		"Content-Type": "application/json; charset=utf-8", "Accept-Encoding": "x-lz4-frame",
+	})
+	if err != nil {
+		return nil, err
+	}
+	reader, err := newArrowReader(resp.Body, expected)
+	if err != nil {
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("storage %s: %w", op.action, err)
+	}
+	return reader, nil
+}
+
+// ArrowReader is a reference-counted Arrow IPC reader. Release closes the HTTP
+// stream when the last reference is released. Only one goroutine may read it.
+type ArrowReader struct {
+	ipc      *ipc.Reader
+	body     io.ReadCloser
+	refs     atomic.Int64
+	expected int64
+	rows     int64
+	err      error
+}
+
+var _ array.RecordReader = (*ArrowReader)(nil)
+
+func newArrowReader(body io.ReadCloser, expected int64) (*ArrowReader, error) {
+	decoded, err := ipc.NewReader(body)
+	if err != nil {
+		return nil, err
+	}
+	r := &ArrowReader{ipc: decoded, body: body, expected: expected}
+	r.refs.Store(1)
+	return r, nil
+}
+
+func (r *ArrowReader) Retain() { r.refs.Add(1) }
+
+func (r *ArrowReader) Release() {
+	if r.refs.Add(-1) == 0 {
+		r.ipc.Release()
+		_ = r.body.Close()
+	}
+}
+
+func (r *ArrowReader) Schema() *arrow.Schema { return r.ipc.Schema() }
+
+func (r *ArrowReader) RecordBatch() arrow.RecordBatch { return r.ipc.RecordBatch() }
+
+// Record implements the compatibility method of array.RecordReader.
+func (r *ArrowReader) Record() arrow.Record { return r.RecordBatch() }
+
+func (r *ArrowReader) Next() bool {
+	if r.err != nil {
+		return false
+	}
+	if !r.ipc.Next() {
+		r.err = r.ipc.Err()
+		if r.err == nil && r.expected >= 0 && r.rows != r.expected {
+			r.err = fmt.Errorf("storage: read %d of %d rows: %w", r.rows, r.expected, io.ErrUnexpectedEOF)
+		}
+		return false
+	}
+	r.rows += r.RecordBatch().NumRows()
+	if r.expected >= 0 && r.rows > r.expected {
+		r.err = fmt.Errorf("storage: received %d rows for a range of %d rows", r.rows, r.expected)
+		return false
+	}
+	return true
+}
+
+func (r *ArrowReader) Err() error { return r.err }

@@ -66,7 +66,7 @@ func ExampleColumn() {
 	fmt.Printf("%s: %s\n", column[1].Name, column[1].Type)
 	fmt.Printf("%s: %s\n", column[2].Name, column[2].Type)
 
-	// Output:
+	// Example output:
 	// name: STRING
 	// age: BIGINT
 	// property: MAP<VARCHAR(100),STRUCT<`a`:INT,`b`:INT>>

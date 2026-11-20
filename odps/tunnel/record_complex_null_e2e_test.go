@@ -19,7 +19,6 @@ package tunnel_test
 import (
 	"errors"
 	"io"
-	"os"
 	"runtime/debug"
 	"sort"
 	"strings"
@@ -194,9 +193,7 @@ func complexNullE2ERecords(t *testing.T) ([]data.Record, []string) {
 }
 
 func TestEndToEndComplexTypeWithNulls(t *testing.T) {
-	if os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET") == "" {
-		t.Skip("no MaxCompute credentials in the environment; this test needs a real project and tunnel endpoint")
-	}
+	requireLiveTunnel(t)
 
 	arrayType := mustParseE2EDataType(t, "array<bigint>").(datatype.ArrayType)
 	mapType := mustParseE2EDataType(t, "map<string,string>").(datatype.MapType)

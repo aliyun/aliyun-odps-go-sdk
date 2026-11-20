@@ -99,13 +99,6 @@ func (s *schemaResModel) toTableSchema(tableName string) (tableschema.TableSchem
 // maxRetryAttempts is how many times tunnel.Retry runs its closure.
 const maxRetryAttempts = 3
 
-func min(x, y int) int {
-	if x <= y {
-		return x
-	}
-	return y
-}
-
 // retrySleep is a seam: Retry waits through it so tests can observe the backoff
 // without burning real wall-clock time.
 var retrySleep = time.Sleep

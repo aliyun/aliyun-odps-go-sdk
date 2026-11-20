@@ -199,16 +199,8 @@ func (r *Resources) createTempPartFile(projectName, schemaName string, fr FileRe
 		return errors.WithStack(err)
 	}
 	client.HttpTimeout = 60 * time.Second
-	resp, err := client.Do(req)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	if resp.StatusCode != 201 {
-		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
-		data, _ := ioutil.ReadAll(resp.Body)
-		return errors.WithStack(errors.New(string(data)))
-	}
-	return nil
+	// A part is created or replaced under the same name on retry.
+	return errors.WithStack(client.DoWithParseFunc(req, nil))
 }
 
 func (r *Resources) mergeTempPartFile(projectName, schemaName string, fr FileResource, reader *bytes.Buffer, overwrite bool, totalBytes int64) error {
@@ -257,17 +249,7 @@ func (r *Resources) mergeTempPartFile(projectName, schemaName string, fr FileRes
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	if resp.StatusCode != 201 {
-		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
-		data, _ := ioutil.ReadAll(resp.Body)
-		return errors.WithStack(errors.New(string(data)))
-	}
-
-	return nil
+	return errors.WithStack(client.DoWithParseFunc(req, nil))
 }
 
 // Delete delete a resource

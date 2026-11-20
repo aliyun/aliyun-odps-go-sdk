@@ -99,7 +99,6 @@ func ExampleTable_Load() {
 
 	schema := table.Schema()
 	println(fmt.Sprintf("%+v", schema.Columns))
-	// Output:
 }
 
 func ExampleTable_AddPartition() {
@@ -108,8 +107,6 @@ func ExampleTable_AddPartition() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-
-	// Output:
 }
 
 func ExampleTable_GetPartitions() {
@@ -126,8 +123,6 @@ func ExampleTable_GetPartitions() {
 		println(fmt.Sprintf("Last Modified time: %s", p.LastModifiedTime()))
 		println("")
 	}
-
-	// Output:
 }
 
 func ExampleTable_ExecSql() {
@@ -152,11 +147,9 @@ func ExampleTable_ExecSql() {
 	}
 
 	println(fmt.Sprintf("%+v", results[0].Result))
-
-	// Output:
 }
 
-func ExampleTable_GetClusterInfo() {
+func ExampleTable_ClusterInfo() {
 	cluster := tableschema.ClusterInfo{
 		ClusterType: tableschema.CLUSTER_TYPE.Hash,
 		ClusterCols: []string{"c1", "c2"},
@@ -189,11 +182,9 @@ func ExampleTable_GetClusterInfo() {
 	println(info.ClusterCols)
 	println(info.SortCols)
 	println(info.BucketNum)
-
-	// Output:
 }
 
-func ExampleTable_GetPrimaryKey() {
+func ExampleTable_PrimaryKeys() {
 	schema := tableschema.NewSchemaBuilder().Name("has_pk").PrimaryKeys([]string{"id", "name"}).Column(tableschema.Column{Name: "id", Type: datatype.IntType, NotNull: true}).
 		Column(tableschema.Column{Name: "name", Type: datatype.StringType, NotNull: true}).
 		Column(tableschema.Column{Name: "name2", Type: datatype.StringType, NotNull: false}).
@@ -213,10 +204,9 @@ func ExampleTable_GetPrimaryKey() {
 	for _, str := range table.PrimaryKeys() {
 		println(str)
 	}
-	// Output:
 }
 
-func ExampleTable_IsTransactional() {
+func ExampleTable_Transactional() {
 	schema := tableschema.NewSchemaBuilder().Name("deltaTable").PrimaryKeys([]string{"id", "name"}).Column(tableschema.Column{Name: "id", Type: datatype.IntType, NotNull: true}).
 		Column(tableschema.Column{Name: "name", Type: datatype.StringType, NotNull: true}).
 		Column(tableschema.Column{Name: "name2", Type: datatype.StringType, NotNull: false}).
@@ -235,5 +225,4 @@ func ExampleTable_IsTransactional() {
 	}
 
 	println(table.Transactional())
-	// Output:
 }

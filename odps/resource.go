@@ -133,7 +133,9 @@ func (r *Resource) Load() error {
 	err := client.GetWithParseFunc(resource, queryArgs, nil, func(res *http.Response) error {
 		header := res.Header
 		r.Model.SchemaName = header.Get(common.HttpHeaderOdpsSchemaName)
-		r.Model.Name = header.Get(common.HttpHeaderOdpsResourceName)
+		if name := header.Get(common.HttpHeaderOdpsResourceName); name != "" {
+			r.Model.Name = name
+		}
 		r.Model.Owner = header.Get(common.HttpHeaderOdpsOwner)
 		r.Model.Comment = header.Get(common.HttpHeaderOdpsComment)
 		r.Model.CreationTime = header.Get(common.HttpHeaderOdpsCreationTime)
