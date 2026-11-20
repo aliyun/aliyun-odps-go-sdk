@@ -181,7 +181,8 @@ func (c *Client) newReadSession(op operation, action, id, status string, count i
 // OpenReader streams a range of the snapshot. Pass nil for the entire snapshot.
 // The caller owns one reference and must call Release.
 func (s *ReadSession) OpenReader(ctx context.Context, rows *RowRange) (*ArrowReader, error) {
-	rangeToRead := RowRange{Count: s.rows}
+	// An empty snapshot needs a positive wire count to retrieve the Arrow schema.
+	rangeToRead := RowRange{Count: max(s.rows, 1)}
 	if rows != nil {
 		rangeToRead = *rows
 	}

@@ -208,6 +208,39 @@ func makeIPC(t *testing.T, batch arrow.RecordBatch) []byte {
 	return buf.Bytes()
 }
 
+func TestOpenEmptyInstanceResult(t *testing.T) {
+	schema := makeArrowBatch(t).Schema()
+	var payload bytes.Buffer
+	require.NoError(t, ipc.NewWriter(&payload, ipc.WithSchema(schema)).Close())
+	client := localClient(t, func(w http.ResponseWriter, r *http.Request) {
+		params := r.URL.Query()
+		switch params.Get("Action") {
+		case "InstanceCreateReadSession":
+			fmt.Fprint(w, `{"DownloadID":"empty","RecordCount":0}`)
+		case "InstanceRead":
+			assert.Equal(t, "0", params.Get("Offset"))
+			if params.Get("Count") != "1" {
+				http.Error(w, "read count must be positive", http.StatusBadRequest)
+				return
+			}
+			_, _ = w.Write(payload.Bytes())
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
+	ctx := t.Context()
+	session, err := client.CreateInstanceReadSession(ctx, "instance", InstanceReadOptions{})
+	require.NoError(t, err)
+	require.Zero(t, session.RecordCount())
+	reader, err := session.OpenReader(ctx, nil)
+	require.NoError(t, err)
+	defer reader.Release()
+	require.True(t, reader.Schema().Equal(schema))
+	require.False(t, reader.Next())
+	require.NoError(t, reader.Err())
+}
+
 func TestArrowReadLengthAndTruncation(t *testing.T) {
 	payload := makeIPC(t, makeArrowBatch(t, 8))
 	schemaEnd := 8 + int(binary.LittleEndian.Uint32(payload[4:8]))

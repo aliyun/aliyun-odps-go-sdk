@@ -127,6 +127,27 @@ func TestEmulatorInstanceReadSession(t *testing.T) {
 	serviceError(t, err, http.StatusNotFound, "NoSuchSession")
 }
 
+func TestEmulatorEmptyInstanceReadSession(t *testing.T) {
+	e := newEmulator(t)
+	ctx := t.Context()
+	id := e.sql(t, "select cast(1 as bigint) as id where 1 = 0")
+	session, err := e.storage.CreateInstanceReadSession(ctx, id, storage.InstanceReadOptions{})
+	require.NoError(t, err)
+	require.Zero(t, session.RecordCount())
+
+	reopened, err := e.storage.GetInstanceReadSession(ctx, id, session.Session(), storage.InstanceReadOptions{})
+	require.NoError(t, err)
+	reader, err := reopened.OpenReader(ctx, nil)
+	require.NoError(t, err)
+	defer reader.Release()
+	require.Equal(t, "id", reader.Schema().Field(0).Name)
+	require.Equal(t, arrow.PrimitiveTypes.Int64, reader.Schema().Field(0).Type)
+	for reader.Next() {
+		require.Zero(t, reader.RecordBatch().NumRows())
+	}
+	require.NoError(t, reader.Err())
+}
+
 func testBatch(t *testing.T, id int64, note string) arrow.RecordBatch {
 	t.Helper()
 	mem := memory.NewCheckedAllocator(memory.DefaultAllocator)
