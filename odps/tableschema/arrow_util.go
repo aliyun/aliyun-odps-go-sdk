@@ -17,103 +17,57 @@
 package tableschema
 
 import (
-	"encoding/binary"
+	"bytes"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow/array"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 )
 
-type arrowOptions struct {
-	ExtendedMode  bool
-	TimestampUnit TimeUnit
-	DatetimeUnit  TimeUnit
-}
-
-type TimeUnit string
-
-const (
-	Second TimeUnit = "second"
-	Milli  TimeUnit = "milli"
-	Micro  TimeUnit = "micro"
-	Nano   TimeUnit = "nano"
-)
-
-// ArrowOptions can not be used directly, it can be created by ArrowOptionConfig.XXX
-type ArrowOptions func(cfg *arrowOptions)
-
-func newTypeConvertConfig(opts ...ArrowOptions) *arrowOptions {
-	cfg := &arrowOptions{
-		ExtendedMode:  false,
-		TimestampUnit: Nano,
-		DatetimeUnit:  Milli,
-	}
-
-	for _, opt := range opts {
-		opt(cfg)
-	}
-
-	return cfg
-}
-
-func withExtendedMode() ArrowOptions {
-	return func(cfg *arrowOptions) {
-		cfg.ExtendedMode = true
-	}
-}
-
-func withTimestampUnit(unit TimeUnit) ArrowOptions {
-	return func(cfg *arrowOptions) {
-		cfg.TimestampUnit = unit
-	}
-}
-
-func withDatetimeUnit(unit TimeUnit) ArrowOptions {
-	return func(cfg *arrowOptions) {
-		cfg.DatetimeUnit = unit
-	}
-}
-
-var ArrowOptionConfig = struct {
-	WithExtendedMode  func() ArrowOptions
-	WithTimestampUnit func(unit TimeUnit) ArrowOptions
-	WithDatetimeUnit  func(unit TimeUnit) ArrowOptions
-}{
-	WithExtendedMode:  withExtendedMode,
-	WithTimestampUnit: withTimestampUnit,
-	WithDatetimeUnit:  withDatetimeUnit,
-}
-
-// TypeToArrowType convert odps field type to arrow field type
-// *        Storage Type      |  Arrow Type
-// *    ----------------------+---------------------
-// *      boolean             |  boolean
-// *      tinyint             |  int8
-// *      smallint            |  int16
-// *      int                 |  int32
-// *      bigint              |  int64
-// *      float               |  float32
-// *      double              |  float64
-// *      char                |  utf8
-// *      varchar             |  utf8
-// *      string              |  utf8
-// *      binary              |  binary
-// *      date                |  date32
-// *      datetime            |  timestamp(nano)
-// *      timestamp           |  timestamp(nano) 【注：精度选择功能开发中】
-// *      interval_day_time   |  day_time_interval
-// *      interval_year_month |  month_interval
-// *      decimal             |  decimal
-// *      struct              |  struct
-// *      array               |  list
-// *      map                 |  map
+// TypeToArrowType maps a MaxCompute column type to its Storage API V2 Arrow type.
 func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error) {
+	if odpsType == nil {
+		return nil, fmt.Errorf("missing MaxCompute type")
+	}
+	switch typ := odpsType.(type) {
+	case datatype.DecimalType:
+		if typ.Precision < 1 || typ.Precision > 38 || typ.Scale < 0 || typ.Scale > typ.Precision {
+			return nil, fmt.Errorf("invalid MaxCompute type %s", typ.Name())
+		}
+		return &arrow.Decimal128Type{Precision: typ.Precision, Scale: typ.Scale}, nil
+	case datatype.StructType:
+		fields := make([]arrow.Field, len(typ.Fields))
+		for i, field := range typ.Fields {
+			fieldType, err := TypeToArrowType(field.Type)
+			if err != nil {
+				return nil, fmt.Errorf("struct field %q: %w", field.Name, err)
+			}
+			fields[i] = arrow.Field{Name: field.Name, Type: fieldType, Nullable: true}
+		}
+		return arrow.StructOf(fields...), nil
+	case datatype.ArrayType:
+		itemType, err := TypeToArrowType(typ.ElementType)
+		if err != nil {
+			return nil, fmt.Errorf("array element: %w", err)
+		}
+		return arrow.ListOf(itemType), nil
+	case datatype.MapType:
+		key, err := TypeToArrowType(typ.KeyType)
+		if err != nil {
+			return nil, fmt.Errorf("map key: %w", err)
+		}
+		value, err := TypeToArrowType(typ.ValueType)
+		if err != nil {
+			return nil, fmt.Errorf("map value: %w", err)
+		}
+		return arrow.MapOf(key, value), nil
+	}
+
 	switch odpsType.ID() {
 	case datatype.BOOLEAN:
 		return arrow.FixedWidthTypes.Boolean, nil
@@ -138,59 +92,21 @@ func TypeToArrowType(odpsType datatype.DataType) (arrow.DataType, error) {
 	case datatype.DATETIME:
 		return arrow.FixedWidthTypes.Timestamp_ms, nil
 	case datatype.TIMESTAMP:
-		return arrow.FixedWidthTypes.Timestamp_ns, nil
+		return &arrow.TimestampType{Unit: arrow.Nanosecond, TimeZone: "UTC"}, nil
 	case datatype.TIMESTAMP_NTZ:
-		return arrow.FixedWidthTypes.Timestamp_ns, nil
+		return &arrow.TimestampType{Unit: arrow.Nanosecond}, nil
 	case datatype.IntervalDayTime:
 		return arrow.FixedWidthTypes.DayTimeInterval, nil
 	case datatype.IntervalYearMonth:
 		return arrow.FixedWidthTypes.MonthInterval, nil
-	case datatype.DECIMAL:
-		decimal, _ := odpsType.(datatype.DecimalType)
-		return &arrow.Decimal128Type{
-			Precision: decimal.Precision,
-			Scale:     decimal.Scale,
-		}, nil
-	case datatype.STRUCT:
-		structType, _ := odpsType.(datatype.StructType)
-		arrowFields := make([]arrow.Field, len(structType.Fields))
-		for i, field := range structType.Fields {
-			arrowType, err := TypeToArrowType(field.Type)
-			if err != nil {
-				return arrow.Null, err
-			}
-
-			arrowFields[i] = arrow.Field{
-				Name: field.Name,
-				Type: arrowType,
-			}
-		}
-		return arrow.StructOf(arrowFields...), nil
-	case datatype.ARRAY:
-		arrayType, _ := odpsType.(datatype.ArrayType)
-		itemType, err := TypeToArrowType(arrayType.ElementType)
-		if err != nil {
-			return arrow.Null, err
-		}
-
-		return arrow.ListOf(itemType), nil
-		// case datatype.MAP:
-		//	mapType, _ := odpsType.(datatype.MapType)
-		//	keyType, err := TypeToArrowType(mapType.KeyType)
-		//	if err != nil {
-		//		return arrow.Null, err
-		//	}
-		//	valueType, err := TypeToArrowType(mapType.ValueType)
-		//	if err != nil {
-		//		return arrow.Null, err
-		//	}
-		//	return arrow.MapOf(keyType, valueType), nil
 	}
-
-	return arrow.Null, errors.Errorf("unknown odps data type: %s", odpsType.Name())
+	return nil, fmt.Errorf("unsupported MaxCompute type: %s", odpsType.Name())
 }
 
-func toMaxComputeData(vector array.Interface, index int, typeInfo datatype.DataType, cfg *arrowOptions) (data.Data, error) {
+func toMaxComputeData(vector arrow.Array, index int, typeInfo datatype.DataType) (data.Data, error) {
+	if vector.IsNull(index) {
+		return data.Null, nil
+	}
 	switch typeInfo.ID() {
 	case datatype.BOOLEAN:
 		value := vector.(*array.Boolean).Value(index)
@@ -215,220 +131,115 @@ func toMaxComputeData(vector array.Interface, index int, typeInfo datatype.DataT
 		return data.Double(value), nil
 	case datatype.CHAR, datatype.VARCHAR, datatype.STRING, datatype.JSON:
 		value := vector.(*array.String).Value(index)
-		return data.String(value), nil
+		return data.String(strings.Clone(value)), nil
 	case datatype.BINARY:
 		value := vector.(*array.Binary).Value(index)
-		return data.Binary(value), nil
+		return data.Binary(bytes.Clone(value)), nil
 	case datatype.DATE:
-		value := vector.(*array.Date32).Value(index)
-		// Date32 从 epoch（1970-01-01）起的天数
-		days := int64(value)
-		// 将天数转换为 time.Duration，并加到 epoch 时间上
-		return data.Date(time.Unix(0, 0).AddDate(0, 0, int(days))), nil
-	case datatype.DATETIME:
-		value := vector.(*array.Timestamp).Value(index)
-		epochTime := int64(value)
-		switch cfg.DatetimeUnit {
-		case Second:
-			return data.DateTime(time.Unix(epochTime, 0)), nil
-		case Milli:
-			return data.DateTime(time.Unix(epochTime/1e3, (epochTime%1e3)*1e6)), nil
-		case Micro:
-			return data.DateTime(time.Unix(epochTime/1e6, (epochTime%1e6)*1e3)), nil
-		case Nano:
-			return data.DateTime(time.Unix(0, epochTime)), nil
-		}
-	case datatype.TIMESTAMP:
-		if cfg.ExtendedMode {
-			sec := vector.(*array.Struct).Field(0).(*array.Int64).Value(index)
-			nano := vector.(*array.Struct).Field(1).(*array.Int32).Value(index)
-			return data.Timestamp(time.Unix(sec, int64(nano))), nil
-		} else {
-			value := vector.(*array.Timestamp).Value(index)
-			epochTime := int64(value)
-			switch cfg.TimestampUnit {
-			case Second:
-				return data.Timestamp(time.Unix(epochTime, 0)), nil
-			case Milli:
-				return data.Timestamp(time.Unix(epochTime/1e3, (epochTime%1e3)*1e6)), nil
-			case Micro:
-				return data.Timestamp(time.Unix(epochTime/1e6, (epochTime%1e6)*1e3)), nil
-			case Nano:
-				return data.Timestamp(time.Unix(0, epochTime)), nil
-			}
-		}
-	case datatype.TIMESTAMP_NTZ:
-		if cfg.ExtendedMode {
-			sec := vector.(*array.Struct).Field(0).(*array.Int64).Value(index)
-			nano := vector.(*array.Struct).Field(1).(*array.Int32).Value(index)
-			return data.TimestampNtz(time.Unix(sec, int64(nano))), nil
-		} else {
-			value := vector.(*array.Timestamp).Value(index)
-			epochTime := int64(value)
-			switch cfg.TimestampUnit {
-			case Second:
-				return data.TimestampNtz(time.Unix(epochTime, 0)), nil
-			case Milli:
-				return data.TimestampNtz(time.Unix(epochTime/1e3, (epochTime%1e3)*1e6)), nil
-			case Micro:
-				return data.TimestampNtz(time.Unix(epochTime/1e6, (epochTime%1e6)*1e3)), nil
-			case Nano:
-				return data.TimestampNtz(time.Unix(0, epochTime)), nil
-			}
+		return data.Date(vector.(*array.Date32).Value(index).ToTime()), nil
+	case datatype.DATETIME, datatype.TIMESTAMP, datatype.TIMESTAMP_NTZ:
+		timestamps := vector.(*array.Timestamp)
+		value := timestamps.Value(index).ToTime(timestamps.DataType().(*arrow.TimestampType).Unit)
+		switch typeInfo.ID() {
+		case datatype.DATETIME:
+			return data.DateTime(value), nil
+		case datatype.TIMESTAMP:
+			return data.Timestamp(value), nil
+		default:
+			return data.TimestampNtz(value), nil
 		}
 	case datatype.DECIMAL:
-		decimalType := typeInfo.(datatype.DecimalType)
-		if cfg.ExtendedMode {
-			fixedSizeBinaryVector, extendedMode := vector.(*array.FixedSizeBinary)
-			if extendedMode {
-				val := fixedSizeBinaryVector.Value(index)
-				if len(val) < 8 {
-					return nil, errors.Errorf("Unrecognized Decimal type, val len %d", len(val))
-				}
-
-				mSign := val[1]
-				mIntg := val[2]
-				mFrac := val[3]
-
-				var decimalBuilder strings.Builder
-
-				if mSign > 0 {
-					decimalBuilder.WriteString("-")
-				}
-
-				for j := int(mIntg); j > 0; j-- {
-					num := int(binary.LittleEndian.Uint32(val[8+j*4 : 12+j*4]))
-
-					if j == int(mIntg) {
-						decimalBuilder.WriteString(fmt.Sprintf("%d", num))
-					} else {
-						decimalBuilder.WriteString(fmt.Sprintf("%09d", num))
-					}
-				}
-
-				decimalBuilder.WriteString(".")
-				for j := 0; j < int(mFrac); j++ {
-					num := int(binary.LittleEndian.Uint32(val[8-4*j : 8-4*j+4]))
-					decimalBuilder.WriteString(fmt.Sprintf("%09d", num))
-				}
-
-				// trim trailing zeros
-				result := decimalBuilder.String()
-				result = strings.TrimRight(result, "0")
-				if strings.HasSuffix(result, ".") {
-					result = result[:len(result)-1] // 移除多余的小数点
-				}
-				decimal := data.NewDecimal(int(decimalType.Precision), int(decimalType.Scale), result)
-				return decimal, nil
-			}
+		decimal := vector.(*array.Decimal128)
+		physicalType := decimal.DataType().(*arrow.Decimal128Type)
+		expectedType := typeInfo.(datatype.DecimalType)
+		if physicalType.Scale != expectedType.Scale {
+			return nil, fmt.Errorf("incompatible Arrow decimal scale %d for MaxCompute scale %d", physicalType.Scale, expectedType.Scale)
 		}
-		value := vector.(*array.Decimal128).Value(index)
-		decimal := data.NewDecimalFromValue(int(decimalType.Precision), int(decimalType.Scale), value.BigInt())
-		return decimal, nil
+		value := decimal.Value(index).ToString(expectedType.Scale)
+		return data.NewDecimal(int(expectedType.Precision), int(expectedType.Scale), value), nil
+	case datatype.IntervalDayTime:
+		value := vector.(*array.DayTimeInterval).Value(index)
+		total := int64(value.Days)*24*60*60*1000 + int64(value.Milliseconds)
+		return data.NewIntervalDayTime(total/1000, int32(total%1000)*int32(time.Millisecond)), nil
+	case datatype.IntervalYearMonth:
+		return data.IntervalYearMonth(vector.(*array.MonthInterval).Value(index)), nil
 	case datatype.ARRAY:
-		arrayType := typeInfo.(datatype.ArrayType)
-
-		// 处理 LIST 类型
-		listCol := vector.(*array.List)
-
-		// 获取偏移值，包括第 i 个列表对应的偏移量
-		offsets := listCol.Offsets()
-		start := offsets[index] // 当前列表的起始位置
-		end := offsets[index+1] // 下一个列表的起始位置
-
-		numElements := end - start                      // 当前列表的元素数量
-		listData := make([]interface{}, 0, numElements) // 创建容量为当前列表长度的切片
-
-		// 获取当前列表的值
-		childArray := listCol.ListValues() // 获取子列表，这里通常是一个 Array 接口
-
-		// 遍历子列表中的实际元素
-		for j := start; j < end; j++ {
-			elementData, err := toMaxComputeData(childArray, int(j-start), arrayType.ElementType, cfg)
+		typ := typeInfo.(datatype.ArrayType)
+		list := vector.(*array.List)
+		start, end := list.ValueOffsets(index)
+		result := data.NewArrayWithType(typ)
+		for i := start; i < end; i++ {
+			value, err := toMaxComputeData(list.ListValues(), int(i), typ.ElementType)
 			if err != nil {
 				return nil, err
 			}
-			listData = append(listData, elementData)
+			result.UnSafeAppend(value)
 		}
-		return data.ArrayFromSlice(listData...)
-
+		return result, nil
 	case datatype.MAP:
-		mapType := typeInfo.(datatype.MapType)
-		// 处理 MAP 类型
-		mapCol := vector.(*array.Map)
-
-		offsets := mapCol.Offsets()
-		start := offsets[index]
-		end := offsets[index+1]
-
-		mapData := make(map[interface{}]interface{})
-		keys := mapCol.Keys()
-		values := mapCol.Items()
-
-		for j := start; j < end; j++ {
-			keyData, err := toMaxComputeData(keys, int(j-start), mapType.KeyType, cfg)
+		typ := typeInfo.(datatype.MapType)
+		column := vector.(*array.Map)
+		start, end := column.ValueOffsets(index)
+		result := data.NewMapWithType(typ)
+		for i := start; i < end; i++ {
+			key, err := toMaxComputeData(column.Keys(), int(i), typ.KeyType)
 			if err != nil {
 				return nil, err
 			}
-			valueData, err := toMaxComputeData(values, int(j-start), mapType.ValueType, cfg)
+			value, err := toMaxComputeData(column.Items(), int(i), typ.ValueType)
 			if err != nil {
 				return nil, err
 			}
-			mapData[keyData] = valueData
+			if err := result.Set(key, value); err != nil {
+				return nil, err
+			}
 		}
-		return data.MapFromGoMap(mapData)
-
+		return result, nil
 	case datatype.STRUCT:
-		structType := typeInfo.(datatype.StructType)
-		// 处理 STRUCT 类型
-		structCol := vector.(*array.Struct)
-
-		structData := data.NewStructWithTyp(structType)
-
-		for fieldIndex := 0; fieldIndex < structCol.NumField(); fieldIndex++ {
-			fieldType := structType.Fields[fieldIndex]
-			fieldName := fieldType.Name
-
-			fieldArray := structCol.Field(fieldIndex)
-			fieldValue, err := toMaxComputeData(fieldArray, index, fieldType.Type, cfg)
+		typ := typeInfo.(datatype.StructType)
+		column := vector.(*array.Struct)
+		if column.NumField() != len(typ.Fields) {
+			return nil, fmt.Errorf("incompatible Arrow struct field count for %s", typ.Name())
+		}
+		result := data.NewStructWithTyp(typ)
+		for i, field := range typ.Fields {
+			value, err := toMaxComputeData(column.Field(i), index, field.Type)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("struct field %q: %w", field.Name, err)
 			}
-			err = structData.SetField(fieldName, fieldValue)
-			if err != nil {
+			if err := result.SetField(field.Name, value); err != nil {
 				return nil, err
 			}
 		}
-		return structData, nil
+		return result, nil
 	}
 	return nil, fmt.Errorf("unsupported ODPS type: %v", typeInfo.Name())
 }
 
-// ToMaxComputeRecords 将 Arrow Record Batch 转换为 ODPS Record 列表
-func ToMaxComputeRecords(arrowBatch array.Record, columns []Column, opt ...ArrowOptions) ([]data.Record, error) {
-	cfg := newTypeConvertConfig(opt...)
-	odpsRecords := make([]data.Record, 0, int(arrowBatch.NumRows()))
-	// 迭代每一行
-	for i := 0; i < int(arrowBatch.NumRows()); i++ {
-		// 创建 ODPS Record
-		odpsRecord := make([]data.Data, 0, int(arrowBatch.NumCols()))
-
-		// 遍历 Arrow Record 中的所有列
-		for j := 0; j < int(arrowBatch.NumCols()); j++ {
-			col := arrowBatch.Column(j)
-
-			if col.IsValid(i) {
-				odpsData, err := toMaxComputeData(col, i, columns[j].Type, cfg)
-				if err != nil {
-					return nil, err
-				}
-				odpsRecord = append(odpsRecord, odpsData)
-			} else {
-				// 处理空值
-				odpsRecord = append(odpsRecord, data.Null)
-			}
-		}
-		odpsRecords = append(odpsRecords, odpsRecord)
+// ToMaxComputeRecords converts a Storage API V2 batch to independent MaxCompute
+// records. columns must match the batch column order.
+func ToMaxComputeRecords(batch arrow.RecordBatch, columns []Column) (records []data.Record, err error) {
+	if batch == nil || int64(len(columns)) != batch.NumCols() {
+		return nil, fmt.Errorf("columns in the Arrow batch and MaxCompute schema do not match")
 	}
-	return odpsRecords, nil
+	// A stream may carry a different physical Arrow type from the requested table.
+	defer func() {
+		if value := recover(); value != nil {
+			records = nil
+			err = fmt.Errorf("incompatible Arrow batch: %v", value)
+		}
+	}()
+	records = make([]data.Record, 0, batch.NumRows())
+	for row := range int(batch.NumRows()) {
+		record := data.NewRecord(len(columns))
+		for index, column := range columns {
+			value, err := toMaxComputeData(batch.Column(index), row, column.Type)
+			if err != nil {
+				return nil, fmt.Errorf("column %q: %w", column.Name, err)
+			}
+			record[index] = value
+		}
+		records = append(records, record)
+	}
+	return records, nil
 }

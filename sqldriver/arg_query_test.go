@@ -66,6 +66,8 @@ func TestPositionArgQuery(t *testing.T) {
 		"select * from student where name=? and student.age<? or name like '?' or name='cat'",
 		"select * from student where name=?",
 		"update user set name=?, age=?, address=? where id=1",
+		"select ?;",
+		"select ?;",
 	}
 
 	expected := []struct {
@@ -75,12 +77,16 @@ func TestPositionArgQuery(t *testing.T) {
 		{"select * from student where name=tom and student.age<10 or name like 'tom' or name='cat'", false},
 		{"select * from student where name=tom", false},
 		{"", true},
+		{"select 42;", false},
+		{"", true},
 	}
 
 	args := [][]interface{}{
 		{"tom", 10, "tom"},
 		{"tom"},
 		{"tom", 10},
+		{42},
+		{42, 43},
 	}
 
 	for i, q := range queries {

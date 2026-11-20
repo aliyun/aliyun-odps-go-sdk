@@ -85,6 +85,9 @@ func (t *Tenant) Load() error {
 	if err != nil {
 		return err
 	}
+	if tenantResponse.Tenant == nil {
+		return errors.New("tenant response is missing Tenant")
+	}
 
 	t.model = tenantResponse.Tenant
 	return nil

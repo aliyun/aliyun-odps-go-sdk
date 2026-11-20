@@ -24,12 +24,11 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/pkg/errors"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
-
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 )
 
 type TableSchema struct {
@@ -83,7 +82,7 @@ type TableSchema struct {
 
 type reservedJSON struct {
 	ClusterInfo
-	Transactional string   `json:"Transactional"`
+	Transactional any
 	PrimaryKeys   []string `json:"PrimaryKey"`
 }
 
@@ -315,7 +314,16 @@ func (schema *TableSchema) UnmarshalJSON(data []byte) error {
 		}
 		schema.ClusterInfo = reservedData.ClusterInfo
 		schema.PrimaryKeys = reservedData.PrimaryKeys
-		schema.Transactional = common.StringToBool(reservedData.Transactional)
+		switch flag := reservedData.Transactional.(type) {
+		case nil:
+			schema.Transactional = false
+		case bool:
+			schema.Transactional = flag
+		case string:
+			schema.Transactional = common.StringToBool(flag)
+		default:
+			return fmt.Errorf("expected boolean or string for Transactional, got %T", flag)
+		}
 	}
 	return nil
 }
@@ -364,10 +372,7 @@ func (schema *TableSchema) ToBaseSQLString(projectName string, schemaName string
 		")" +
 		"{{ end }}"
 
-	tpl, err := template.New("DDL_CREATE_TABLE").Funcs(fns).Parse(tplStr)
-	if err != nil {
-		panic(err)
-	}
+	tpl := template.Must(template.New("DDL_CREATE_TABLE").Funcs(fns).Parse(tplStr))
 
 	type Data struct {
 		ProjectName       string
@@ -380,9 +385,8 @@ func (schema *TableSchema) ToBaseSQLString(projectName string, schemaName string
 	data := Data{projectName, schemaName, schema, isExternal, createIfNotExists}
 
 	var out bytes.Buffer
-	err = tpl.Execute(&out, data)
-	if err != nil {
-		panic(err)
+	if err := tpl.Execute(&out, data); err != nil {
+		return "", errors.Wrap(err, "render table DDL")
 	}
 	return out.String(), nil
 }
@@ -633,7 +637,7 @@ func (schema *TableSchema) ToExternalSQLString(
 	builder.WriteString(baseSQL)
 
 	// stored by, 用于指定自定义格式StorageHandler的类名或其他外部表文件格式
-	builder.WriteString(fmt.Sprintf("\nstored by '%s'\n", schema.StorageHandler))
+	_, _ = fmt.Fprintf(&builder, "\nstored by '%s'\n", schema.StorageHandler)
 
 	// serde properties, 序列化属性参数
 	if len(serdeProperties) > 0 {
@@ -641,7 +645,7 @@ func (schema *TableSchema) ToExternalSQLString(
 		i, n := 0, len(serdeProperties)
 
 		for key, value := range serdeProperties {
-			builder.WriteString(fmt.Sprintf("%s=%s", common.QuoteString(key), common.QuoteString(value)))
+			_, _ = fmt.Fprintf(&builder, "%s=%s", common.QuoteString(key), common.QuoteString(value))
 			i += 1
 			if i < n {
 				builder.WriteString(", ")
@@ -652,7 +656,7 @@ func (schema *TableSchema) ToExternalSQLString(
 	}
 
 	// location, 外部表存放地址
-	builder.WriteString(fmt.Sprintf("location '%s'\n", schema.Location))
+	_, _ = fmt.Fprintf(&builder, "location '%s'\n", schema.Location)
 
 	// 自定义格式时类定义所在的jar
 	if len(jars) > 0 {
@@ -674,7 +678,7 @@ func (schema *TableSchema) ToExternalSQLString(
 		sortColsNum := len(schema.TblProperties)
 
 		for k, v := range schema.TblProperties {
-			builder.WriteString(fmt.Sprintf("%s=%s", common.QuoteString(k), common.QuoteString(v)))
+			_, _ = fmt.Fprintf(&builder, "%s=%s", common.QuoteString(k), common.QuoteString(v))
 			i++
 			if i < sortColsNum {
 				builder.WriteString(", ")
@@ -685,24 +689,28 @@ func (schema *TableSchema) ToExternalSQLString(
 	}
 
 	if schema.Lifecycle > 0 {
-		builder.WriteString(fmt.Sprintf("lifecycle %d", schema.Lifecycle))
+		_, _ = fmt.Fprintf(&builder, "lifecycle %d", schema.Lifecycle)
 	}
 
 	builder.WriteRune(';')
 	return builder.String(), nil
 }
 
-func (schema *TableSchema) ToArrowSchema() *arrow.Schema {
+// ToArrowSchema maps data columns to the Storage API V2 Arrow representation.
+func (schema *TableSchema) ToArrowSchema() (*arrow.Schema, error) {
 	fields := make([]arrow.Field, len(schema.Columns))
 	for i, column := range schema.Columns {
-		arrowType, _ := TypeToArrowType(column.Type)
+		arrowType, err := TypeToArrowType(column.Type)
+		if err != nil {
+			return nil, fmt.Errorf("column %q: %w", column.Name, err)
+		}
 		fields[i] = arrow.Field{
 			Name:     column.Name,
 			Type:     arrowType,
 			Nullable: !column.NotNull,
 		}
 	}
-	return arrow.NewSchema(fields, nil)
+	return arrow.NewSchema(fields, nil), nil
 }
 
 func (schema *TableSchema) FieldByName(name string) (Column, bool) {
@@ -718,9 +726,9 @@ func (schema *TableSchema) FieldByName(name string) (Column, bool) {
 // GeneratePartitionSpec Used for Auto-Partition tables to automatically generate partition columns based on Record
 func (schema *TableSchema) GeneratePartitionSpec(record *data.Record) (string, error) {
 	var builder strings.Builder
-	for index, partitionColumn := range schema.PartitionColumns {
+	for _, partitionColumn := range schema.PartitionColumns {
 		if partitionColumn.GenerateExpression != nil {
-			if index > 0 {
+			if builder.Len() > 0 {
 				builder.WriteString("/")
 			}
 			generate, err := partitionColumn.GenerateExpression.generate(record, schema)

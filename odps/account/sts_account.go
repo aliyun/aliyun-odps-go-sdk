@@ -19,6 +19,7 @@ package account
 import (
 	"errors"
 	"net/http"
+	"sync"
 
 	"github.com/aliyun/credentials-go/credentials"
 
@@ -45,7 +46,7 @@ type stsStringProvider struct {
 }
 
 func (sp *stsStringProvider) _signRequest(req *http.Request, endpoint string) error {
-	err := sp.AliyunAccount.SignRequest(req, endpoint)
+	err := sp.SignRequest(req, endpoint)
 	if err != nil {
 		return err
 	}
@@ -65,7 +66,7 @@ func (sp *stsStringProvider) Credential() (*credentials.CredentialModel, error) 
 // errIncompleteCredential is returned when a credential provider hands the
 // account an unusable credential. It deliberately carries no credential value,
 // so an error message can be logged or shown without leaking a secret.
-var errIncompleteCredential = errors.New("odps account: credential provider returned an incomplete credential (access key id and secret are required)")
+var errIncompleteCredential = errors.New("odps account: incomplete credential (access key id and secret are required)")
 
 // signWithCredential signs req with the access key pair from cred.
 //
@@ -90,6 +91,8 @@ func signWithCredential(cred *credentials.CredentialModel, regionId, endpoint st
 
 	if token, ok := stsTokenHeaderValue(cred); ok {
 		req.Header.Set(common.HttpHeaderAuthorizationSTSToken, token)
+	} else {
+		req.Header.Del(common.HttpHeaderAuthorizationSTSToken)
 	}
 
 	return nil
@@ -101,9 +104,6 @@ func signWithCredential(cred *credentials.CredentialModel, regionId, endpoint st
 // BearerToken is only a fallback, kept so a provider that has always put its
 // token there keeps working; a credential with neither sends no token header.
 func stsTokenHeaderValue(cred *credentials.CredentialModel) (string, bool) {
-	if cred == nil {
-		return "", false
-	}
 	if cred.SecurityToken != nil {
 		return *cred.SecurityToken, true
 	}
@@ -115,12 +115,13 @@ func stsTokenHeaderValue(cred *credentials.CredentialModel) (string, bool) {
 }
 
 type stsAliyunCredentialProvider struct {
+	mu               sync.Mutex
 	aliyunCredential credentials.Credential
 	regionId         string
 }
 
 func (sp *stsAliyunCredentialProvider) _signRequest(req *http.Request, endpoint string) error {
-	cred, err := sp.aliyunCredential.GetCredential()
+	cred, err := sp.Credential()
 	if err != nil {
 		return err
 	}
@@ -129,6 +130,9 @@ func (sp *stsAliyunCredentialProvider) _signRequest(req *http.Request, endpoint 
 }
 
 func (sp *stsAliyunCredentialProvider) Credential() (*credentials.CredentialModel, error) {
+	// The credentials-go providers may mutate their cache during refresh.
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
 	return sp.aliyunCredential.GetCredential()
 }
 

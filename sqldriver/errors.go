@@ -17,10 +17,18 @@
 package sqldriver
 
 import (
+	"fmt"
+
 	"github.com/pkg/errors"
 )
 
-// CanceledError 是 ctx 取消/超时打断等待时返回的错误。它同时满足两个要求：
+// ErrTransactionsUnsupported is returned by Begin and BeginTx.
+var ErrTransactionsUnsupported = errors.New("MaxCompute does not support database/sql transactions")
+
+// ErrPreparedStatementsUnsupported is returned by Prepare and PrepareContext.
+var ErrPreparedStatementsUnsupported = errors.New("the MaxCompute SQL driver does not support prepared statements")
+
+// CanceledError 是执行 SQL 或打开结果流时的取消错误，包含客户端已收到的实例 ID。
 //
 //  1. errors.Is(err, context.Canceled) / errors.Is(err, context.DeadlineExceeded)
 //     仍然成立（原因在 Unwrap 链里），不改变调用方原有的判断写法；
@@ -41,10 +49,7 @@ type CanceledError struct {
 }
 
 func (e *CanceledError) Error() string {
-	return errors.Wrapf(e.Err,
-		"canceled while waiting for MaxCompute instance %s; the instance keeps running on the server, "+
-			"terminate it with odps.Instance.Terminate if it is no longer needed",
-		e.InstanceID).Error()
+	return fmt.Sprintf("MaxCompute operation canceled for instance %s: %v", e.InstanceID, e.Err)
 }
 
 // Unwrap keeps the context error in the chain, so errors.Is still matches it.

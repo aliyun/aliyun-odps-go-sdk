@@ -19,7 +19,6 @@ package data
 import (
 	"fmt"
 	"math/big"
-	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -48,7 +47,7 @@ func (d *Decimal) Scale() int {
 }
 
 func (d *Decimal) Value() string {
-	return d.value
+	return d.String()
 }
 
 // NewDecimal value means readable string of the decimal, because MaxCompute uses string as the serialization method of decimal
@@ -72,40 +71,26 @@ func NewDecimalFromValue(precision, scale int, intValue *big.Int) *Decimal {
 	}
 }
 
+// DecimalFromStr parses a fixed-point value using up to 38 digits of precision.
 func DecimalFromStr(value string) (*Decimal, error) {
-	parts := strings.Split(value, ".")
-	if len(parts) > 3 {
+	unsigned := strings.TrimPrefix(value, "+")
+	if unsigned == value {
+		unsigned = strings.TrimPrefix(value, "-")
+	}
+	integer, fraction, hasPoint := strings.Cut(unsigned, ".")
+	if !decimalDigits(integer) || (hasPoint && !decimalDigits(fraction)) {
 		return nil, InvalidDecimalErr
 	}
-
-	_, err := strconv.ParseInt(parts[0], 10, 32)
-	if err != nil {
-		return nil, InvalidDecimalErr
+	scale := len(fraction)
+	precision := max(1, len(strings.TrimLeft(integer, "0"))+scale)
+	if precision > 38 {
+		return nil, fmt.Errorf("%w: precision %d exceeds 38", InvalidDecimalErr, precision)
 	}
+	return NewDecimal(precision, scale, value), nil
+}
 
-	d := Decimal{}
-	d.precision = len(parts[0])
-
-	if d.precision > 38 {
-		return nil, errors.New("integer is too big, the most numbers of the integer is 38")
-	}
-
-	if len(parts) == 2 {
-		_, err = strconv.ParseInt(parts[1], 10, 32)
-		if err != nil {
-			return nil, InvalidDecimalErr
-		}
-
-		d.scale = len(parts[1])
-	}
-
-	if d.scale > 38 {
-		return nil, errors.New("fractional is too long, which is longer than 38")
-	}
-
-	d.value = value
-	d.Valid = true
-	return &d, nil
+func decimalDigits(value string) bool {
+	return value != "" && strings.IndexFunc(value, func(r rune) bool { return r < '0' || r > '9' }) == -1
 }
 
 func (d Decimal) Type() datatype.DataType {
@@ -113,20 +98,24 @@ func (d Decimal) Type() datatype.DataType {
 }
 
 func (d Decimal) String() string {
-	if d.value == parseFromValue {
-		valueStr := d.intValue.String()
-		if d.scale > 0 {
-			if len(valueStr) <= d.scale {
-				valueStr = "0." + fmt.Sprintf("%0*s", d.scale, valueStr)
-			} else {
-				integerPart := valueStr[:len(valueStr)-d.scale]
-				fractionalPart := valueStr[len(valueStr)-d.scale:]
-				valueStr = integerPart + "." + fractionalPart
-			}
-		}
-		return fmt.Sprintf("%s", valueStr)
+	if d.value != parseFromValue {
+		return d.value
 	}
-	return fmt.Sprintf("%s", d.value)
+	value := d.intValue.String()
+	if d.scale <= 0 {
+		return value
+	}
+
+	sign := ""
+	if unsigned, negative := strings.CutPrefix(value, "-"); negative {
+		sign = "-"
+		value = unsigned
+	}
+	if len(value) <= d.scale {
+		value = strings.Repeat("0", d.scale-len(value)+1) + value
+	}
+	split := len(value) - d.scale
+	return sign + value[:split] + "." + value[split:]
 }
 
 func (d Decimal) Sql() string {

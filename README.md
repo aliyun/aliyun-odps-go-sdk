@@ -1,18 +1,31 @@
-# Note
-This SDK is used in production, including the control-plane surfaces (`SQLTask`, instance status and results, `Tables`/`Schemas`/`Table.Load`) and the Tunnel APIs.
+# MaxCompute Go SDK
 
-It is still under active development toward v1.0. CI coverage in this repository is not comprehensive yet. Tunnel Protobuf records support nested NULL values in complex types and detect truncated checksum trailers. Use Protobuf to upload to tables with MAP columns.
+Use this SDK to submit SQL, manage MaxCompute metadata, and transfer data. The
+1.0 API uses [Storage API V2](docs/storage-v2.md) for Arrow and `odps/tunnel`
+for Protobuf transfers.
 
 # Install
-The MaxCompute SDK APIs and SQL driver require Go 1.15 or later in v0.4.x.
+Go 1.26.11 or later is required.
 ```shell
 go get github.com/aliyun/aliyun-odps-go-sdk
 ```
+
+## Tests
+
+Run `bash scripts/test-emulator.sh` with Go 1.26.11 or later, Docker, and Python 3.9 or later.
+The script builds a pinned MaxCompute Emulator and starts two loopback fixtures
+for protocol and strict authentication tests. It builds the examples and
+reports source line coverage and Gobco branch coverage across the SDK and Tea
+modules. Set SDK_EMULATOR_IMAGE to use an already built candidate image.
+Gobco measures each package's tests and does not instrument `select` cases.
+Run `bash scripts/test-emulator.sh --release` before tagging. The release check
+requires more than 90% reported branch coverage and more than 85% source line coverage.
 
 # 目录说明
 ## odps
  - odps sdk的主体目录, 包括子目录
  - tunnel: tunnel相关实现
+ - storage: Storage API V2 的实例和表 Arrow 读取及批量写入
  - account
  - common
  - data: odps数据值的go表示
@@ -125,12 +138,12 @@ odpsIns.SetDefaultProjectName(projectName)
 
 ### go sql 的 context 语义
 
-`db.QueryContext` / `db.ExecContext` 的 context 只管客户端，不管服务端：
+`db.QueryContext` 和 `db.ExecContext` 的 context 控制 SQL 提交、状态轮询、重试等待及结果下载。
 
-1. **提交前** context 已取消或已过期：直接返回 `ctx.Err()`，不会创建 MaxCompute instance。
-2. **等待 instance 结束时**取消：等待立刻结束并返回 `ctx.Err()`，错误类型是 `*sqldriver.CanceledError`，
-   里面直接带着 instance id。服务端任务**不会**被终止——终止运行中的作业是破坏性动作，留给调用方
-   显式决定。已在途的那个 HTTP 请求不会被打断，所以返回时刻在一个轮询周期加一次往返之内。
+1. **提交前** context 已取消或已过期时，直接返回 context 错误。
+2. **请求或重试期间**取消会中断客户端操作。查询或执行返回错误时，驱动通过 `*sqldriver.CanceledError` 携带已收到的实例 ID，
+   并保留 `errors.Is(err, context.Canceled)` 和 `errors.Is(err, context.DeadlineExceeded)` 的判断方式。
+   如果在收到实例 ID 前取消提交，服务端仍可能已经接收任务。要主动终止已知实例，请调用 `Instance.Terminate`。
 
    ```go
    var canceled *sqldriver.CanceledError
@@ -139,13 +152,13 @@ odpsIns.SetDefaultProjectName(projectName)
        _ = odpsIns.Instance(canceled.InstanceID).Terminate() // 只有你自己叫停
    }
    ```
-3. **读取结果时**取消：driver 会关掉结果流，卡住的 `Rows.Next` 随即带着 `ctx.Err()` 返回，
-   `Rows.Err()` 报错而不是被当成"正常读完"。`Rows.Close` 可重复调用。
+3. **读取结果时**取消会关闭结果流，调用方通过 `Rows.Err()` 获取取消错误。`Rows.Close` 可重复调用。
 4. **`db.PingContext` 不会访问服务端**：本 driver 没有实现 `driver.Pinger`，ping 只在
    database/sql 层取连接（context 已取消时返回 `ctx.Err()`）。要确认连通性请显式执行一条 SQL。
 5. **`ExecContext` 返回的 `sql.Result` 不再可能是 nil**：MaxCompute 不报告受影响行数，
    所以 `RowsAffected` / `LastInsertId` 明确返回"不支持"的错误（`sqldriver.ErrNoRowsAffectedInfo` /
    `sqldriver.ErrNoLastInsertIdInfo`）。以前这里返回 nil，调用方 `res.RowsAffected()` 会 panic。
+6. `Begin` 和 `BeginTx` 返回 `sqldriver.ErrTransactionsUnsupported`。`Prepare` 和 `PrepareContext` 返回 `sqldriver.ErrPreparedStatementsUnsupported`。
 
 不用 context 的等待入口是 `Instance.WaitForSuccess`，需要给它加期限时用
 `Instance.WaitForSuccessContext(ctx)`。

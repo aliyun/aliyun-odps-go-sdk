@@ -379,8 +379,15 @@ func (r *RecordProtocWriter) writeJson(val *data.Json) error {
 	return errors.WithStack(r.protocWriter.WriteBytes(b))
 }
 
-func (r *RecordProtocWriter) close() error {
-	err := r.protocWriter.WriteTag(MetaCount, protowire.VarintType)
+func (r *RecordProtocWriter) close() (err error) {
+	defer func() {
+		closeErr := r.writeCloser.Close()
+		if err == nil {
+			err = errors.WithStack(closeErr)
+		}
+	}()
+
+	err = r.protocWriter.WriteTag(MetaCount, protowire.VarintType)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -396,11 +403,6 @@ func (r *RecordProtocWriter) close() error {
 	}
 
 	err = r.protocWriter.WriteUInt32(r.crcOfCrc.Value())
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	err = r.writeCloser.Close()
 	if err != nil {
 		return errors.WithStack(err)
 	}

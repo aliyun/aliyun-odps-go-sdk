@@ -22,11 +22,17 @@ func parseGenerateExpression(exprJSON string) (GenerateExpression, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(generateExpression) == 0 {
+		return nil, fmt.Errorf("generate expression has no expressions")
+	}
 
 	// 后续遍历，最后一个项目为顶层表达式
 	topLevelExpression := generateExpression[len(generateExpression)-1]
 	functionCall := topLevelExpression.FunctionCall
 	if functionCall != nil && strings.ToLower(functionCall.Name) == "trunc_time" {
+		if len(generateExpression) != 3 {
+			return nil, fmt.Errorf("trunc_time requires a column and a date part")
+		}
 		return newTruncTimeWithConstant(
 			generateExpression[0].LeafExprDesc.Reference.Name,
 			generateExpression[1].LeafExprDesc.Constant,

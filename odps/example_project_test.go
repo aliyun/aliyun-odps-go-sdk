@@ -34,8 +34,6 @@ func ExampleProjects_List() {
 	for _, project := range projects {
 		println(fmt.Sprintf("%+v", project))
 	}
-
-	// Output:
 }
 
 func ExampleProjects_Exists() {
@@ -48,7 +46,6 @@ func ExampleProjects_Exists() {
 	}
 
 	println(fmt.Sprintf("%s existed: %t", projectName, existed))
-	// Output:
 }
 
 func ExampleProject() {
@@ -84,7 +81,6 @@ func ExampleProject() {
 
 	isExisted := project.Existed()
 	println(isExisted)
-	// Output:
 }
 
 func ExampleProject_GetTunnelEndpoint() {
@@ -95,6 +91,4 @@ func ExampleProject_GetTunnelEndpoint() {
 	} else {
 		println(tunnelEndpoint)
 	}
-
-	// Output:
 }

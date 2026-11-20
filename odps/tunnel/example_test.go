@@ -19,6 +19,7 @@ package tunnel_test
 import (
 	"log"
 	"os"
+	"testing"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
@@ -40,6 +41,9 @@ func init() {
 	odpsEndpoint := restclient.LoadEndpointFromEnv()
 	tunnelEndpoint := os.Getenv("tunnel_odps_endpoint")
 
+	if os.Getenv("MAXCOMPUTE_LIVE_TESTS") != "1" || account == nil || odpsEndpoint == "" {
+		return
+	}
 	odpsIns = odps.NewOdps(account, odpsEndpoint)
 	odpsIns.SetDefaultProjectName(ProjectName)
 	tunnelIns = tunnel.NewTunnel(odpsIns, tunnelEndpoint)
@@ -47,6 +51,13 @@ func init() {
 	//createTableWithComplexData()
 	//createSaleDetailTable()
 	///createUploadSampleArrowTable()
+}
+
+func requireLiveTunnel(t *testing.T) {
+	t.Helper()
+	if odpsIns == nil {
+		t.Skip("requires MAXCOMPUTE_LIVE_TESTS=1, a live endpoint, and credentials")
+	}
 }
 
 func createTableWithComplexData() {

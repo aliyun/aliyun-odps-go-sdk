@@ -29,7 +29,6 @@ import (
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 )
 
@@ -109,31 +108,40 @@ func (t *Table) IsLoaded() bool {
 }
 
 func (t *Table) IsLoadedExtended() bool {
-	return t.beLoaded
+	return t.beLoadedExtended
 }
 
 func (t *Table) Load() error {
+	if err := t.loadBasic(); err != nil {
+		return err
+	}
+	return t.LoadExtendedInfo()
+}
+
+func (t *Table) loadBasic() error {
 	client := t.odpsIns.restClient
 	resource := t.ResourceUrl()
-	t.beLoaded = true
-
 	queryArgs := make(url.Values, 4)
 	if t.SchemaName() != "" {
 		queryArgs.Set("curr_schema", t.SchemaName())
 	}
 
-	err := client.GetWithModel(resource, queryArgs, nil, &t.model)
+	model := tableModel{Name: t.Name(), ProjectName: t.ProjectName(), SchemaName: t.SchemaName()}
+	err := client.GetWithModel(resource, queryArgs, nil, &model)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	err = json.Unmarshal([]byte(t.model.Schema), &t.tableSchema)
+	var schema tableschema.TableSchema
+	err = json.Unmarshal([]byte(model.Schema), &schema)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-
-	// LoadExtendedInfo会加载其他额外信息，主要是table schema信息
-	return errors.WithStack(t.LoadExtendedInfo())
+	t.model = model
+	t.tableSchema = schema
+	t.beLoaded = true
+	t.beLoadedExtended = false
+	return nil
 }
 
 func (t *Table) LoadExtendedInfo() error {
@@ -286,58 +294,38 @@ func calculateMaxLabel(labels []string) string {
 			continue
 		}
 
-		curCategory := label[0 : len(label)-1]
+		curCategory := strings.ToLower(label[:len(label)-1])
 		num, err := strconv.Atoi(string(label[len(label)-1]))
-		if err != nil {
+		if err != nil || num < maxLevel {
 			continue
-		}
-
-		if num > maxLevel {
-			maxLevel = num
-			category = ""
 		}
 
 		if curCategory == "" {
-			category = "L"
-			continue
+			curCategory = "L"
 		}
-
-		curCategory = strings.ToLower(curCategory)
-		if category == "" {
+		if num > maxLevel || category == "" {
+			maxLevel = num
 			category = curCategory
 		} else if category != curCategory {
 			category = "L"
 		}
 	}
 
-	if category == "" && maxLevel == 0 {
-		return ""
-	}
-
 	if category == "" {
-		category = "L"
+		return ""
 	}
 
 	return fmt.Sprintf("%s%d", category, maxLevel)
 }
 
+// Exists checks existence using basic table metadata.
 func (t *Table) Exists() (bool, error) {
-	err := t.Load()
+	err := t.loadBasic()
 
-	var httpErr restclient.HttpError
-	if errors.As(err, &httpErr) {
-		if httpErr.Status == "404 Not Found" {
-			return false, nil
-		}
-
-		return false, err
+	if isNotFound(err) {
+		return false, nil
 	}
-
-	if err != nil {
-		return false, errors.WithStack(err)
-	}
-
-	return true, nil
+	return err == nil, err
 }
 
 func (t *Table) LastDDLTime() time.Time {
@@ -421,28 +409,7 @@ func (t *Table) ColumnMaskInfos() ([]ColumnMaskInfo, error) {
 }
 
 func (t *Table) Delete() error {
-	var sqlBuilder strings.Builder
-	sqlBuilder.WriteString("drop table")
-	sqlBuilder.WriteString(" if exists")
-
-	sqlBuilder.WriteRune(' ')
-
-	hints := make(map[string]string)
-	if t.SchemaName() == "" {
-		hints["odps.namespace.schema"] = "false"
-	} else {
-		hints["odps.namespace.schema"] = "true"
-	}
-	sqlBuilder.WriteString(t.getFullName())
-	sqlBuilder.WriteString(";")
-
-	sqlTask := NewSqlTask("SQLDropTableTask", sqlBuilder.String(), hints)
-	instances := NewInstances(t.odpsIns, t.ProjectName())
-	i, err := instances.CreateTask(t.ProjectName(), &sqlTask)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	return errors.WithStack(i.WaitForSuccess())
+	return t.waitDDL("SQLDropTableTask", "drop table if exists "+t.getFullName()+";")
 }
 
 func (t *Table) ExecSqlWithHints(taskName, sql string, hints map[string]string) (*Instance, error) {
@@ -456,55 +423,37 @@ func (t *Table) ExecSql(taskName, sql string) (*Instance, error) {
 	return t.ExecSqlWithHints(taskName, sql, nil)
 }
 
-// 将格式为region=1026/name=abc格式的“分区值”转换为格式为region='1026',name='abc'的"分区spec"值
-func partitionValueToSpec(value string) string {
-	columns := strings.Split(value, "/")
-
-	sb := strings.Builder{}
-	for i, n := 0, len(columns); i < n; i++ {
-		kv := strings.Split(columns[i], "=")
-
-		sb.WriteString(fmt.Sprintf("%s='%s'", kv[0], kv[1]))
-
-		if i < n-1 {
-			sb.WriteString(",")
-		}
+func partitionValueToSpec(value string) (string, error) {
+	columns, err := parsePartitionValue(value)
+	if err != nil {
+		return "", err
 	}
-
-	return sb.String()
+	return formatPartitionSpec(columns), nil
 }
 
 // AddPartitions Example: AddPartitions(true, []string{"region=10026/name=abc", "region=10027/name=mhn"})
 func (t *Table) AddPartitions(ifNotExists bool, partitionValues []string) error {
 	var sb strings.Builder
 	sb.WriteString("alter table ")
-	hints := make(map[string]string)
-	if t.SchemaName() == "" {
-		hints["odps.namespace.schema"] = "false"
-	} else {
-		hints["odps.namespace.schema"] = "true"
-	}
 	sb.WriteString(t.getFullName())
 	sb.WriteString(" add")
 	if ifNotExists {
-		sb.WriteString(" if not exists\n")
+		sb.WriteString(" if not exists")
 	}
 
 	for _, partitionValue := range partitionValues {
-		sb.WriteString("partition (")
-		sb.WriteString(partitionValueToSpec(partitionValue))
-		sb.WriteString(")\n")
+		spec, err := partitionValueToSpec(partitionValue)
+		if err != nil {
+			return err
+		}
+		sb.WriteString("\npartition (")
+		sb.WriteString(spec)
+		sb.WriteByte(')')
 	}
 
 	sb.WriteString(";")
-	println(sb.String())
 
-	i, err := t.ExecSqlWithHints("SQLAddPartitionTask", sb.String(), hints)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return errors.WithStack(i.WaitForSuccess())
+	return t.waitDDL("SQLAddPartitionTask", sb.String())
 }
 
 // AddPartition Example: AddPartition(true, "region=10026/name=abc")
@@ -516,12 +465,6 @@ func (t *Table) AddPartition(ifNotExists bool, partitionValue string) error {
 func (t *Table) DeletePartitions(ifExists bool, partitionValues []string) error {
 	var sb strings.Builder
 	sb.WriteString("alter table ")
-	hints := make(map[string]string)
-	if t.SchemaName() == "" {
-		hints["odps.namespace.schema"] = "false"
-	} else {
-		hints["odps.namespace.schema"] = "true"
-	}
 	sb.WriteString(t.getFullName())
 	sb.WriteString(" drop")
 	if ifExists {
@@ -530,8 +473,12 @@ func (t *Table) DeletePartitions(ifExists bool, partitionValues []string) error 
 
 	n := len(partitionValues)
 	for i, partitionValue := range partitionValues {
+		spec, err := partitionValueToSpec(partitionValue)
+		if err != nil {
+			return err
+		}
 		sb.WriteString(" partition (")
-		sb.WriteString(partitionValueToSpec(partitionValue))
+		sb.WriteString(spec)
 		sb.WriteString(")")
 
 		if i < n-1 {
@@ -541,17 +488,7 @@ func (t *Table) DeletePartitions(ifExists bool, partitionValues []string) error 
 
 	sb.WriteString(";")
 
-	ins, err := t.ExecSqlWithHints("SQLDropPartitionTask", sb.String(), hints)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	err = ins.WaitForSuccess()
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return nil
+	return t.waitDDL("SQLDropPartitionTask", sb.String())
 }
 
 // DeletePartition Example: DeletePartition(true, "region=10026/name=abc")
@@ -562,6 +499,7 @@ func (t *Table) DeletePartition(ifExists bool, partitionValue string) error {
 func (t *Table) GetPartitionValues() ([]string, error) {
 	queryArgs := make(url.Values, 4)
 	queryArgs.Set("partitions", "")
+	queryArgs.Set("expectmarker", "true")
 	// 指定name为空后，接口只会返回分区的“名字”，也就是分区的值q
 	queryArgs.Set("name", "")
 
@@ -581,37 +519,28 @@ func (t *Table) GetPartitionValues() ([]string, error) {
 		} `xml:"Partition"`
 	}
 
-	var resModel ResModel
-	err := client.GetWithModel(resource, queryArgs, nil, &resModel)
-	if err != nil {
-		return nil, errors.WithStack(err)
+	partitionValues := []string{}
+	for {
+		var page ResModel
+		if err := client.GetWithModel(resource, queryArgs, nil, &page); err != nil {
+			return nil, errors.WithStack(err)
+		}
+		for _, partition := range page.Partitions {
+			partitionValues = append(partitionValues, partition.Name)
+		}
+		if page.Marker == "" {
+			return partitionValues, nil
+		}
+		queryArgs.Set("marker", page.Marker)
 	}
-
-	partitionValues := make([]string, len(resModel.Partitions))
-	for i, p := range resModel.Partitions {
-		partitionValues[i] = p.Name
-	}
-
-	return partitionValues, err
 }
 
 // GetPartition get partitions with partitionKey like "region=10026/name=abc", error if not found
 func (t *Table) GetPartition(partitionValue string) (Partition, error) {
-	// 将region=10026/name=abc格式的分区值转换为region='10026',name='abc'
-	columns := strings.Split(partitionValue, "/")
-
-	sb := strings.Builder{}
-	for i, n := 0, len(columns); i < n; i++ {
-		kv := strings.Split(columns[i], "=")
-
-		sb.WriteString(fmt.Sprintf("%s='%s'", kv[0], kv[1]))
-
-		if i < n-1 {
-			sb.WriteString(",")
-		}
+	partitionSpec, err := partitionValueToSpec(partitionValue)
+	if err != nil {
+		return Partition{}, err
 	}
-
-	partitionSpec := sb.String()
 	partitions, err := t.getPartitions(partitionSpec)
 	if err != nil {
 		return Partition{}, err
@@ -774,7 +703,7 @@ func (t *Table) generateChangeClusterInfoSQL(clusterInfo tableschema.ClusterInfo
 	if len(clusterInfo.SortCols) > 0 {
 		sb.WriteString(" sorted by (")
 		for index, sortCol := range clusterInfo.SortCols {
-			sb.WriteString(fmt.Sprintf("%s %s", common.QuoteRef(sortCol.Name), string(sortCol.Order)))
+			_, _ = fmt.Fprintf(&sb, "%s %s", common.QuoteRef(sortCol.Name), string(sortCol.Order))
 			if index < len(clusterInfo.SortCols)-1 {
 				sb.WriteString(", ")
 			}
@@ -782,7 +711,7 @@ func (t *Table) generateChangeClusterInfoSQL(clusterInfo tableschema.ClusterInfo
 		sb.WriteString(")")
 	}
 	if clusterInfo.BucketNum > 0 {
-		sb.WriteString(fmt.Sprintf(" into %d buckets", clusterInfo.BucketNum))
+		_, _ = fmt.Fprintf(&sb, " into %d buckets", clusterInfo.BucketNum)
 	}
 	sb.WriteString(";")
 	return sb.String()
@@ -820,9 +749,9 @@ func (t *Table) generateAddColumnsSQL(columns []tableschema.Column, ifNotExists 
 	}
 	sb.WriteString("(")
 	for index, column := range columns {
-		sb.WriteString(fmt.Sprintf("%s %s", common.QuoteRef(column.Name), column.Type))
+		_, _ = fmt.Fprintf(&sb, "%s %s", common.QuoteRef(column.Name), column.Type)
 		if column.Comment != "" {
-			sb.WriteString(fmt.Sprintf(" comment %s", common.QuoteString(column.Comment)))
+			_, _ = fmt.Fprintf(&sb, " comment %s", common.QuoteString(column.Comment))
 		}
 		if index < len(columns)-1 {
 			sb.WriteString(", ")
@@ -849,7 +778,8 @@ func (t *Table) AlterColumnType(columnName string, columnType datatype.DataType)
 }
 
 func (t *Table) generateAlterColumnTypeSQL(columnName string, columnType datatype.DataType) string {
-	return fmt.Sprintf("alter table %s change column %s %s %s;", t.getFullName(), columnName, columnName, columnType)
+	name := common.QuoteRef(columnName)
+	return fmt.Sprintf("alter table %s change column %s %s %s;", t.getFullName(), name, name, columnType)
 }
 
 func (t *Table) ChangeColumnName(oldColumnName string, newColumnName string) error {
@@ -857,25 +787,20 @@ func (t *Table) ChangeColumnName(oldColumnName string, newColumnName string) err
 }
 
 func (t *Table) generateChangeColumnNameSQL(oldColumnName string, newColumnName string) string {
-	return fmt.Sprintf("alter table %s change column %s rename to %s;", t.getFullName(), oldColumnName, newColumnName)
+	return fmt.Sprintf("alter table %s change column %s rename to %s;", t.getFullName(), common.QuoteRef(oldColumnName), common.QuoteRef(newColumnName))
 }
 
 func (t *Table) executeSql(sql string) error {
-	hints := make(map[string]string)
-	if t.SchemaName() == "" {
-		hints["odps.namespace.schema"] = "false"
-	} else {
-		hints["odps.namespace.schema"] = "true"
-	}
-	ins, err := t.ExecSqlWithHints("AnonymousSQLTask", sql, hints)
+	return t.waitDDL("AnonymousSQLTask", sql)
+}
+
+func (t *Table) waitDDL(taskName, sql string) error {
+	hints := map[string]string{"odps.namespace.schema": strconv.FormatBool(t.SchemaName() != "")}
+	ins, err := t.ExecSqlWithHints(taskName, sql, hints)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	err = ins.WaitForSuccess()
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	return nil
+	return ins.WaitForSuccess()
 }
 
 func (t *Table) getFullName() string {

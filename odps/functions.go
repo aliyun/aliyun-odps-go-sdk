@@ -62,12 +62,7 @@ func (f *Functions) Create(projectName, schemaName string, function Function) er
 		return errors.WithStack(err)
 	}
 	client.HttpTimeout = 60 * time.Second
-	_, err = client.Do(req)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return nil
+	return errors.WithStack(client.DoWithParseFunc(req, nil))
 }
 
 // Update update a function
@@ -90,7 +85,7 @@ func (f *Functions) Update(projectName, schemaName string, function Function) er
 
 	queryArgs := make(url.Values, 4)
 	if schemaName != "" {
-		queryArgs.Add("schema", schemaName)
+		queryArgs.Set("curr_schema", schemaName)
 	}
 
 	data, err := xml.Marshal(function.Model)
@@ -105,12 +100,7 @@ func (f *Functions) Update(projectName, schemaName string, function Function) er
 		return errors.WithStack(err)
 	}
 	client.HttpTimeout = 60 * time.Second
-	_, err = client.Do(req)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return nil
+	return errors.WithStack(client.DoWithParseFunc(req, nil))
 }
 
 // Get get a function
@@ -120,7 +110,7 @@ func (f *Functions) Get(functionName string) (*Function, error) {
 	}
 
 	fb := NewFunctionBuilder()
-	function := fb.ProjectName(f.projectName).Odps(f.OdpsIns).Name(functionName).Build()
+	function := fb.ProjectName(f.projectName).SchemaName(f.schemaName).Odps(f.OdpsIns).Name(functionName).Build()
 	return &function, nil
 }
 
@@ -144,12 +134,7 @@ func (f *Functions) Delete(functionName string) error {
 		return errors.WithStack(err)
 	}
 	client.HttpTimeout = 60 * time.Second
-	_, err = client.Do(req)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return nil
+	return errors.WithStack(client.DoWithParseFunc(req, nil))
 }
 
 // SchemaName get the schema name

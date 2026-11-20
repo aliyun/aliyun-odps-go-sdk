@@ -440,11 +440,9 @@ func IsTypeEqual(t1, t2 DataType) bool {
 		for i := range fields1 {
 			f1, f2 := fields1[i], fields2[i]
 
-			if f1.Name != f2.Name {
+			if f1.Name != f2.Name || !IsTypeEqual(f1.Type, f2.Type) {
 				return false
 			}
-
-			return IsTypeEqual(f1.Type, f2.Type)
 		}
 	case MapType:
 		r2, _ := t2.(MapType)

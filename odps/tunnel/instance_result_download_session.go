@@ -17,11 +17,13 @@
 package tunnel
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 
@@ -52,6 +54,15 @@ func CreateInstanceResultDownloadSession(
 	restClient restclient.RestClient,
 	opts ...InstanceOption,
 ) (*InstanceResultDownloadSession, error) {
+	return createInstanceResultDownloadSession(context.Background(), projectName, instanceId, quotaName, restClient, opts...)
+}
+
+func createInstanceResultDownloadSession(
+	ctx context.Context,
+	projectName, instanceId, quotaName string,
+	restClient restclient.RestClient,
+	opts ...InstanceOption,
+) (*InstanceResultDownloadSession, error) {
 	cfg := newInstanceSessionConfig(opts...)
 
 	session := InstanceResultDownloadSession{
@@ -74,7 +85,7 @@ func CreateInstanceResultDownloadSession(
 		return nil, errors.WithStack(err)
 	}
 
-	err = session.loadInformation(req)
+	err = session.loadInformation(req.WithContext(ctx))
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -145,6 +156,14 @@ func (is *InstanceResultDownloadSession) OpenRecordReader(
 	start, count, sizeLimit int,
 	columnNames []string,
 ) (*RecordProtocReader, error) {
+	return is.OpenRecordReaderContext(context.Background(), start, count, sizeLimit, columnNames)
+}
+
+// OpenRecordReaderContext uses ctx to open and read the requested row range.
+func (is *InstanceResultDownloadSession) OpenRecordReaderContext(
+	ctx context.Context, start, count, sizeLimit int, columnNames []string,
+) (*RecordProtocReader, error) {
+	requestedColumns := columnNames
 	if len(columnNames) == 0 {
 		columnNames = make([]string, len(is.schema.Columns))
 		for i, c := range is.schema.Columns {
@@ -162,12 +181,15 @@ func (is *InstanceResultDownloadSession) OpenRecordReader(
 		columns[i] = c
 	}
 
-	res, err := is.newDownloadConnection(start, count, sizeLimit, columnNames)
+	res, err := is.newDownloadConnection(ctx, start, count, sizeLimit, requestedColumns)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
 	reader := newRecordProtocReader(res, columns, is.shouldTransformDate)
+	if !is.IsLongPolling {
+		reader.expectRange(start, count, is.recordCount)
+	}
 	return &reader, nil
 }
 
@@ -182,7 +204,7 @@ func (is *InstanceResultDownloadSession) newInitiationRequest() (*http.Request, 
 
 	if is.TaskName != "" {
 		queryArgs.Set("cached", "")
-		queryArgs.Set("taskname", "")
+		queryArgs.Set("taskname", is.TaskName)
 
 		if is.QueryId != -1 {
 			queryArgs.Set("queryid", strconv.Itoa(is.QueryId))
@@ -227,10 +249,6 @@ func (is *InstanceResultDownloadSession) loadInformation(req *http.Request) erro
 
 	var resModel ResModel
 	err := is.RestClient.DoWithParseFunc(req, func(res *http.Response) error {
-		if res.StatusCode/100 != 2 {
-			return errors.WithStack(restclient.NewHttpNotOk(res))
-		}
-
 		is.shouldTransformDate = res.Header.Get(common.HttpHeaderOdpsDateTransFrom) == "true"
 		decoder := json.NewDecoder(res.Body)
 		return errors.WithStack(decoder.Decode(&resModel))
@@ -253,14 +271,11 @@ func (is *InstanceResultDownloadSession) loadInformation(req *http.Request) erro
 }
 
 func (is *InstanceResultDownloadSession) newDownloadConnection(
+	ctx context.Context,
 	start, count, sizeLimit int,
 	columnNames []string,
 ) (*http.Response, error) {
 	queryArgs := make(url.Values, 6)
-
-	//if len(columnNames) > 0 {
-	//	queryArgs.Set("columns", strings.Join(columnNames, ","))
-	//}
 
 	if is.LimitEnabled {
 		queryArgs.Set("instance_tunnel_limit_enabled", "")
@@ -272,7 +287,7 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 	queryArgs.Set("data", "")
 	if is.IsLongPolling {
 		queryArgs.Set("cached", "")
-		queryArgs.Set("taskname", "")
+		queryArgs.Set("taskname", is.TaskName)
 
 		if is.QueryId != -1 {
 			queryArgs.Set("queryid", strconv.Itoa(is.QueryId))
@@ -283,6 +298,9 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 		}
 	} else {
 		queryArgs.Set("downloadid", is.Id)
+		if len(columnNames) > 0 {
+			queryArgs.Set("columns", strings.Join(columnNames, ","))
+		}
 	}
 
 	queryArgs.Set("rowrange", fmt.Sprintf("(%d,%d)", start, count))
@@ -305,9 +323,9 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 
 	var res *http.Response
 
-	err = Retry(func() error {
-		res, err = is.RestClient.Do(req)
-		return errors.WithStack(err)
+	err = retryContext(ctx, func() error {
+		res, err = is.RestClient.Do(req.Clone(ctx))
+		return err
 	})
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -315,6 +333,10 @@ func (is *InstanceResultDownloadSession) newDownloadConnection(
 	contentEncoding := res.Header.Get("Content-Encoding")
 	if contentEncoding != "" {
 		res.Body = WrapByCompressor(res.Body, contentEncoding)
+	}
+	if err := ctx.Err(); err != nil {
+		_ = res.Body.Close()
+		return nil, err
 	}
 
 	return res, nil

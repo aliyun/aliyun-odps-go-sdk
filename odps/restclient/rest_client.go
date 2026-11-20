@@ -18,10 +18,10 @@ package restclient
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -246,25 +246,24 @@ func (client *RestClient) NewRequestWithParamsAndHeaders(method, resource string
 	if err != nil {
 		return nil, err
 	}
-	if headers != nil {
-		for name, value := range headers {
-			req.Header.Set(name, value)
-		}
+	for name, value := range headers {
+		req.Header.Set(name, value)
 	}
 	return req, nil
 }
 
 func (client *RestClient) Do(req *http.Request) (*http.Response, error) {
+	if err := req.Context().Err(); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
 	req.Header.Set(common.HttpHeaderUserAgent, common.UserAgentValue)
 	req.Header.Set(common.HttpHeaderXOdpsUserAgent, client.UserAgent())
 	gmtTime := time.Now().In(common.GMT).Format(time.RFC1123)
 	req.Header.Set(common.HttpHeaderDate, gmtTime)
 	query := req.URL.Query()
 
-	_, ok := query["current_project"]
-	// in go1.17, 下面的语句应该这样写：if !query.Has("curr_project") && client.defaultProject != "" {
-	// 但values.Has方法是在go1.17才引入的，为了兼容go1.15，所以不用Has方法
-	if !ok && client.defaultProject != "" {
+	if client.defaultProject != "" && !query.Has("curr_project") && !query.Has("current_project") {
 		query.Set("curr_project", client.defaultProject)
 	}
 	req.URL.RawQuery = query.Encode()
@@ -279,18 +278,17 @@ func (client *RestClient) Do(req *http.Request) (*http.Response, error) {
 		return res, errors.WithStack(err)
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return res, errors.WithStack(NewHttpNotOk(res))
+		httpErr := NewHttpNotOk(res)
+		if err := req.Context().Err(); err != nil {
+			return res, errors.WithStack(err)
+		}
+		return res, errors.WithStack(httpErr)
 	}
 	return res, nil
 }
 
 func (client *RestClient) DoWithParseFunc(req *http.Request, parseFunc func(res *http.Response) error) error {
-	return client.DoWithParseRes(req, func(res *http.Response) error {
-		if parseFunc == nil {
-			return nil
-		}
-		return errors.WithStack(parseFunc(res))
-	})
+	return client.DoWithParseRes(req, parseFunc)
 }
 
 func (client *RestClient) DoWithParseRes(req *http.Request, parseFunc func(res *http.Response) error) error {
@@ -299,12 +297,7 @@ func (client *RestClient) DoWithParseRes(req *http.Request, parseFunc func(res *
 		return errors.WithStack(err)
 	}
 
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			log.Fatalf("close http error, url=%s", req.URL.String())
-		}
-	}(res.Body)
+	defer func() { _ = res.Body.Close() }()
 
 	if parseFunc == nil {
 		return nil
@@ -324,21 +317,31 @@ func (client *RestClient) DoWithModel(req *http.Request, model interface{}) erro
 }
 
 func (client *RestClient) GetWithModel(resource string, queryArgs url.Values, headers map[string]string, model interface{}) error {
+	return client.GetWithModelContext(context.Background(), resource, queryArgs, headers, model)
+}
+
+// GetWithModelContext fetches and decodes an XML model using ctx.
+func (client *RestClient) GetWithModelContext(ctx context.Context, resource string, queryArgs url.Values, headers map[string]string, model interface{}) error {
 	req, err := client.NewRequestWithParamsAndHeaders(common.HttpMethod.GetMethod, resource, nil, queryArgs, headers)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	return errors.WithStack(client.DoWithModel(req, model))
+	return errors.WithStack(client.DoWithModel(req.WithContext(ctx), model))
 }
 
 func (client *RestClient) GetWithParseFunc(resource string, queryArgs url.Values, headers map[string]string, parseFunc func(res *http.Response) error) error {
+	return client.GetWithParseFuncContext(context.Background(), resource, queryArgs, headers, parseFunc)
+}
+
+// GetWithParseFuncContext fetches and parses a response using ctx.
+func (client *RestClient) GetWithParseFuncContext(ctx context.Context, resource string, queryArgs url.Values, headers map[string]string, parseFunc func(res *http.Response) error) error {
 	req, err := client.NewRequestWithParamsAndHeaders(common.HttpMethod.GetMethod, resource, nil, queryArgs, headers)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	return errors.WithStack(client.DoWithParseFunc(req, parseFunc))
+	return errors.WithStack(client.DoWithParseFunc(req.WithContext(ctx), parseFunc))
 }
 
 func (client *RestClient) PutWithParseFunc(resource string, queryArgs url.Values, body io.Reader, parseFunc func(res *http.Response) error) error {
@@ -358,25 +361,12 @@ func (client *RestClient) DoXmlWithParseFunc(
 	bodyModel interface{},
 	parseFunc func(res *http.Response) error,
 ) error {
-	bodyXml, err := xml.Marshal(bodyModel)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	req, err := client.NewRequestWithUrlQuery(method, resource, bytes.NewReader(bodyXml), queryArgs)
-	req.Header.Set(common.HttpHeaderContentType, common.XMLContentType)
-	for name, value := range headers {
-		req.Header.Set(name, value)
-	}
-
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return errors.WithStack(client.DoWithParseFunc(req, parseFunc))
+	return client.DoXmlWithParseFuncContext(context.Background(), method, resource, queryArgs, headers, bodyModel, parseFunc)
 }
 
-func (client *RestClient) DoXmlWithParseRes(
+// DoXmlWithParseFuncContext sends an XML request and parses the response using ctx.
+func (client *RestClient) DoXmlWithParseFuncContext(
+	ctx context.Context,
 	method string,
 	resource string,
 	queryArgs url.Values,
@@ -390,16 +380,26 @@ func (client *RestClient) DoXmlWithParseRes(
 	}
 
 	req, err := client.NewRequestWithUrlQuery(method, resource, bytes.NewReader(bodyXml), queryArgs)
+	if err != nil {
+		return errors.WithStack(err)
+	}
 	req.Header.Set(common.HttpHeaderContentType, common.XMLContentType)
 	for name, value := range headers {
 		req.Header.Set(name, value)
 	}
 
-	if err != nil {
-		return errors.WithStack(err)
-	}
+	return errors.WithStack(client.DoWithParseFunc(req.WithContext(ctx), parseFunc))
+}
 
-	return errors.WithStack(client.DoWithParseRes(req, parseFunc))
+func (client *RestClient) DoXmlWithParseRes(
+	method string,
+	resource string,
+	queryArgs url.Values,
+	headers map[string]string,
+	bodyModel interface{},
+	parseFunc func(res *http.Response) error,
+) error {
+	return client.DoXmlWithParseFunc(method, resource, queryArgs, headers, bodyModel, parseFunc)
 }
 
 func (client *RestClient) DoXmlWithModel(

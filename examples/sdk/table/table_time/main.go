@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
@@ -31,13 +32,13 @@ func main() {
 
 	// Get table create time
 	createTime := table.CreatedTime()
-	println("create time = ", createTime)
+	fmt.Println("create time =", createTime)
 
 	// Get table last ddl time
 	lastDDLTime := table.LastDDLTime()
-	println("last ddl time = ", lastDDLTime)
+	fmt.Println("last ddl time =", lastDDLTime)
 
 	// Get table last modified time
 	lastModifiedTime := table.LastModifiedTime()
-	println("last modified time = ", lastModifiedTime)
+	fmt.Println("last modified time =", lastModifiedTime)
 }

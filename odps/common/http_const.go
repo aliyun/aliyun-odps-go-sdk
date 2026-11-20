@@ -27,7 +27,7 @@ const (
 	HttpHeaderOdpsPrefix = "x-odps-"
 )
 
-var SDKVersion = "0.4.x"
+var SDKVersion = "1.0.0"
 
 func init() {
 	UserAgentValue = fmt.Sprintf("odps-go-sdk/%s Go/%s (%s; %s)",
@@ -52,7 +52,7 @@ var HttpMethod = struct {
 	DeleteMethod: "DELETE",
 }
 
-var GMT, _ = time.LoadLocation("GMT")
+var GMT = time.FixedZone("GMT", 0)
 
 const (
 	HttpHeaderDate                          = "Date"

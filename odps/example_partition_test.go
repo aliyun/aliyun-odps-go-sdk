@@ -38,8 +38,6 @@ func ExamplePartition_Load() {
 	println(fmt.Sprintf("Value: %s", partition.Value()))
 	println(fmt.Sprintf("Record number: %d", partition.RecordNum()))
 	println(fmt.Sprintf("Create Time: %s", partition.CreatedTime()))
-
-	// Output:
 }
 
 func ExamplePartition_LoadExtended() {
@@ -58,5 +56,4 @@ func ExamplePartition_LoadExtended() {
 	println(fmt.Sprintf("File number: %d", partition.FileNumEx()))
 	println(fmt.Sprintf("PhysicalSizefd: %d", partition.PhysicalSizeEx()))
 	println(fmt.Sprintf("Reserved: %s", partition.ReservedEx()))
-	// Output:
 }

@@ -35,10 +35,8 @@ type IntervalYearMonth int32
 func NewIntervalDayTime(totalSeconds int64, nanos int32) IntervalDayTime {
 	const NanosPerSecond = int32(time.Second)
 
-	if nanos > 0 {
-		totalSeconds += int64(nanos) / int64(NanosPerSecond)
-		nanos %= nanos % NanosPerSecond
-	}
+	totalSeconds += int64(nanos / NanosPerSecond)
+	nanos %= NanosPerSecond
 
 	return IntervalDayTime{
 		totalSeconds: totalSeconds,

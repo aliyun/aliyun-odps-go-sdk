@@ -26,8 +26,76 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 )
+
+func TestWaitForSuccessContextCancelsInFlightPolling(t *testing.T) {
+	for _, action := range []string{"status", "taskstatus", "result"} {
+		t.Run(action, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				params := r.URL.Query()
+				requested := "status"
+				if params.Has("taskstatus") {
+					requested = "taskstatus"
+				} else if params.Has("result") {
+					requested = "result"
+				}
+				if requested == action {
+					cancel()
+					select {
+					case <-r.Context().Done():
+					case <-t.Context().Done():
+					}
+					return
+				}
+				if requested == "taskstatus" {
+					_, _ = w.Write([]byte(`<Instance><Tasks><Task Type="SQL"><Name>t</Name><Status>Failed</Status></Task></Tasks></Instance>`))
+				} else {
+					_, _ = w.Write([]byte(`<Instance><Status>Terminated</Status></Instance>`))
+				}
+			}))
+			t.Cleanup(server.Close)
+			service := NewOdps(account2.NewAliyunAccount("fixture-id", "fixture-key"), server.URL)
+			instance := NewInstance(service, "project", "instance")
+			done := make(chan error, 1)
+			go func() { done <- instance.WaitForSuccessContext(ctx) }()
+			select {
+			case err := <-done:
+				require.ErrorIs(t, err, context.Canceled)
+			case <-time.After(2 * time.Second):
+				t.Fatalf("wait did not cancel %s", action)
+			}
+		})
+	}
+}
+
+func TestExecSQLContextKeepsAcknowledgedInstanceID(t *testing.T) {
+	var submissions atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		submissions.Add(1)
+		w.Header().Set("Location", r.URL.Path+"/fixture-instance")
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		select {
+		case <-r.Context().Done():
+		case <-t.Context().Done():
+		}
+	}))
+	t.Cleanup(server.Close)
+	service := NewOdps(account2.NewAliyunAccount("fixture-id", "fixture-key"), server.URL)
+	service.SetDefaultProjectName("project")
+	ctx, cancel := context.WithTimeout(t.Context(), 600*time.Millisecond)
+	defer cancel()
+	instance, err := service.ExecSQLContext(ctx, "select 42")
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.NotNil(t, instance)
+	require.Equal(t, "fixture-instance", instance.Id())
+	require.EqualValues(t, 1, submissions.Load())
+}
 
 // WaitForSuccessContext 在 ctx 已取消时立即返回，不发请求。
 func TestWaitForSuccessContextAlreadyCanceled(t *testing.T) {

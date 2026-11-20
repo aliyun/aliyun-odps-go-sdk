@@ -10,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 )
 
 // ResourceType is  resource type
@@ -123,7 +122,7 @@ func (r *Resource) Load() error {
 	client := r.OdpsIns.restClient
 	rb := common.ResourceBuilder{ProjectName: r.ProjectName}
 	resource := rb.Resource(r.Name())
-	r.beLoaded = true
+	r.beLoaded = false
 
 	queryArgs := make(url.Values, 4)
 	if r.SchemaName() != "" {
@@ -132,24 +131,29 @@ func (r *Resource) Load() error {
 	queryArgs.Set("meta", "")
 	err := client.GetWithParseFunc(resource, queryArgs, nil, func(res *http.Response) error {
 		header := res.Header
-		r.Model.SchemaName = header.Get(common.HttpHeaderOdpsSchemaName)
-		r.Model.Name = header.Get(common.HttpHeaderOdpsResourceName)
+		if schema := header.Get(common.HttpHeaderOdpsSchemaName); schema != "" {
+			r.Model.SchemaName = schema
+		}
+		if name := header.Get(common.HttpHeaderOdpsResourceName); name != "" {
+			r.Model.Name = name
+		}
 		r.Model.Owner = header.Get(common.HttpHeaderOdpsOwner)
 		r.Model.Comment = header.Get(common.HttpHeaderOdpsComment)
 		r.Model.CreationTime = header.Get(common.HttpHeaderOdpsCreationTime)
 		r.Model.LastModifiedTime = header.Get(common.HttpHeaderLastModified)
 		r.Model.LastUpdator = header.Get(common.HttpHeaderOdpsUpdator)
 		r.Model.ResourceType = ResourceTypeFromStr(header.Get(common.HttpHeaderOdpsResourceType))
-		r.Model.TableName = header.Get(common.HttpHeaderOdpsResourceType)
 		r.Model.ResourceSize, _ = strconv.ParseInt(header.Get(common.HttpHeaderOdpsResourceSize), 10, 64)
 		r.Model.ContentMD5 = header.Get(common.HttpHeaderContentMD5)
 		r.Model.SourceTableName = header.Get(common.HttpHeaderOdpsCopyTableSource)
+		r.Model.TableName = r.Model.SourceTableName
 		r.Model.VolumePath = header.Get(common.HttpHeaderOdpsCopyFileSource)
 		if header.Get(common.HttpHeaderOdpsResourceIsTemp) != "" {
 			r.Model.IsTempResource, _ = strconv.ParseBool(header.Get(common.HttpHeaderOdpsResourceIsTemp))
 		}
 		return nil
 	})
+	r.beLoaded = err == nil
 	return errors.WithStack(err)
 }
 
@@ -201,15 +205,10 @@ func (r *Resource) SetResourceType(resourceType ResourceType) {
 // Exist check whether resource exist
 func (r *Resource) Exist() (bool, error) {
 	err := r.Load()
-	var httpErr restclient.HttpError
-	if errors.As(err, &httpErr) {
-		if httpErr.Status == "404 Not Found" {
-			return false, nil
-		}
-		return false, err
+	if isNotFound(err) {
+		return false, nil
 	}
-
-	return true, nil
+	return err == nil, err
 }
 
 // TableResource is a table resource
@@ -234,7 +233,7 @@ func NewTableResource(projectName, tableName string, partition string) TableReso
 
 func (r *TableResource) getSourceTableName() string {
 	if r.Model.SourceTableName == "" && r.OdpsIns != nil {
-		_ = r.Resource.Load()
+		_ = r.Load()
 	}
 	return r.Model.SourceTableName
 }

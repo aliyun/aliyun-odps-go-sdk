@@ -79,11 +79,22 @@ type fakeService struct {
 }
 
 func newFakeService(t *testing.T) *fakeService {
+	return newFakeServiceWithHandler(t, nil)
+}
+
+func newFakeServiceWithHandler(t *testing.T, intercept func(http.ResponseWriter, *http.Request) bool) *fakeService {
 	t.Helper()
 
 	f := &fakeService{succeedAfterPolls: neverSucceeds}
-	f.rest = httptest.NewServer(http.HandlerFunc(f.restHandler))
-	f.tunnel = httptest.NewServer(http.HandlerFunc(f.tunnelHandler))
+	handler := func(fallback http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			if intercept == nil || !intercept(w, r) {
+				fallback(w, r)
+			}
+		}
+	}
+	f.rest = httptest.NewServer(handler(f.restHandler))
+	f.tunnel = httptest.NewServer(handler(f.tunnelHandler))
 	t.Cleanup(func() {
 		f.rest.Close()
 		f.tunnel.Close()

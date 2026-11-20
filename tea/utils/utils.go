@@ -19,7 +19,7 @@ const (
 	PREFIX      = "x-odps-"
 )
 
-var GMT, _ = time.LoadLocation("GMT")
+var GMT = time.FixedZone("GMT", 0)
 
 // GetApiTimestamp 获取格式为 'Fri, 13 Dec 2024 02:57:00 GMT' 的时间戳
 func GetApiTimestamp() (result *string) {
@@ -107,7 +107,7 @@ func buildCanonicalResource(resource *string, params map[string]*string) string 
 				builder.WriteString("&")
 			}
 			builder.WriteString(key)
-			if value, exists := params[key]; exists && *value != "" {
+			if value := params[key]; value != nil && *value != "" {
 				builder.WriteString("=" + *value)
 			}
 		}

@@ -21,8 +21,6 @@ import (
 	"net/http"
 
 	"github.com/pkg/errors"
-
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 )
 
 type httpConnection struct {
@@ -57,18 +55,7 @@ func (conn *httpConnection) closeRes() error {
 		return errors.WithStack(rOrE.err)
 	}
 
-	res := rOrE.res
-
-	if res.StatusCode/100 != 2 {
-		return errors.WithStack(restclient.NewHttpNotOk(res))
-	}
-
-	err := res.Body.Close()
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return nil
+	return errors.WithStack(rOrE.res.Body.Close())
 }
 
 func (conn *httpConnection) bytesCount() int {

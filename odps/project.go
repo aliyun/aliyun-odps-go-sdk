@@ -17,9 +17,9 @@
 package odps
 
 import (
+	"context"
 	"encoding/xml"
-	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -119,7 +119,7 @@ type optionalParams struct {
 	extendedProperties bool
 }
 
-func (p *Project) _loadFromOdps(params optionalParams) (*projectModel, error) {
+func (p *Project) loadFromOdps(ctx context.Context, params optionalParams) (*projectModel, error) {
 	resource := p.rb.Project()
 	client := p.RestClient()
 
@@ -168,7 +168,7 @@ func (p *Project) _loadFromOdps(params optionalParams) (*projectModel, error) {
 		return nil
 	}
 
-	if err := client.GetWithParseFunc(resource, urlQuery, nil, parseFunc); err != nil {
+	if err := client.GetWithParseFuncContext(ctx, resource, urlQuery, nil, parseFunc); err != nil {
 		return nil, errors.WithStack(err)
 	}
 
@@ -177,14 +177,16 @@ func (p *Project) _loadFromOdps(params optionalParams) (*projectModel, error) {
 
 // Load should be called before get properties of project
 func (p *Project) Load() error {
-	model, err := p._loadFromOdps(optionalParams{})
+	return p.load(context.Background())
+}
+
+func (p *Project) load(ctx context.Context) error {
+	model, err := p.loadFromOdps(ctx, optionalParams{})
 	p.beLoaded = true
 
 	if err != nil {
-		if httpNoteOk, ok := err.(restclient.HttpError); ok {
-			if httpNoteOk.StatusCode == 404 {
-				p.exists = false
-			}
+		if isNotFound(err) {
+			p.exists = false
 		}
 
 		return errors.WithStack(err)
@@ -193,6 +195,11 @@ func (p *Project) Load() error {
 	p.exists = true
 	p.model = *model
 	return nil
+}
+
+func isNotFound(err error) bool {
+	var response restclient.HttpError
+	return errors.As(err, &response) && response.StatusCode == http.StatusNotFound
 }
 
 // IsLoaded whether `Load()` has been called
@@ -244,7 +251,7 @@ func (p *Project) GetAllProperties() (common.Properties, error) {
 		return p.allProperties, nil
 	}
 
-	model, err := p._loadFromOdps(optionalParams{withAllProperties: true})
+	model, err := p.loadFromOdps(context.Background(), optionalParams{withAllProperties: true})
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -263,7 +270,7 @@ func (p *Project) GetDefaultCluster() (string, error) {
 		return p.model.DefaultCluster, nil
 	}
 
-	model, err := p._loadFromOdps(optionalParams{usedByGroupApi: true})
+	model, err := p.loadFromOdps(context.Background(), optionalParams{usedByGroupApi: true})
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
@@ -283,7 +290,7 @@ func (p *Project) GetClusters() ([]Cluster, error) {
 		return p.model.Clusters, nil
 	}
 
-	model, err := p._loadFromOdps(optionalParams{usedByGroupApi: true})
+	model, err := p.loadFromOdps(context.Background(), optionalParams{usedByGroupApi: true})
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -302,7 +309,7 @@ func (p *Project) GetExtendedProperties() (common.Properties, error) {
 		return p.model.ExtendedProperties, nil
 	}
 
-	model, err := p._loadFromOdps(optionalParams{extendedProperties: true})
+	model, err := p.loadFromOdps(context.Background(), optionalParams{extendedProperties: true})
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -333,12 +340,15 @@ func (p *Project) SecurityManager() security.Manager {
 }
 
 func (p *Project) GetTunnelEndpoint(quotaNames ...string) (string, error) {
+	return p.GetTunnelEndpointContext(context.Background(), quotaNames...)
+}
+
+// GetTunnelEndpointContext resolves the project's Tunnel endpoint using ctx.
+func (p *Project) GetTunnelEndpointContext(ctx context.Context, quotaNames ...string) (string, error) {
 	client := p.odpsIns.restClient
 	resource := p.rb.Tunnel()
 	queryArgs := make(url.Values, 1)
 	queryArgs.Set("service", "")
-	// queryArgs.Set("current_project", p.Name())
-
 	if len(quotaNames) > 0 {
 		quotaName := quotaNames[0]
 		if quotaName != "" {
@@ -351,19 +361,23 @@ func (p *Project) GetTunnelEndpoint(quotaNames ...string) (string, error) {
 		return "", errors.WithStack(err)
 	}
 
-	schema := req.URL.Scheme
 	var tunnelEndpoint string
-	err = client.DoWithParseFunc(req, func(res *http.Response) error {
-		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
-		b, err := ioutil.ReadAll(res.Body)
+	err = client.DoWithParseFunc(req.WithContext(ctx), func(res *http.Response) error {
+		b, err := io.ReadAll(res.Body)
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		tunnelEndpoint = string(b)
+		tunnelEndpoint = req.URL.Scheme + "://" + strings.TrimSpace(string(b))
 		return nil
 	})
-
-	return fmt.Sprintf("%s://%s", schema, tunnelEndpoint), errors.WithStack(err)
+	if err != nil {
+		return "", errors.WithStack(err)
+	}
+	endpoint, err := url.Parse(tunnelEndpoint)
+	if err != nil || endpoint.Hostname() == "" {
+		return "", errors.New("invalid Tunnel endpoint in discovery response")
+	}
+	return tunnelEndpoint, nil
 }
 
 // Update the project properties, the properties are different in different versioned odps.

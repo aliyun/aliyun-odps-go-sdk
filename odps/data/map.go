@@ -92,33 +92,17 @@ func (m *Map) Set(keyI interface{}, valueI interface{}) error {
 		return errors.WithStack(err)
 	}
 
-	if valueI != nil {
-		value, err := TryConvertGoToOdpsData(valueI)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-
-		m.data[key] = value
-	} else {
-		m.data[key] = nil
-	}
-
-	return nil
-}
-
-func (m *Map) SafeSet(keyI Data, valueI Data) error {
-	if m.typ.KeyType == nil || m.typ.ValueType == nil {
-		return errors.New("element type of Map has not be set")
-	}
-
-	key, err := TryConvertGoToOdpsData(keyI)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
 	value, err := TryConvertGoToOdpsData(valueI)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	return m.set(key, value)
+}
+
+func (m *Map) SafeSet(key, value Data) error {
+	if m.typ.KeyType == nil || m.typ.ValueType == nil {
+		return errors.New("element type of Map has not be set")
 	}
 
 	// NULL keys and values are legal in the wire format and carry no type to
@@ -128,9 +112,16 @@ func (m *Map) SafeSet(keyI Data, valueI Data) error {
 	}
 
 	if value != nil && !datatype.IsTypeEqual(value.Type(), m.typ.ValueType) {
-		return errors.Errorf("fail to set key of type %s to %s", value.Type(), m.typ)
+		return errors.Errorf("fail to set value of type %s to %s", value.Type(), m.typ)
 	}
 
+	return m.set(key, value)
+}
+
+func (m *Map) set(key, value Data) error {
+	if key != nil && !reflect.ValueOf(key).Comparable() {
+		return errors.Errorf("map key of type %s is not comparable", key.Type())
+	}
 	m.data[key] = value
 	return nil
 }
@@ -175,8 +166,8 @@ func (m *Map) TypeInfer() (datatype.DataType, error) {
 
 func MapFromGoMap(m interface{}) (*Map, error) {
 	mt := reflect.TypeOf(m)
-	if mt.Kind() != reflect.Map {
-		return nil, errors.Errorf("%s is not a map", mt.Name())
+	if mt == nil || mt.Kind() != reflect.Map {
+		return nil, errors.Errorf("%T is not a map", m)
 	}
 
 	mm, err := TryConvertGoToOdpsData(m)

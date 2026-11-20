@@ -49,5 +49,4 @@ func ExampleOdps_ExecSQl() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-	// Output:
 }

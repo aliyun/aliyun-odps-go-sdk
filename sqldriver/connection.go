@@ -40,14 +40,14 @@ func newConnection(config *odps.Config) *connection {
 	}
 }
 
-// Begin sql/driver.Conn接口实现，由于odps不支持实物，方法的实现为空
+// Begin reports that MaxCompute does not support database/sql transactions.
 func (c *connection) Begin() (driver.Tx, error) {
-	return nil, nil
+	return nil, ErrTransactionsUnsupported
 }
 
-// Prepare sql/driver.Conn接口实现，由于odps不支持prepare statement, 方法实现为空p
+// Prepare reports that the driver does not support prepared statements.
 func (c *connection) Prepare(string) (driver.Stmt, error) {
-	return nil, nil
+	return nil, ErrPreparedStatementsUnsupported
 }
 
 // Close sql/driver.Conn接口实现。odps 的 REST 调用本身没有服务端会话状态要清理，
@@ -60,16 +60,8 @@ func (c *connection) Close() error {
 	return nil
 }
 
-// QueryContext sql/driver.QueryerContext接口实现
-//
-// ctx 控制客户端的等待与资源：提交前已取消则不去创建远端 instance；等待期间
-// 取消/超时会尽快返回 ctx.Err()；返回 Rows 之后 ctx 也管到行消费 —— 取消时
-// driver 会关掉结果流，卡住的 Next 立即带着 ctx.Err() 返回。
-//
-// ctx 不会终止服务端的 MaxCompute instance：终止运行中的任务是破坏性动作，
-// 由调用方决定（见 odps.Instance.Terminate）；取消报错里带 instance id 就是为了
-// 让调用方还能追到这个任务。已经发出的单个 HTTP 请求不会被打断，所以等待的
-// 返回时刻在一个轮询周期加一次往返之内。
+// QueryContext uses ctx for submission, waiting, and reading results. An
+// interrupted operation with a known instance ID returns CanceledError.
 func (c *connection) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	sqlStr, err := namedArgQueryToSql(query, args)
 	if err != nil {
@@ -94,52 +86,35 @@ func (c *connection) queryContext(ctx context.Context, query string) (driver.Row
 		return nil, errors.WithStack(err)
 	}
 
-	// 执行sql task，获取instance
-	ins, err := c.odpsIns.ExecSQlWithHints(query, c.config.Hints)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	// 等待instance结束，等待受ctx控制
-	if err = ins.WaitForSuccessContext(ctx); err != nil {
-		return nil, waitError(ins, err)
-	}
-
-	// 如果dsn中配置了enableLogview=true，将打印相应logView
-	if value, ok := c.config.Others["enableLogview"]; ok && strings.ToLower(value) == "true" {
-		lv := c.odpsIns.LogView()
-		lvUrl, err := lv.GenerateLogView(ins, 10)
-		if err != nil {
-			return nil, errors.Wrapf(err, "Generate logView failed.")
-		}
-
-		log.Printf("%s\n", lvUrl)
-	}
-
-	// 调用instance tunnel, 下载结果
 	tunnelEndpoint := c.config.TunnelEndpoint
 	if tunnelEndpoint != "" && c.config.TunnelQuotaName != "" {
 		return nil, errors.New(`"tunnelEndpoint" and "tunnelQuotaName" cannot be configured both`)
 	}
 
-	if c.config.TunnelQuotaName != "" {
-		project := c.odpsIns.DefaultProject()
-		tunnelEndpoint, err = project.GetTunnelEndpoint(c.config.TunnelQuotaName)
+	ins, err := c.odpsIns.ExecSQLContext(ctx, query, c.config.Hints)
+	if err != nil {
+		return nil, instanceError(ins, err)
+	}
+	if err = ins.WaitForSuccessContext(ctx); err != nil {
+		return nil, instanceError(ins, err)
+	}
+
+	// 如果dsn中配置了enableLogview=true，将打印相应logView
+	if value, ok := c.config.Others["enableLogview"]; ok && strings.ToLower(value) == "true" {
+		lvUrl, err := c.odpsIns.GenerateLogViewContext(ctx, ins, 10)
 		if err != nil {
-			return nil, errors.WithStack(err)
+			return nil, instanceError(ins, errors.Wrap(err, "generate LogView"))
 		}
+
+		log.Printf("%s\n", lvUrl)
 	}
 
 	if tunnelEndpoint == "" {
 		project := c.odpsIns.DefaultProject()
-		tunnelEndpoint, err = project.GetTunnelEndpoint()
+		tunnelEndpoint, err = project.GetTunnelEndpointContext(ctx, c.config.TunnelQuotaName)
 		if err != nil {
-			return nil, errors.WithStack(err)
+			return nil, instanceError(ins, err)
 		}
-	}
-
-	if err := ctx.Err(); err != nil {
-		return nil, canceledWaitingInstance(ins, err)
 	}
 
 	// 结果下载的连接是一次性的：每建一个 session 都会新起一个 http.Transport，
@@ -148,9 +123,9 @@ func (c *connection) queryContext(ctx context.Context, query string) (driver.Row
 	tunnelIns := tunnel.NewTunnel(c.odpsIns, tunnelEndpoint)
 	tunnelIns.DisableKeepAlives = true
 	projectName := c.odpsIns.DefaultProjectName()
-	session, err := tunnelIns.CreateInstanceResultDownloadSession(projectName, ins.Id())
+	session, err := tunnelIns.CreateInstanceResultDownloadSessionContext(ctx, projectName, ins.Id())
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, instanceError(ins, err)
 	}
 
 	recordCount := session.RecordCount()
@@ -158,9 +133,9 @@ func (c *connection) queryContext(ctx context.Context, query string) (driver.Row
 		recordCount = 1
 	}
 
-	reader, err := session.OpenRecordReader(0, recordCount, 0, nil)
+	reader, err := session.OpenRecordReaderContext(ctx, 0, recordCount, 0, nil)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, instanceError(ins, err)
 	}
 
 	schema := session.Schema()
@@ -178,17 +153,17 @@ func (c *connection) queryContext(ctx context.Context, query string) (driver.Row
 	// Rows 还没有交给调用方，没有人会再 Close 它。
 	if err := ctx.Err(); err != nil {
 		_ = rows.Close()
-		return nil, canceledWaitingInstance(ins, err)
+		return nil, instanceError(ins, err)
 	}
 
 	return rows, nil
 }
 
-// waitError 把等待 instance 结束的错误转成 driver 层的错误。ctx 取消/超时时
-// 带上 instance id：调用方只有拿 id 才能在服务端继续跟踪或主动终止该任务。
-func waitError(ins *odps.Instance, err error) error {
-	if ctxErr := contextCancellation(err); ctxErr != nil {
-		return canceledWaitingInstance(ins, ctxErr)
+func instanceError(ins *odps.Instance, err error) error {
+	if ins != nil {
+		if ctxErr := contextCancellation(err); ctxErr != nil {
+			return &CanceledError{InstanceID: ins.Id(), Err: ctxErr}
+		}
 	}
 
 	return errors.WithStack(err)
@@ -208,12 +183,7 @@ func contextCancellation(err error) error {
 	return nil
 }
 
-func canceledWaitingInstance(ins *odps.Instance, ctxErr error) error {
-	return &CanceledError{InstanceID: ins.Id(), Err: ctxErr}
-}
-
-// ExecContext sql/driver.ExecerContext接口实现，ctx 语义与 QueryContext 一致：
-// 只约束客户端等待，不终止服务端 instance。
+// ExecContext uses ctx for SQL submission and waiting for the instance.
 func (c *connection) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 	sqlStr, err := namedArgQueryToSql(query, args)
 	if err != nil {
@@ -237,15 +207,14 @@ func (c *connection) execContext(ctx context.Context, query string) (driver.Resu
 		return nil, errors.WithStack(err)
 	}
 
-	// 执行sql task，获取instance
-	ins, err := c.odpsIns.ExecSQlWithHints(query, c.config.Hints)
+	ins, err := c.odpsIns.ExecSQLContext(ctx, query, c.config.Hints)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, instanceError(ins, err)
 	}
 
 	// 等待instance结束
 	if err = ins.WaitForSuccessContext(ctx); err != nil {
-		return nil, waitError(ins, err)
+		return nil, instanceError(ins, err)
 	}
 
 	// odps 不报告受影响行数，但也不能返回 nil：database/sql 会把它原样交给调用方，
@@ -275,11 +244,12 @@ func namedArgQueryToSql(query string, args []driver.NamedValue) (string, error) 
 }
 
 func positionArgQueryToSql(query string, args []driver.Value) (string, error) {
-	positionArgQuery := NewPositionArgQuery(query)
-	for _, arg := range args {
-		positionArgQuery.SetArgs(arg)
+	values := make([]any, len(args))
+	for i, arg := range args {
+		values[i] = arg
 	}
-
+	positionArgQuery := NewPositionArgQuery(query)
+	positionArgQuery.SetArgs(values...)
 	return positionArgQuery.toSql()
 }
 

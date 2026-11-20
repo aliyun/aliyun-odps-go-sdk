@@ -3,6 +3,7 @@ package odps_test
 import "testing"
 
 func TestTenant_Load(t *testing.T) {
+	requireLiveService(t)
 	tenant := odpsIns.Tenant()
 	err := tenant.Load()
 	if err != nil {
@@ -14,6 +15,7 @@ func TestTenant_Load(t *testing.T) {
 }
 
 func TestTenant_TenantRolePolicy(t *testing.T) {
+	requireLiveService(t)
 	t.Skip("skip this tests, the impact of tenant test may be relatively large")
 	manager := odpsIns.Projects().GetDefaultProject().SecurityManager()
 	res, err := manager.Run("LIST TENANT ROLES", true, "")

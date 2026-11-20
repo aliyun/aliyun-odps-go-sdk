@@ -8,7 +8,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 )
 
 // Function is a function
@@ -51,11 +50,19 @@ func (f *Function) Load() error {
 	}
 
 	client := f.OdpsIns.restClient
-	err := client.GetWithModel(resource, queryArgs, nil, &f.Model)
+	var model functionModel
+	err := client.GetWithModel(resource, queryArgs, nil, &model)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
+	if model.Name == "" {
+		model.Name = f.Name()
+	}
+	if model.SchemaName == "" {
+		model.SchemaName = f.SchemaName()
+	}
+	f.Model = model
 	f.beLoaded = true
 	return nil
 }
@@ -63,15 +70,11 @@ func (f *Function) Load() error {
 // Exist check if the function exists
 func (f *Function) Exist() (bool, error) {
 	err := f.Load()
-	var httpErr restclient.HttpError
-	if errors.As(err, &httpErr) {
-		if httpErr.Status == "404 Not Found" {
-			return false, nil
-		}
-		return false, err
+	if isNotFound(err) {
+		return false, nil
 	}
 
-	return true, nil
+	return err == nil, err
 }
 
 // Name get function name
