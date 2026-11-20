@@ -56,6 +56,27 @@ func withRetryContractSleep(t *testing.T) *[]time.Duration {
 	return &waits
 }
 
+func TestRetryContextStopsBeforeAnAttemptOrBackoff(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	err := retryContext(ctx, func() error {
+		t.Error("a canceled retry must not call its operation")
+		return nil
+	})
+	assert.ErrorIs(t, err, context.Canceled)
+
+	ctx, cancel = context.WithCancel(t.Context())
+	defer cancel()
+	calls := 0
+	err = retryContext(ctx, func() error {
+		calls++
+		cancel()
+		return stderrors.New("retryable read failure")
+	})
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, 1, calls)
+}
+
 // retryContractTunnelAccount signs with a stand-in value; the fake service never
 // checks it and nothing here is a credential.
 type retryContractTunnelAccount struct{}

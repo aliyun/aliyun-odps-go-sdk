@@ -96,6 +96,43 @@ func retryContractErrorBody(status int) string {
 	return fmt.Sprintf(`<Error><Code>ODPS-%d</Code><Message>service said %d</Message><RequestId>req-1</RequestId></Error>`, status, status)
 }
 
+func TestRestClientCanceledContextBeforeSigning(t *testing.T) {
+	client := NewOdpsRestClient(nil, "https://fixture.invalid/api")
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	req, err := client.NewRequest(http.MethodGet, "projects/fixture", nil)
+	if !assert.NoError(t, err) {
+		return
+	}
+	res, err := client.Do(req.WithContext(ctx))
+	assert.Nil(t, res)
+	assert.ErrorIs(t, err, context.Canceled)
+}
+
+func TestRestClientDeadlineReadingErrorBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		w.(http.Flusher).Flush()
+		select {
+		case <-r.Context().Done():
+		case <-t.Context().Done():
+		}
+	}))
+	t.Cleanup(server.Close)
+	client := NewOdpsRestClient(MockAccount{}, server.URL)
+	ctx, cancel := context.WithTimeout(t.Context(), 600*time.Millisecond)
+	defer cancel()
+	req, err := client.NewRequest(http.MethodGet, "projects/fixture", nil)
+	if !assert.NoError(t, err) {
+		return
+	}
+	res, err := client.Do(req.WithContext(ctx))
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	if assert.NotNil(t, res) {
+		assert.Equal(t, http.StatusServiceUnavailable, res.StatusCode)
+	}
+}
+
 // TestRestClientRetryContractNon2xxIsNotRetried covers every status the service
 // uses to say "try later" or "you failed": one attempt each, the caller gets a
 // HttpError carrying status, reason, request id, server headers and the body.
