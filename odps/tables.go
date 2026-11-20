@@ -17,15 +17,17 @@
 package odps
 
 import (
-	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"maps"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/options"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 )
 
@@ -171,31 +173,7 @@ func (ts *Tables) Create(
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	if hints == nil {
-		hints = make(map[string]string)
-	}
-	if ts.schemaName == "" {
-		hints["odps.namespace.schema"] = "false"
-	} else {
-		hints["odps.namespace.schema"] = "true"
-	}
-
-	task := NewSqlTask("SQLCreateTableTask", sql, hints)
-
-	// TODO rm aliases
-	if alias != nil {
-		aliasJson, _ := json.Marshal(alias)
-		task.AddProperty("aliases", string(aliasJson))
-	}
-
-	instances := NewInstances(ts.odpsIns, ts.projectName)
-
-	ins, err := instances.CreateTask(ts.projectName, &task)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return errors.WithStack(ins.WaitForSuccess())
+	return ts.runDDL("SQLCreateTableTask", sql, ts.namespaceHints(hints), alias)
 }
 
 // CreateExternal create external table, the schema can be build with tableschema.SchemaBuilder
@@ -211,28 +189,7 @@ func (ts *Tables) CreateExternal(
 		return errors.WithStack(err)
 	}
 
-	if hints == nil {
-		hints = make(map[string]string)
-	}
-	if ts.schemaName == "" {
-		hints["odps.namespace.schema"] = "false"
-	} else {
-		hints["odps.namespace.schema"] = "true"
-	}
-	task := NewSqlTask("SQLCreateExternalTableTask", sql, hints)
-
-	if alias != nil {
-		aliasJson, _ := json.Marshal(hints)
-		task.AddProperty("aliases", string(aliasJson))
-	}
-
-	instances := NewInstances(ts.odpsIns, ts.projectName)
-
-	i, err := instances.CreateTask(ts.projectName, &task)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	return errors.WithStack(i.WaitForSuccess())
+	return ts.runDDL("SQLCreateExternalTableTask", sql, ts.namespaceHints(hints), alias)
 }
 
 func (ts *Tables) CreateView(schema tableschema.TableSchema,
@@ -240,19 +197,7 @@ func (ts *Tables) CreateView(schema tableschema.TableSchema,
 	createIfNotExists,
 	buildDeferred bool,
 ) error {
-	sql, err := schema.ToViewSQLString(ts.projectName, ts.schemaName, orReplace, createIfNotExists, buildDeferred)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	task := NewSqlTask("SQLCreateViewTask", sql, nil)
-	instances := NewInstances(ts.odpsIns, ts.projectName)
-
-	i, err := instances.CreateTask(ts.projectName, &task)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	return errors.WithStack(i.WaitForSuccess())
+	return ts.CreateViewWithHints(schema, orReplace, createIfNotExists, buildDeferred, nil)
 }
 
 func (ts *Tables) CreateViewWithHints(schema tableschema.TableSchema,
@@ -266,14 +211,7 @@ func (ts *Tables) CreateViewWithHints(schema tableschema.TableSchema,
 		return errors.WithStack(err)
 	}
 
-	task := NewSqlTask("SQLCreateViewTask", sql, hints)
-	instances := NewInstances(ts.odpsIns, ts.projectName)
-
-	i, err := instances.CreateTask(ts.projectName, &task)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	return errors.WithStack(i.WaitForSuccess())
+	return ts.runDDL("SQLCreateViewTask", sql, hints, nil)
 }
 
 func (ts *Tables) CreateWithDataHub(
@@ -298,28 +236,12 @@ func (ts *Tables) CreateWithDataHub(
 	sb.WriteString(fmt.Sprintf("\nhubLifecycle %d", hubLifecycle))
 	sb.WriteRune(';')
 
-	hints := make(map[string]string)
-	if ts.schemaName == "" {
-		hints["odps.namespace.schema"] = "false"
-	} else {
-		hints["odps.namespace.schema"] = "true"
-	}
-	task := NewSqlTask("SQLCreateTableTaskWithDataHub", sb.String(), hints)
-
-	instances := NewInstances(ts.odpsIns, ts.projectName)
-	i, err := instances.CreateTask(ts.projectName, &task)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return errors.WithStack(i.WaitForSuccess())
+	return ts.runDDL("SQLCreateTableTaskWithDataHub", sb.String(), ts.namespaceHints(nil), nil)
 }
 
 // Delete delete table
 func (ts *Tables) Delete(tableName string, ifExists bool) error {
 	var sqlBuilder strings.Builder
-	hints := make(map[string]string)
-	hints["odps.namespace.schema"] = "false"
 	sqlBuilder.WriteString("drop table")
 	if ifExists {
 		sqlBuilder.WriteString(" if exists")
@@ -329,16 +251,26 @@ func (ts *Tables) Delete(tableName string, ifExists bool) error {
 	sqlBuilder.WriteString(ts.projectName)
 	sqlBuilder.WriteRune('.')
 	if ts.schemaName != "" {
-		hints["odps.namespace.schema"] = "true"
 		sqlBuilder.WriteString("`" + ts.schemaName + "`")
 		sqlBuilder.WriteRune('.')
 	}
 	sqlBuilder.WriteString("`" + tableName + "`")
 	sqlBuilder.WriteString(";")
 
-	sqlTask := NewSqlTask("SQLDropTableTask", sqlBuilder.String(), hints)
+	return ts.runDDL("SQLDropTableTask", sqlBuilder.String(), ts.namespaceHints(nil), nil)
+}
+
+func (ts *Tables) namespaceHints(hints map[string]string) map[string]string {
+	settings := make(map[string]string, len(hints)+1)
+	maps.Copy(settings, hints)
+	settings["odps.namespace.schema"] = strconv.FormatBool(ts.schemaName != "")
+	return settings
+}
+
+func (ts *Tables) runDDL(name, query string, hints, aliases map[string]string) error {
+	task := NewSQLTaskWithOptions(query, &options.SQLTaskOptions{TaskName: name, Hints: hints, Aliases: aliases})
 	instances := NewInstances(ts.odpsIns, ts.projectName)
-	i, err := instances.CreateTask(ts.projectName, &sqlTask)
+	i, err := instances.CreateTask(ts.projectName, &task)
 	if err != nil {
 		return errors.WithStack(err)
 	}

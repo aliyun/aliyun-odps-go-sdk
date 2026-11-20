@@ -21,6 +21,11 @@
 - Discover Tunnel routes by project and quota, and send P2P stream writes to the selected worker.
 - Sign ODPS v4 requests using their request date and normalize endpoints with a trailing slash.
 - Support empty resource uploads and stop when an input reader makes no progress.
+- Resolve SQL schema hints consistently and preserve the caller's options and external table aliases.
+- Read the requested SQL task's CSV result and report malformed headers and task errors.
+- Make LogView discovery safe for concurrent requests and use the instance project's region.
+- Preserve full DECIMAL precision and report integer conversions that would lose data.
+- Apply the configured Deflate level and close the streaming request when a compressor fails.
 - Apply SQL context cancellation to HTTP requests and retry delays, and preserve the instance ID when available.
 - Add MaxCompute Emulator regressions for Arrow, offset retries, and lost write and commit responses.
 

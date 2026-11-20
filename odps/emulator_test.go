@@ -20,6 +20,7 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/options"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 )
@@ -203,6 +204,54 @@ func TestEmulatorInstanceSuccessAndFailure(t *testing.T) {
 	requireEmulatorServiceError(t, err, http.StatusNotFound, "NoSuchInstance")
 	_, err = missing.GetResult()
 	requireEmulatorServiceError(t, err, http.StatusNotFound, "NoSuchInstance")
+}
+
+func TestEmulatorSQLDefaultSchema(t *testing.T) {
+	service := emulatorService(t)
+	suffix := time.Now().UnixNano()
+	schemaName := fmt.Sprintf("go_sdk_schema_%d", suffix)
+	tableName := fmt.Sprintf("go_sdk_lookup_%d", suffix)
+	require.NoError(t, service.Schemas().Create(schemaName, false, "Go SDK SQL namespace fixture"))
+	t.Cleanup(func() { require.NoError(t, service.Schemas().Delete(schemaName)) })
+	schema := tableschema.NewSchemaBuilder().Name(tableName).
+		Column(tableschema.Column{Name: "id", Type: datatype.BigIntType}).Build()
+	defaultTables := service.Tables()
+	require.NoError(t, defaultTables.Create(schema, false, nil, nil))
+	t.Cleanup(func() { require.NoError(t, defaultTables.Delete(tableName, true)) })
+	require.NoError(t, odps.NewTables(service, service.DefaultProjectName(), schemaName).Create(schema, false, nil, nil))
+
+	for _, row := range []struct{ schema, value string }{{"default", "12"}, {schemaName, "34"}} {
+		sql := fmt.Sprintf("insert into %s.%s.%s values(%s)", service.DefaultProjectName(), row.schema, tableName, row.value)
+		instance, err := service.ExecSQLContext(t.Context(), sql)
+		require.NoError(t, err)
+		require.NoError(t, instance.WaitForSuccessContext(t.Context()))
+	}
+	query := "select id from " + tableName
+	task := odps.NewAnonymousSQLTask(query, nil)
+	for _, tc := range []struct {
+		name string
+		opts *options.SQLTaskOptions
+		want string
+	}{
+		{"client default", nil, "12"},
+		{"option override", options.NewSQLTaskOptions(options.WithDefaultSchema(schemaName)), "34"},
+		{"hint override", options.NewSQLTaskOptions(options.WithDefaultSchema(schemaName),
+			options.WithHints(map[string]string{"odps.default.schema": "default"})), "12"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			instance, err := service.ExecSQlWithOption(query, tc.opts)
+			require.NoError(t, err)
+			require.NoError(t, instance.WaitForSuccessContext(t.Context()))
+			reader, err := task.GetSelectResultAsCsv(instance, true)
+			require.NoError(t, err)
+			rows, err := reader.ReadAll()
+			require.NoError(t, err)
+			require.Equal(t, [][]string{{"id"}, {tc.want}}, rows)
+		})
+	}
+	instance, err := service.ExecSQlWithOption(query, options.NewSQLTaskOptions(options.WithDefaultSchema(schemaName+"_missing")))
+	require.NoError(t, err)
+	require.ErrorContains(t, instance.WaitForSuccessContext(t.Context()), "schema does not exist")
 }
 
 func TestEmulatorTablePaginationAndLoadState(t *testing.T) {

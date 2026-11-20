@@ -14,7 +14,7 @@ reports="$(mktemp -d "$report_root/odps-sdk-coverage.XXXXXX")"
 reports="$(cd "$reports" && pwd)"
 echo "Test reports: $reports"
 
-source_commit='6ad22011621665e2debad2ea7648b0b15d423db8'
+source_commit='ef62c5e87c783970c422786ad5dec472bf9e37b0'
 platform="${SDK_EMULATOR_PLATFORM:-linux/amd64}"
 image="${SDK_EMULATOR_IMAGE:-maxcompute-emulator:sdk-${source_commit:0:12}}"
 if [[ -z "${SDK_EMULATOR_IMAGE:-}" ]]; then

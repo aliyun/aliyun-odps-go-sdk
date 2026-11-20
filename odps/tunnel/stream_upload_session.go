@@ -299,56 +299,40 @@ func (su *StreamUploadSession) flushStream(streamWriter *RecordPackStreamWriter,
 		return "", 0, errors.WithStack(err)
 	}
 
-	var reader io.ReadCloser
-	var writer io.WriteCloser
-	reader, writer = io.Pipe()
+	reader, writer := io.Pipe()
 
 	conn, err := su.newUploadConnection(reader, writer, currentSlot, streamWriter, timeout)
 	if err != nil {
 		return "", 0, errors.WithStack(err)
 	}
 
-	// write bytes to http uploading connection
-	_, err = conn.Writer.Write(streamWriter.buffer.Bytes())
-	if err != nil {
-		// 在write失败时，如果http请求还未完全发送到server, server会等待http请求完成，造成 conn.closeRes()卡住。
-		// 因为conn.closeRes()会读取http响应流，而server一直在等剩余的http请求内容。
-		// 注意: 这里关掉reader后可能导致writer写数据失败、程序退出而丢失了writer的真实错误原因
+	_, writeErr := conn.Writer.Write(streamWriter.buffer.Bytes())
+	if writeErr != nil {
+		// Unblock the HTTP request before closing the compressor after an interrupted write.
 		_ = reader.Close()
-		// 显示关闭打开的连接，并在http返回非200状态时，获取实际的http错误
-		closeError := conn.closeRes()
-		if closeError != nil {
-			return "", 0, su.flushFailed(closeError)
-		}
-
-		return "", 0, su.flushFailed(err)
 	}
-	// close http writer
-	err = conn.Writer.Close()
-	if err != nil {
-		closeError := conn.closeRes()
-		if closeError != nil {
-			return "", 0, su.flushFailed(closeError)
-		}
-
-		return "", 0, su.flushFailed(err)
-	}
-
-	// get and close response
+	closeErr := conn.Writer.Close()
+	// A custom compressor may return from Close before closing its destination.
+	// The transport still needs EOF to finish sending the request.
+	_ = writer.Close()
 	rOrE := <-conn.resChan
-
 	if rOrE.err != nil {
 		return "", 0, su.flushFailed(rOrE.err)
 	}
-
 	res := rOrE.res
+	defer func() { _ = res.Body.Close() }()
+	if writeErr != nil {
+		return "", 0, su.flushFailed(writeErr)
+	}
+	if closeErr != nil {
+		return "", 0, su.flushFailed(closeErr)
+	}
 
 	// The server has committed the data by now. Everything below only affects the
 	// routing information used by the *next* flush, so none of it may be reported
 	// as a flush failure: the caller would retry and write the same data twice.
 	requestId := res.Header.Get(common.HttpHeaderOdpsRequestId)
 	bytesSent := conn.bytesCount()
-	_ = res.Body.Close()
 
 	su.refreshSlotRouting(
 		currentSlot,

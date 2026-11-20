@@ -19,11 +19,12 @@ package odps
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 
 	"github.com/pkg/errors"
 
@@ -39,9 +40,9 @@ const (
 
 type LogView struct {
 	odpsIns        *Odps
-	logViewHost    *string
-	jobInsightHost *string
-	version        int
+	logViewHost    atomic.Pointer[string]
+	jobInsightHost atomic.Pointer[string]
+	version        options.LogViewVersion
 }
 
 func NewLogView(odpsIns *Odps) *LogView {
@@ -49,92 +50,68 @@ func NewLogView(odpsIns *Odps) *LogView {
 }
 
 func newLogView(ctx context.Context, odpsIns *Odps) *LogView {
-	lv := &LogView{odpsIns: odpsIns, version: int(odpsIns.Options.LogViewVersion)}
-	if odpsIns.Options.LogViewVersion == options.Auto {
-		lv.version = 1
+	lv := &LogView{odpsIns: odpsIns, version: odpsIns.Options.LogViewVersion}
+	if lv.version == options.Auto {
+		lv.version = options.LegacyLogView
 		if lv.getJobInsightHost(ctx) != nil {
-			lv.version = 2
+			lv.version = options.JobInsight
 		}
 	}
 	return lv
 }
 
 func (lv *LogView) LogViewHost() string {
-	ctx := context.Background()
-	if lv.version == 1 {
-		logViewHost := lv.getLogViewHost(ctx)
-		if logViewHost == nil {
-			return LogViewHostDefault
-		} else {
-			return *logViewHost
+	return lv.host(context.Background())
+}
+
+func (lv *LogView) host(ctx context.Context) string {
+	switch lv.version {
+	case options.LegacyLogView:
+		if host := lv.resolveHost(ctx, &lv.logViewHost, "/logview/host"); host != nil {
+			return *host
 		}
-	} else if lv.version == 2 {
-		jobInsightHost := lv.getJobInsightHost(ctx)
-		if jobInsightHost == nil {
-			return JobInsightHostDefault
-		} else {
-			return *jobInsightHost
+		return LogViewHostDefault
+	case options.JobInsight:
+		if host := lv.getJobInsightHost(ctx); host != nil {
+			return *host
 		}
-	} else {
+		return JobInsightHostDefault
+	default:
 		return "Unknown LogView Version " + fmt.Sprint(lv.version)
 	}
 }
 
-func (lv *LogView) getLogViewHost(ctx context.Context) *string {
-	if lv.logViewHost != nil {
-		return lv.logViewHost
-	}
-	client := lv.odpsIns.RestClient()
-	err := client.GetWithParseFuncContext(ctx, "/logview/host", nil, nil, func(res *http.Response) error {
-		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
-		buf, err := ioutil.ReadAll(res.Body)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		result := string(buf)
-		if strings.TrimSpace(result) == "" {
-			return nil
-		}
-		lv.logViewHost = &result
-		return nil
-	})
-	if err != nil {
-		log.Printf("get logview err, %v", err)
-		return nil
-	}
-	return lv.logViewHost
+func (lv *LogView) getJobInsightHost(ctx context.Context) *string {
+	return lv.resolveHost(ctx, &lv.jobInsightHost, "/webconsole/host")
 }
 
-func (lv *LogView) getJobInsightHost(ctx context.Context) *string {
-	if lv.jobInsightHost != nil {
-		return lv.jobInsightHost
+func (lv *LogView) resolveHost(ctx context.Context, cache *atomic.Pointer[string], resource string) *string {
+	if host := cache.Load(); host != nil {
+		return host
 	}
 	client := lv.odpsIns.RestClient()
-	err := client.GetWithParseFuncContext(ctx, "/webconsole/host", nil, nil, func(res *http.Response) error {
-		// Use ioutil.ReadAll instead of io.ReadAll for compatibility with Go 1.15.
-		buf, err := ioutil.ReadAll(res.Body)
+	err := client.GetWithParseFuncContext(ctx, resource, nil, nil, func(res *http.Response) error {
+		buf, err := io.ReadAll(res.Body)
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		result := string(buf)
-		if strings.TrimSpace(result) == "" {
-			return nil
+		if host := strings.TrimSpace(string(buf)); host != "" {
+			cache.CompareAndSwap(nil, &host)
 		}
-		lv.jobInsightHost = &result
 		return nil
 	})
-	if err != nil {
-		return nil
+	if err != nil && resource == "/logview/host" {
+		log.Printf("get logview err, %v", err)
 	}
-	return lv.jobInsightHost
+	return cache.Load()
 }
 
 func (lv *LogView) SetLogViewHost(logViewHost string) {
-	lv.logViewHost = &logViewHost
+	lv.logViewHost.Store(&logViewHost)
 }
 
 func (lv *LogView) SetJobInsightHost(jobInsightHost string) {
-	lv.jobInsightHost = &jobInsightHost
+	lv.jobInsightHost.Store(&jobInsightHost)
 }
 
 func (lv *LogView) GenerateLogView(instance *Instance, hours int) (string, error) {
@@ -150,11 +127,12 @@ func (lv *LogView) generate(ctx context.Context, instance *Instance, hours int) 
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	if lv.version == 2 {
+	switch lv.version {
+	case options.JobInsight:
 		return lv.generateJobInsight(ctx, instance)
-	} else if lv.version == 1 {
+	case options.LegacyLogView:
 		return lv.generateLogView(ctx, instance, hours)
-	} else {
+	default:
 		return "", errors.New("Unknown LogView Version " + fmt.Sprint(lv.version))
 	}
 }
@@ -164,10 +142,7 @@ func (lv *LogView) generateLogView(ctx context.Context, instance *Instance, hour
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
-	logViewHost := LogViewHostDefault
-	if host := lv.getLogViewHost(ctx); host != nil {
-		logViewHost = *host
-	}
+	logViewHost := lv.host(ctx)
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -190,17 +165,12 @@ func (lv *LogView) generateLogView(ctx context.Context, instance *Instance, hour
 
 func (lv *LogView) generateJobInsight(ctx context.Context, instance *Instance) (string, error) {
 	client := lv.odpsIns.RestClient()
-	jobInsightHost := JobInsightHostDefault
-	if host := lv.getJobInsightHost(ctx); host != nil {
-		jobInsightHost = *host
-	}
-
-	jobInsightUrl, err := url.Parse(jobInsightHost)
+	jobInsightUrl, err := url.Parse(lv.host(ctx))
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
 
-	regionID := lv.odpsIns.regionID(ctx)
+	regionID := lv.odpsIns.regionID(ctx, instance.ProjectName())
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}

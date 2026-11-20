@@ -172,7 +172,10 @@ func (r decompressionError) Read([]byte) (int, error) {
 }
 
 func (d Deflate) NewWriter(wc io.WriteCloser) io.WriteCloser {
-	w, _ := zlib.NewWriterLevel(wc, flate.DefaultCompression)
+	w, err := zlib.NewWriterLevel(wc, d.level)
+	if err != nil {
+		w = zlib.NewWriter(wc)
+	}
 	return writeCloser{
 		writeCloser: w,
 		closer:      wc,

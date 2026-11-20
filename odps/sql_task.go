@@ -20,6 +20,9 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"encoding/xml"
+	"io"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -74,14 +77,12 @@ func NewSQLTaskWithOptions(query string, option *options.SQLTaskOptions) SQLTask
 	sqlTask.Config = append(sqlTask.Config, common.Property{Name: "type", Value: taskType})
 
 	hints := option.Hints
-	if hints == nil && option.DefaultSchema != "" {
-		hints = make(map[string]string)
+	if hints["odps.default.schema"] == "" && option.DefaultSchema != "" {
+		hints = make(map[string]string, len(option.Hints)+1)
+		maps.Copy(hints, option.Hints)
 		hints["odps.default.schema"] = option.DefaultSchema
 	}
 	if hints != nil {
-		if hints["odps.default.schema"] == "" && option.DefaultSchema != "" {
-			hints["odps.default.schema"] = option.DefaultSchema
-		}
 		hintsJSON, _ := json.Marshal(hints)
 		sqlTask.Config = append(sqlTask.Config, common.Property{Name: "settings", Value: string(hintsJSON)})
 	}
@@ -107,20 +108,36 @@ func (t *SQLTask) Run(odpsIns *Odps, projectName string) (*Instance, error) {
 	return i, errors.WithStack(err)
 }
 
-// GetSelectResultAsCsv 最多返回1W条数据
+// GetSelectResultAsCsv reads up to 10,000 rows from the instance's inline task result.
 func (t *SQLTask) GetSelectResultAsCsv(i *Instance, withColumnName bool) (*csv.Reader, error) {
 	results, err := i.GetResult()
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	if len(results) <= 0 {
+	if len(results) == 0 {
 		return nil, errors.Errorf("failed to get result from instance %s", i.Id())
 	}
-
-	reader := csv.NewReader(strings.NewReader(results[0].Content()))
+	// Legacy single-task responses may not identify the task by name.
+	result := &results[0]
+	if len(results) > 1 {
+		index := slices.IndexFunc(results, func(result TaskResult) bool {
+			return result.Name == t.GetName()
+		})
+		if index < 0 {
+			return nil, errors.Errorf("instance %s returned no result for task %s", i.Id(), t.GetName())
+		}
+		result = &results[index]
+	}
+	content := result.Content()
+	if result.Status != 0 && result.Status != TaskSuccess {
+		return nil, taskStatusError(result.Name, result.Status, content)
+	}
+	reader := csv.NewReader(strings.NewReader(content))
 	if !withColumnName {
-		_, _ = reader.Read()
+		if _, err := reader.Read(); err != nil && err != io.EOF {
+			return nil, errors.Wrap(err, "read CSV header")
+		}
 	}
 
 	return reader, nil
