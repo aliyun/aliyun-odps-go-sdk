@@ -17,9 +17,11 @@
 package arrjson
 
 import (
+	"encoding/json"
 	"io"
 	"io/ioutil"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -84,9 +86,14 @@ func TestReadWrite(t *testing.T) {
 				t.Fatalf("could not sync data to disk: %v", err)
 			}
 
-			fileBytes, _ := ioutil.ReadFile(f.Name())
-			if wantJSONs[name] != strings.TrimSpace(string(fileBytes)) {
-				t.Fatalf("not expected JSON pretty output for case: %v", name)
+			fileBytes, err := ioutil.ReadFile(f.Name())
+			if err != nil {
+				t.Fatal(err)
+			}
+			gotJSON := decodeFixtureJSON(t, "writer output", string(fileBytes))
+			wantJSON := decodeFixtureJSON(t, "fixture", wantJSONs[name])
+			if !reflect.DeepEqual(gotJSON, wantJSON) {
+				t.Fatalf("writer output differs from JSON fixture for %s", name)
 			}
 
 			_, err = f.Seek(0, io.SeekStart)
@@ -133,6 +140,20 @@ func TestReadWrite(t *testing.T) {
 			}
 		})
 	}
+}
+
+func decodeFixtureJSON(t *testing.T, source, input string) interface{} {
+	t.Helper()
+	decoder := json.NewDecoder(strings.NewReader(input))
+	decoder.UseNumber()
+	var value interface{}
+	if err := decoder.Decode(&value); err != nil {
+		t.Fatalf("invalid JSON in %s: %v", source, err)
+	}
+	if err := decoder.Decode(new(interface{})); err != io.EOF {
+		t.Fatalf("unexpected trailing JSON in %s: %v", source, err)
+	}
+	return value
 }
 
 func makeNullWantJSONs() string {

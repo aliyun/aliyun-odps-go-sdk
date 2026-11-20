@@ -1,10 +1,10 @@
 # Note
 This SDK is used in production, including the control-plane surfaces (`SQLTask`, instance status and results, `Tables`/`Schemas`/`Table.Load`) and the Tunnel APIs.
 
-It is still under active development toward v1.0. CI coverage in this repository is not comprehensive yet, so before relying on a specific path, check the open issues: complex-type (`ARRAY`/`MAP`/`STRUCT`) NULL values in Tunnel records (#27) and truncated checksum detection (#82) are open, with fixes in review (#79, #83).
+It is still under active development toward v1.0. CI coverage in this repository is not comprehensive yet. Tunnel Protobuf records support nested NULL values in complex types and detect truncated checksum trailers. Use Protobuf to upload to tables with MAP columns.
 
 # Install
-required >= go1.15
+The MaxCompute SDK APIs and SQL driver require Go 1.15 or later in v0.4.x.
 ```shell
 go get github.com/aliyun/aliyun-odps-go-sdk
 ```
@@ -49,10 +49,7 @@ go sql/driver 接口的odps实现
 
 所以 `account.AccountFromEnv() != nil` 的确切含义是“这里有一对可以拿去签名的密钥”，它**不**说明这对密钥有效、project 存在或 endpoint 可达——那些只有服务端知道。
 
-`nil` 只回答“密钥对缺不缺、完不完整”这一件事，两点边界要说清：
-
-1. **非 nil 不等于“可以跑真实服务用例”，也不等于“live 配置完整”。** 真实服务用例要的是显式开关加可用 endpoint（公仓 PR #92 引入的 `internal/livetest` 就是这套门禁：要 `ODPS_RUN_LIVE_TESTS=1`、要能用的 `odps_endpoint`，而且对“导出了但值为空白的 token”直接判配置不可用——比本函数更严，这是测试门禁有意保留的口径）。不要因为本函数收紧了，就把那套门禁换成 `AccountFromEnv() != nil`。
-2. **返回 nil 不代表下游会优雅失败。** `RestClient` 内嵌 `account.Account`，签名时直接从它走；把 nil 账号交给 `odps.NewOdps` 或 `restclient.NewOdpsRestClient`，构造时不报错，第一次请求就 panic。所以判 nil 必须发生在构造客户端之前。
+在调用 `odps.NewOdps` 或 `restclient.NewOdpsRestClient` 之前检查账号是否为 `nil`。构造函数接受 `nil` 时，第一次请求会在签名时报 panic。
 
 拿到 nil 之后怎么办，按你自己的来源决定，别把它往下传：
 
