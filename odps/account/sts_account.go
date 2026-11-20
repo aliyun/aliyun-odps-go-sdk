@@ -66,7 +66,7 @@ func (sp *stsStringProvider) Credential() (*credentials.CredentialModel, error) 
 // errIncompleteCredential is returned when a credential provider hands the
 // account an unusable credential. It deliberately carries no credential value,
 // so an error message can be logged or shown without leaking a secret.
-var errIncompleteCredential = errors.New("odps account: credential provider returned an incomplete credential (access key id and secret are required)")
+var errIncompleteCredential = errors.New("odps account: incomplete credential (access key id and secret are required)")
 
 // signWithCredential signs req with the access key pair from cred.
 //
@@ -91,6 +91,8 @@ func signWithCredential(cred *credentials.CredentialModel, regionId, endpoint st
 
 	if token, ok := stsTokenHeaderValue(cred); ok {
 		req.Header.Set(common.HttpHeaderAuthorizationSTSToken, token)
+	} else {
+		req.Header.Del(common.HttpHeaderAuthorizationSTSToken)
 	}
 
 	return nil
@@ -102,9 +104,6 @@ func signWithCredential(cred *credentials.CredentialModel, regionId, endpoint st
 // BearerToken is only a fallback, kept so a provider that has always put its
 // token there keeps working; a credential with neither sends no token header.
 func stsTokenHeaderValue(cred *credentials.CredentialModel) (string, bool) {
-	if cred == nil {
-		return "", false
-	}
 	if cred.SecurityToken != nil {
 		return *cred.SecurityToken, true
 	}

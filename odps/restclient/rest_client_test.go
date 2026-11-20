@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -145,4 +146,33 @@ func TestRestClientAcceptsDirectRequestWithoutConstructor(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, client.DoWithParseRes(req, nil))
 	client.CloseIdleConnections()
+}
+
+func TestRestClientPropagatesHeadersAndStreamsPutBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			assert.Equal(t, "fixture", r.Header.Get("x-odps-fixture"))
+			w.WriteHeader(http.StatusNoContent)
+		case http.MethodPut:
+			assert.Equal(t, "write", r.URL.Query().Get("operation"))
+			payload, err := io.ReadAll(r.Body)
+			assert.NoError(t, err)
+			assert.Equal(t, "payload", string(payload))
+			w.Header().Set("X-Odps-Request-Id", "accepted")
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}))
+	t.Cleanup(server.Close)
+	client := NewOdpsRestClient(MockAccount{}, server.URL)
+	require.NoError(t, client.GetWithParseFunc("/resource", nil, map[string]string{"x-odps-fixture": "fixture"}, nil))
+	var receipt string
+	err := client.PutWithParseFunc("/resource", url.Values{"operation": {"write"}}, strings.NewReader("payload"), func(res *http.Response) error {
+		receipt = res.Header.Get("X-Odps-Request-Id")
+		return nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, "accepted", receipt)
 }

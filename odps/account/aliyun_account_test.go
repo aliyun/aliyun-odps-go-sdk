@@ -35,7 +35,7 @@ func TestSignatureV4(t *testing.T) {
 	if err := signer.SignRequest(req, endpoint); err != nil {
 		t.Fatal(err)
 	}
-	if got := req.Header.Get(common.HttpHeaderAuthorization); !strings.HasPrefix(got, "ODPS test-ak/") || !strings.Contains(got, "/cn-shanghai/odps/") {
+	if got := req.Header.Get(common.HttpHeaderAuthorization); !strings.HasPrefix(got, "ODPS test-ak/20261005/cn-shanghai/odps/") {
 		t.Fatalf("unexpected signing scope: %q", got)
 	}
 	if got := req.Header.Get(common.HttpHeaderAuthorizationSTSToken); got != "test-sts-token" {
@@ -58,6 +58,7 @@ func TestRegionId(t *testing.T) {
 func TestCorporation(t *testing.T) {
 	aliyunAccount := account.NewAliyunAccount("ak", "sk", "cn-shanghai")
 	account.SetCorporation("apsara")
+	t.Cleanup(func() { account.SetCorporation("aliyun") })
 
 	request, err := http.NewRequest("GET", "http://www.mock.com", nil)
 	if err != nil {

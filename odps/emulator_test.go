@@ -429,6 +429,12 @@ func TestEmulatorFileResourceLifecycle(t *testing.T) {
 	require.NoError(t, resource.Load())
 	require.Equal(t, "updated", resource.Comment())
 
+	file.SetReader(strings.NewReader(""))
+	require.NoError(t, resources.UpdateFileResource("", "", file))
+	require.NoError(t, resource.Load())
+	require.Zero(t, resource.Model.ResourceSize)
+	require.Equal(t, "d41d8cd98f00b204e9800998ecf8427e", resource.Model.ContentMD5)
+
 	var found bool
 	resources.List(func(resource *odps.Resource, err error) {
 		require.NoError(t, err)
@@ -444,6 +450,37 @@ func TestEmulatorFileResourceLifecycle(t *testing.T) {
 
 	require.ErrorContains(t, resources.CreateFileResource("", "", odps.NewFileResource(""), false), "name")
 	require.ErrorContains(t, resources.CreateFileResource("", "", odps.NewFileResource(name), false), "reader")
+	file.SetReader(strings.NewReader(""))
+	require.NoError(t, resources.CreateFileResource("", "", file, false))
+	require.NoError(t, resources.Get(name).Load())
+}
+
+type stalledResourceReader struct{}
+
+func (stalledResourceReader) Read([]byte) (int, error) { return 0, nil }
+
+func TestEmulatorResourceUploadNeverPublishesPartialInput(t *testing.T) {
+	service := emulatorService(t)
+	resources := odps.NewResources(service)
+	resources.ChunkSize = 4
+	name := fmt.Sprintf("go_sdk_aborted_resource_%d.txt", time.Now().UnixNano())
+	published := odps.NewFileResource(name)
+	published.SetReader(strings.NewReader("original"))
+	require.NoError(t, resources.CreateFileResource("", "", published, false))
+	t.Cleanup(func() { _ = resources.Delete(name) })
+	t.Cleanup(func() {
+		_ = resources.Delete(service.CurrentSchemaName() + "." + name + ".part.tmp.000000")
+	})
+
+	failed := odps.NewFileResource(name)
+	failed.SetReader(io.MultiReader(strings.NewReader("part"), iotest.ErrReader(io.ErrClosedPipe)))
+	require.ErrorIs(t, resources.UpdateFileResource("", "", failed), io.ErrClosedPipe)
+	resource := resources.Get(name)
+	require.NoError(t, resource.Load())
+	require.Equal(t, "919c8b643b7133116b02fc0d9bb7df3f", resource.Model.ContentMD5)
+
+	failed.SetReader(stalledResourceReader{})
+	require.ErrorIs(t, resources.UpdateFileResource("", "", failed), io.ErrNoProgress)
 }
 
 type resourceEOFReader struct {
@@ -514,6 +551,7 @@ func TestEmulatorTableResourcesAndPagination(t *testing.T) {
 	require.Equal(t, schema, got.SchemaName())
 	require.Equal(t, odps.ResourceTypeTable, got.ResourceType())
 	require.Equal(t, project+"."+table+" partition(ds='sample')", got.Model.SourceTableName)
+	require.Equal(t, got.Model.SourceTableName, got.Model.TableName)
 	require.Equal(t, "updated metadata", got.Comment())
 
 	var listed []string

@@ -26,15 +26,16 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
 
-var corporation = "aliyun"
+var corporation atomic.Pointer[string]
 
 func SetCorporation(corp string) {
-	corporation = corp
+	corporation.Store(&corp)
 }
 
 type AliyunAccount struct {
@@ -59,31 +60,18 @@ func NewAliyunAccount(accessId string, accessKey string, regionId ...string) *Al
 }
 
 func AliyunAccountFromEnv() *AliyunAccount {
-	account := AliyunAccount{}
-
-	if accessId, found := os.LookupEnv("ALIBABA_CLOUD_ACCESS_KEY_ID"); found {
-		account.accessId = accessId
-	}
-
-	if accessKey, found := os.LookupEnv("ALIBABA_CLOUD_ACCESS_KEY_SECRET"); found {
-		account.accessKey = accessKey
-	}
-
-	return &account
+	return NewAliyunAccount(os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_ID"), os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET"))
 }
 
 func AccountFromEnv() Account {
-	accessId, found := os.LookupEnv("ALIBABA_CLOUD_ACCESS_KEY_ID")
-	accessKey, found := os.LookupEnv("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
-	if !found {
+	account := AliyunAccountFromEnv()
+	if account.accessId == "" || account.accessKey == "" {
 		return nil
 	}
-	securityToken, found := os.LookupEnv("ALIBABA_CLOUD_SECURITY_TOKEN")
-	if found {
-		return NewStsAccount(accessId, accessKey, securityToken)
-	} else {
-		return NewAliyunAccount(accessId, accessKey)
+	if securityToken := os.Getenv("ALIBABA_CLOUD_SECURITY_TOKEN"); securityToken != "" {
+		return NewStsAccount(account.accessId, account.accessKey, securityToken)
 	}
+	return account
 }
 
 func (account *AliyunAccount) AccessId() string {
@@ -103,13 +91,30 @@ func (account *AliyunAccount) GetType() Provider {
 }
 
 func (account *AliyunAccount) SignRequest(req *http.Request, endpoint string) error {
-	canonicalString := account.buildCanonicalString(req, endpoint)
+	if account.accessId == "" || account.accessKey == "" {
+		return errIncompleteCredential
+	}
+	if req == nil || req.URL == nil {
+		return fmt.Errorf("odps account: request URL is required for signing")
+	}
+	base, err := url.Parse(endpoint)
+	if err != nil {
+		return fmt.Errorf("odps account: invalid signing endpoint: %w", err)
+	}
+	if req.Header == nil {
+		req.Header = make(http.Header)
+	}
+	canonicalString := account.buildCanonicalString(req, strings.TrimRight(base.Path, "/"))
 	// Generate signature
 	var signature string
 	if account.regionId == "" {
 		signature = account.generateSignatureV2(canonicalString.Bytes())
 	} else {
-		signature = account.generateSignatureV4(canonicalString.Bytes(), account.regionId)
+		date, err := http.ParseTime(req.Header.Get(common.HttpHeaderDate))
+		if err != nil {
+			date = time.Now()
+		}
+		signature = account.generateSignatureV4(canonicalString.Bytes(), account.regionId, date.UTC().Format("20060102"))
 	}
 	// Set authorization header
 	req.Header.Set(common.HttpHeaderAuthorization, signature)
@@ -117,7 +122,7 @@ func (account *AliyunAccount) SignRequest(req *http.Request, endpoint string) er
 }
 
 // buildCanonicalString constructs canonical string for ODPS signature
-func (account *AliyunAccount) buildCanonicalString(req *http.Request, endpoint string) bytes.Buffer {
+func (account *AliyunAccount) buildCanonicalString(req *http.Request, basePath string) bytes.Buffer {
 	var msg bytes.Buffer
 
 	// Write HTTP method
@@ -136,7 +141,7 @@ func (account *AliyunAccount) buildCanonicalString(req *http.Request, endpoint s
 	msg.WriteString(account.buildCanonicalHeaders(req.Header))
 
 	// Write canonical resource
-	msg.WriteString(account.buildCanonicalResource(req, endpoint))
+	msg.WriteString(account.buildCanonicalResource(req, basePath))
 	return msg
 }
 
@@ -164,17 +169,14 @@ func (account *AliyunAccount) buildCanonicalHeaders(headers http.Header) string 
 }
 
 // buildCanonicalResource constructs canonical resource path for ODPS signature
-func (account *AliyunAccount) buildCanonicalResource(req *http.Request, endpoint string) string {
+func (account *AliyunAccount) buildCanonicalResource(req *http.Request, basePath string) string {
 	var resBuf bytes.Buffer
-	parsedEndpoint, _ := url.Parse(endpoint)
-	basePath := parsedEndpoint.Path
 
-	// Handle path normalization
-	if strings.HasPrefix(req.URL.Path, basePath) {
-		resBuf.WriteString(req.URL.Path[len(basePath):])
-	} else {
-		resBuf.WriteString(req.URL.Path)
+	resource := req.URL.Path
+	if resource == basePath || strings.HasPrefix(resource, basePath+"/") {
+		resource = strings.TrimPrefix(resource, basePath)
 	}
+	resBuf.WriteString(resource)
 
 	// Handle query parameters
 	queryParams := req.URL.Query()
@@ -220,15 +222,19 @@ func hmacsha256(key, data []byte) []byte {
 }
 
 // generateSignature creates the final authorization signature V4
-func (account *AliyunAccount) generateSignatureV4(data []byte, regionName string) string {
-	currentDate := time.Now().UTC().Format("20060102")
-	credential := fmt.Sprintf("%s/%s/%s/odps/%s_v4_request", account.accessId, currentDate, regionName, corporation)
+func (account *AliyunAccount) generateSignatureV4(data []byte, regionName, signingDate string) string {
+	corp := "aliyun"
+	if configured := corporation.Load(); configured != nil {
+		corp = *configured
+	}
+	scope := corp + "_v4_request"
+	credential := fmt.Sprintf("%s/%s/%s/odps/%s", account.accessId, signingDate, regionName, scope)
 
-	kSecret := []byte(corporation + "_v4" + account.accessKey)
-	kDate := hmacsha256(kSecret, []byte(currentDate))
+	kSecret := []byte(corp + "_v4" + account.accessKey)
+	kDate := hmacsha256(kSecret, []byte(signingDate))
 	kRegion := hmacsha256(kDate, []byte(regionName))
 	kService := hmacsha256(kRegion, []byte("odps"))
-	signatureKey := hmacsha256(kService, []byte(corporation+"_v4_request"))
+	signatureKey := hmacsha256(kService, []byte(scope))
 	signature := base64HmacSha1(signatureKey, data)
 	return "ODPS " + credential + ":" + signature
 }

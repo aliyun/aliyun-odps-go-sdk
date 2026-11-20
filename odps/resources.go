@@ -104,13 +104,19 @@ func (r *Resources) CreateFileResource(projectName, schemaName string, lfr Reade
 		return errors.New("resource chunk size must be positive")
 	}
 
-	tmpContent := make([]byte, r.ChunkSize)
-	totalBytes, cnt := int64(0), 0
-	var tmpFiles []string
+	partPrefix := lfr.Name()
+	if schemaName != "" {
+		partPrefix = schemaName + "." + partPrefix
+	}
+	buffer := make([]byte, r.ChunkSize)
+	var totalBytes int64
+	var parts []string
 	hash := md5.New()
+	const maxEmptyReads = 100
+	emptyReads := 0
 
 	for {
-		n, err := reader.Read(tmpContent)
+		n, err := reader.Read(buffer)
 		if err != nil && !errors.Is(err, io.EOF) {
 			return err
 		}
@@ -118,43 +124,34 @@ func (r *Resources) CreateFileResource(projectName, schemaName string, lfr Reade
 			if err != nil {
 				break
 			}
+			emptyReads++
+			if emptyReads == maxEmptyReads {
+				return io.ErrNoProgress
+			}
 			continue
 		}
-		hash.Write(tmpContent[:n])
+		emptyReads = 0
+		part := buffer[:n]
+		hash.Write(part)
 
-		tmpReader := bytes.NewBuffer(tmpContent[:n])
-		tmpName := ""
-		if schemaName != "" {
-			tmpName = fmt.Sprintf("%s.%s.part.tmp.%06d", schemaName, lfr.Name(), cnt)
-		} else {
-			tmpName = fmt.Sprintf("%s.part.tmp.%06d", lfr.Name(), cnt)
-		}
-
-		tmp := NewFileResource(tmpName)
-		tmp.SetReader(tmpReader)
+		tmp := NewFileResource(fmt.Sprintf("%s.part.tmp.%06d", partPrefix, len(parts)))
 		tmp.SetIsTempResource(true)
-		tmpFiles = append(tmpFiles, tmpName)
-		if uploadErr := r.createTempPartFile(projectName, schemaName, *tmp, tmpReader, int64(n)); uploadErr != nil {
-			return errors.WithStack(uploadErr)
+		if err := r.putFileResource(projectName, schemaName, tmp, false, part, url.Values{"rIsPart": {"true"}}, 0); err != nil {
+			return err
 		}
 
-		cnt++
+		parts = append(parts, tmp.Name())
 		totalBytes += int64(n)
 		if err != nil {
 			break
 		}
 	}
 
-	md5sum := hex.EncodeToString(hash.Sum(nil))
-	commitContent := fmt.Sprintf("%s|%s", md5sum, strings.Join(tmpFiles, ","))
-	commitReader := bytes.NewBuffer([]byte(commitContent))
-
-	tmp := FileResource{Resource: Resource{Model: resourceModel{ResourceType: ResourceTypeFile}}}
-	tmp.SetName(lfr.Name())
-	tmp.SetComment(lfr.Comment())
-	tmp.SetIsTempResource(lfr.IsTempResource())
-	tmp.SetResourceType(lfr.ResourceType())
-	return errors.WithStack(r.mergeTempPartFile(projectName, schemaName, tmp, commitReader, overwrite, totalBytes))
+	if len(parts) == 0 {
+		return r.putFileResource(projectName, schemaName, lfr, overwrite, nil, url.Values{}, 0)
+	}
+	manifest := hex.EncodeToString(hash.Sum(nil)) + "|" + strings.Join(parts, ",")
+	return r.putFileResource(projectName, schemaName, lfr, overwrite, []byte(manifest), url.Values{"rOpMerge": {"true"}}, totalBytes)
 }
 
 // UpdateFileResource update a file resource
@@ -162,97 +159,37 @@ func (r *Resources) UpdateFileResource(projectName, schemaName string, lfr Reade
 	return r.CreateFileResource(projectName, schemaName, lfr, true)
 }
 
-func (r *Resources) createTempPartFile(projectName, schemaName string, fr FileResource, reader *bytes.Buffer, length int64) error {
-	if fr.Name() == "" {
-		return errors.New("Temp part resource name cannot be empty")
-	}
-	if !fr.IsTempResource() {
-		return errors.New("Temp part resource must be temp resource")
-	}
-	if fr.ResourceType() == ResourceTypeVolumeFile || fr.ResourceType() == ResourceTypeArchive || fr.ResourceType() == ResourceTypeTable || fr.ResourceType() == ResourceTypeUnknown {
-		return errors.New("Temp part resource type must be file")
-	}
-
-	rb := common.ResourceBuilder{ProjectName: projectName}
-	resource := rb.Resources()
-
-	headers := make(map[string]string)
-	headers[common.HttpHeaderContentType] = "application/octet-stream"
-	headers[common.HttpHeaderContentDisposition] = "attachment;filename=" + fr.Name()
-	headers[common.HttpHeaderOdpsResourceType] = ResourceTypeToStr(fr.ResourceType())
-	headers[common.HttpHeaderOdpsResourceName] = fr.Name()
-	if fr.Comment() != "" {
-		headers[common.HttpHeaderOdpsComment] = fr.Comment()
-	}
-	headers[common.HttpHeaderOdpsResourceIsTemp] = strconv.FormatBool(fr.IsTempResource())
-	headers[common.HttpHeaderContentLength] = strconv.FormatInt(length, 10)
-
-	tmpReader := bytes.NewReader(reader.Bytes())
-	if headers[common.HttpHeaderContentMD5] == "" {
-		hash := md5.New()
-		_, _ = io.Copy(hash, reader)
-		headers[common.HttpHeaderContentMD5] = hex.EncodeToString(hash.Sum(nil))
-	}
-
-	queryArgs := make(url.Values, 4)
-	if schemaName != "" {
-		queryArgs.Set("curr_schema", schemaName)
-	}
-	queryArgs.Set("rIsPart", "true")
-
-	client := r.OdpsIns.restClient
-	req, err := client.NewRequestWithParamsAndHeaders(common.HttpMethod.PostMethod, resource, tmpReader, queryArgs, headers)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	client.HttpTimeout = 60 * time.Second
-	// A part is created or replaced under the same name on retry.
-	return errors.WithStack(client.DoWithParseFunc(req, nil))
-}
-
-func (r *Resources) mergeTempPartFile(projectName, schemaName string, fr FileResource, reader *bytes.Buffer, overwrite bool, totalBytes int64) error {
-	if fr.Name() == "" {
-		return errors.New("File resource name cannot be empty")
-	}
-
+func (r *Resources) putFileResource(projectName, schemaName string, fr ReaderResource, overwrite bool, body []byte, queryArgs url.Values, totalBytes int64) error {
 	rb := common.NewResourceBuilder(projectName)
-	var resource, method string
+	resource, method := rb.Resources(), common.HttpMethod.PostMethod
 	if overwrite {
 		resource = rb.Resource(fr.Name())
 		method = common.HttpMethod.PutMethod
-	} else {
-		resource = rb.Resources()
-		method = common.HttpMethod.PostMethod
 	}
 
-	headers := make(map[string]string)
-	headers[common.HttpHeaderContentType] = "application/octet-stream"
-	headers[common.HttpHeaderContentDisposition] = "attachment;filename=" + fr.Name()
-	headers[common.HttpHeaderOdpsResourceType] = ResourceTypeToStr(fr.ResourceType())
-	headers[common.HttpHeaderOdpsResourceName] = fr.Name()
-	if fr.Comment() != "" {
-		headers[common.HttpHeaderOdpsComment] = fr.Comment()
+	digest := md5.Sum(body)
+	headers := map[string]string{
+		common.HttpHeaderContentType:        "application/octet-stream",
+		common.HttpHeaderContentDisposition: "attachment;filename=" + fr.Name(),
+		common.HttpHeaderContentMD5:         hex.EncodeToString(digest[:]),
+		common.HttpHeaderOdpsResourceType:   ResourceTypeToStr(fr.ResourceType()),
+		common.HttpHeaderOdpsResourceName:   fr.Name(),
+	}
+	if comment := fr.Comment(); comment != "" {
+		headers[common.HttpHeaderOdpsComment] = comment
 	}
 	if fr.IsTempResource() {
-		headers[common.HttpHeaderOdpsResourceIsTemp] = strconv.FormatBool(fr.IsTempResource())
+		headers[common.HttpHeaderOdpsResourceIsTemp] = "true"
 	}
-	headers[common.HttpHeaderOdpsResourceMergeTotalBytes] = strconv.FormatInt(totalBytes, 10)
-	headers[common.HttpHeaderContentLength] = strconv.FormatInt(totalBytes, 10)
-	tmpReader := bytes.NewReader(reader.Bytes())
-	if headers[common.HttpHeaderContentMD5] == "" {
-		hash := md5.New()
-		_, _ = io.Copy(hash, reader)
-		headers[common.HttpHeaderContentMD5] = hex.EncodeToString(hash.Sum(nil))
+	if queryArgs.Has("rOpMerge") {
+		headers[common.HttpHeaderOdpsResourceMergeTotalBytes] = strconv.FormatInt(totalBytes, 10)
 	}
 
-	queryArgs := make(url.Values, 4)
 	if schemaName != "" {
 		queryArgs.Set("curr_schema", schemaName)
 	}
-	queryArgs.Set("rOpMerge", "true")
-
 	client := r.OdpsIns.restClient
-	req, err := client.NewRequestWithParamsAndHeaders(method, resource, tmpReader, queryArgs, headers)
+	req, err := client.NewRequestWithParamsAndHeaders(method, resource, bytes.NewReader(body), queryArgs, headers)
 	if err != nil {
 		return errors.WithStack(err)
 	}

@@ -144,10 +144,10 @@ func (r *Resource) Load() error {
 		r.Model.LastModifiedTime = header.Get(common.HttpHeaderLastModified)
 		r.Model.LastUpdator = header.Get(common.HttpHeaderOdpsUpdator)
 		r.Model.ResourceType = ResourceTypeFromStr(header.Get(common.HttpHeaderOdpsResourceType))
-		r.Model.TableName = header.Get(common.HttpHeaderOdpsResourceType)
 		r.Model.ResourceSize, _ = strconv.ParseInt(header.Get(common.HttpHeaderOdpsResourceSize), 10, 64)
 		r.Model.ContentMD5 = header.Get(common.HttpHeaderContentMD5)
 		r.Model.SourceTableName = header.Get(common.HttpHeaderOdpsCopyTableSource)
+		r.Model.TableName = r.Model.SourceTableName
 		r.Model.VolumePath = header.Get(common.HttpHeaderOdpsCopyFileSource)
 		if header.Get(common.HttpHeaderOdpsResourceIsTemp) != "" {
 			r.Model.IsTempResource, _ = strconv.ParseBool(header.Get(common.HttpHeaderOdpsResourceIsTemp))

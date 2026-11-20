@@ -73,7 +73,7 @@ func TestEmulatorRefreshesSTSOnNamedQuota(t *testing.T) {
 	require.NotNil(t, original.AccessKeySecret)
 	require.NotNil(t, original.SecurityToken)
 	newService := func(a account.Account) *odps.Odps {
-		service := odps.NewOdps(a, endpoint+"/api")
+		service := odps.NewOdps(a, endpoint+"/api/")
 		service.SetDefaultProjectName("test_project")
 		service.SetHttpTimeout(4 * time.Second)
 		return service

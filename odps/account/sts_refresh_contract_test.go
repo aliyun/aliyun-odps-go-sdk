@@ -415,6 +415,23 @@ func TestStsAccountRetryContractTokenFieldSelection(t *testing.T) {
 	}
 }
 
+func TestStsAccountClearsPreviousTokenWhenCredentialsChangeType(t *testing.T) {
+	const endpoint = "http://127.0.0.1:1"
+	provider := &fakeCredentialProvider{models: []*credentials.CredentialModel{
+		{AccessKeyId: strp("temporary"), AccessKeySecret: strp("test-secret"), SecurityToken: strp("test-token")},
+		{AccessKeyId: strp("permanent"), AccessKeySecret: strp("test-secret")},
+	}}
+	signer := NewStsAccountWithProvider(provider)
+	req := newSignedRequest(t, http.MethodGet, endpoint+"/projects/p")
+	if assert.NoError(t, signer.SignRequest(req, endpoint)) {
+		assert.Equal(t, "test-token", req.Header.Get(common.HttpHeaderAuthorizationSTSToken))
+	}
+	if assert.NoError(t, signer.SignRequest(req, endpoint)) {
+		assert.Contains(t, req.Header.Get(common.HttpHeaderAuthorization), "ODPS permanent:")
+		assert.Empty(t, req.Header.Values(common.HttpHeaderAuthorizationSTSToken))
+	}
+}
+
 // TestStsAccountRetryContractIncompleteCredentialIsAnError: a provider reply
 // that cannot be signed with is reported to the caller. It used to be a nil
 // dereference, i.e. one bad provider reply killed the process (and printed its

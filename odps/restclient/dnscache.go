@@ -84,10 +84,6 @@ func (r *Resolver) lookup(ctx context.Context, host string) ([]string, error) {
 		return nil, err
 	}
 
-	if len(ips) == 0 {
-		return nil, nil
-	}
-
 	strIPs := make([]string, len(ips))
 	for index, ip := range ips {
 		strIPs[index] = ip.String()
