@@ -336,6 +336,13 @@ func TestWriteValidationAndMalformedAcknowledgements(t *testing.T) {
 	require.ErrorContains(t, err, "stream ID")
 	_, err = session.GetStream(t.Context(), Stream{ID: "s", Version: -1})
 	require.ErrorContains(t, err, "version")
+	for _, id := range []string{"worker_1", "worker.1", "worker/1", "worker 1", "worker-一"} {
+		_, err = session.CreateStream(t.Context(), Stream{ID: id})
+		require.ErrorContains(t, err, "ASCII letters, digits, and hyphens")
+		_, err = session.GetStream(t.Context(), Stream{ID: id})
+		require.ErrorContains(t, err, "ASCII letters, digits, and hyphens")
+		require.ErrorContains(t, session.CommitStreams(t.Context(), Stream{ID: id}), "ASCII letters, digits, and hyphens")
+	}
 	writer := &WriteStream{session: session, stream: Stream{ID: "s", Version: 1}}
 	_, err = writer.WriteBatch(t.Context(), 0, nil)
 	require.ErrorContains(t, err, "nonempty")

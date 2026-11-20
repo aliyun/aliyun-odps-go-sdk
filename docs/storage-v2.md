@@ -45,8 +45,9 @@ session descriptor with `GetInstanceReadSession` to reopen a result. See the
 - Create a table snapshot with `CreateTableReadSession`. Select columns and
   partitions in `TableReadOptions`, then use `OpenReader` to stream rows.
 - Create a batch upload with `CreateTableWriteSession` and open one or more
-  streams with `CreateStream`. Write each batch at the previously acknowledged
-  offset. `InitialOffset` on a resumed stream is the server's durable offset.
+  streams with `CreateStream`. Use ASCII letters, digits, and hyphens in stream
+  IDs. Write each batch at the previously acknowledged offset. `InitialOffset`
+  on a resumed stream is the server's durable offset.
 - After an ambiguous transport error, resend the same batch at the same offset.
   A different batch at that offset is rejected.
 - Finish creating, writing, and closing every stream in the session. Call

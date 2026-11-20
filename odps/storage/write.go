@@ -10,6 +10,7 @@ import (
 	"maps"
 	"math"
 	"net/http"
+	"regexp"
 	"strconv"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -169,13 +170,19 @@ func (s *WriteSession) Abort(ctx context.Context) error {
 
 // Stream identifies a writer attempt within a session.
 type Stream struct {
+	// ID must contain only ASCII letters, digits, and hyphens.
 	ID      string `json:"StreamId"`
 	Version int64  `json:"StreamVersion"`
 }
 
+var streamIDPattern = regexp.MustCompile(`^[A-Za-z0-9-]+$`)
+
 func (s Stream) validate() error {
 	if s.ID == "" || s.Version < 0 {
 		return fmt.Errorf("storage: stream ID is required and version must be nonnegative")
+	}
+	if !streamIDPattern.MatchString(s.ID) {
+		return fmt.Errorf("storage: stream ID must contain only ASCII letters, digits, and hyphens")
 	}
 	return nil
 }
