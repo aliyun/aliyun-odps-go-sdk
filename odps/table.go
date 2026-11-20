@@ -455,22 +455,12 @@ func (t *Table) ExecSql(taskName, sql string) (*Instance, error) {
 	return t.ExecSqlWithHints(taskName, sql, nil)
 }
 
-// 将格式为region=1026/name=abc格式的“分区值”转换为格式为region='1026',name='abc'的"分区spec"值
-func partitionValueToSpec(value string) string {
-	columns := strings.Split(value, "/")
-
-	sb := strings.Builder{}
-	for i, n := 0, len(columns); i < n; i++ {
-		kv := strings.Split(columns[i], "=")
-
-		sb.WriteString(fmt.Sprintf("%s='%s'", kv[0], kv[1]))
-
-		if i < n-1 {
-			sb.WriteString(",")
-		}
+func partitionValueToSpec(value string) (string, error) {
+	columns, err := parsePartitionValue(value)
+	if err != nil {
+		return "", err
 	}
-
-	return sb.String()
+	return formatPartitionSpec(columns), nil
 }
 
 // AddPartitions Example: AddPartitions(true, []string{"region=10026/name=abc", "region=10027/name=mhn"})
@@ -486,17 +476,20 @@ func (t *Table) AddPartitions(ifNotExists bool, partitionValues []string) error 
 	sb.WriteString(t.getFullName())
 	sb.WriteString(" add")
 	if ifNotExists {
-		sb.WriteString(" if not exists\n")
+		sb.WriteString(" if not exists")
 	}
 
 	for _, partitionValue := range partitionValues {
-		sb.WriteString("partition (")
-		sb.WriteString(partitionValueToSpec(partitionValue))
-		sb.WriteString(")\n")
+		spec, err := partitionValueToSpec(partitionValue)
+		if err != nil {
+			return err
+		}
+		sb.WriteString("\npartition (")
+		sb.WriteString(spec)
+		sb.WriteByte(')')
 	}
 
 	sb.WriteString(";")
-	println(sb.String())
 
 	i, err := t.ExecSqlWithHints("SQLAddPartitionTask", sb.String(), hints)
 	if err != nil {
@@ -529,8 +522,12 @@ func (t *Table) DeletePartitions(ifExists bool, partitionValues []string) error 
 
 	n := len(partitionValues)
 	for i, partitionValue := range partitionValues {
+		spec, err := partitionValueToSpec(partitionValue)
+		if err != nil {
+			return err
+		}
 		sb.WriteString(" partition (")
-		sb.WriteString(partitionValueToSpec(partitionValue))
+		sb.WriteString(spec)
 		sb.WriteString(")")
 
 		if i < n-1 {
@@ -596,21 +593,10 @@ func (t *Table) GetPartitionValues() ([]string, error) {
 
 // GetPartition get partitions with partitionKey like "region=10026/name=abc", error if not found
 func (t *Table) GetPartition(partitionValue string) (Partition, error) {
-	// 将region=10026/name=abc格式的分区值转换为region='10026',name='abc'
-	columns := strings.Split(partitionValue, "/")
-
-	sb := strings.Builder{}
-	for i, n := 0, len(columns); i < n; i++ {
-		kv := strings.Split(columns[i], "=")
-
-		sb.WriteString(fmt.Sprintf("%s='%s'", kv[0], kv[1]))
-
-		if i < n-1 {
-			sb.WriteString(",")
-		}
+	partitionSpec, err := partitionValueToSpec(partitionValue)
+	if err != nil {
+		return Partition{}, err
 	}
-
-	partitionSpec := sb.String()
 	partitions, err := t.getPartitions(partitionSpec)
 	if err != nil {
 		return Partition{}, err

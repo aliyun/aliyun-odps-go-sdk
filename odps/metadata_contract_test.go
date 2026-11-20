@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -204,4 +205,42 @@ func TestProjectLoadInvalidatesDeletedProject(t *testing.T) {
 	require.ErrorAs(t, project.Load(), &response)
 	require.Equal(t, http.StatusNotFound, response.StatusCode)
 	require.False(t, project.Existed())
+}
+
+func TestSchemaExistsRejectsInvalidMetadata(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		created string
+		updated string
+		body    string
+		err     string
+	}{
+		{name: "missing creation header", updated: time.Unix(60, 0).UTC().Format(http.TimeFormat), body: `<Schema><Name>reporting</Name></Schema>`},
+		{name: "invalid XML", body: `<Schema>`, err: "unexpected EOF"},
+		{name: "invalid creation date", created: "bad-date", body: `<Schema/>`, err: "schema creation time"},
+		{name: "invalid modification date", updated: "bad-date", body: `<Schema/>`, err: "schema last modified time"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service := metadataFixture(t, func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, http.MethodGet, r.Method)
+				assert.Equal(t, "/api/projects/fixture/schemas/reporting", r.URL.Path)
+				w.Header().Set("x-odps-creation-time", test.created)
+				w.Header().Set("Last-Modified", test.updated)
+				_, _ = io.WriteString(w, test.body)
+			})
+			schema := service.Schema("reporting")
+			exists, err := schema.Exists()
+			if test.err != "" {
+				require.ErrorContains(t, err, test.err)
+				require.False(t, exists)
+				require.False(t, schema.IsLoaded())
+				return
+			}
+			require.NoError(t, err)
+			require.True(t, exists)
+			require.True(t, schema.IsLoaded())
+			require.True(t, schema.CreateTime().IsZero())
+			require.Equal(t, int64(60), schema.ModifiedTime().Unix())
+		})
+	}
 }

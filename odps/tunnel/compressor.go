@@ -151,12 +151,24 @@ func defaultDeflate() Deflate {
 }
 
 func (d Deflate) NewReader(rc io.ReadCloser) io.ReadCloser {
-	r, _ := zlib.NewReader(rc)
+	r, err := zlib.NewReader(rc)
+	if err != nil {
+		return decompressionError{Closer: rc, err: err}
+	}
 
 	return readCloser{
 		readCloser: r,
 		closer:     rc,
 	}
+}
+
+type decompressionError struct {
+	io.Closer
+	err error
+}
+
+func (r decompressionError) Read([]byte) (int, error) {
+	return 0, r.err
 }
 
 func (d Deflate) NewWriter(wc io.WriteCloser) io.WriteCloser {

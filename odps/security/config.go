@@ -85,12 +85,14 @@ func (sc *Config) Load() error {
 		queryArgs.Set("security_configuration_without_exception_policy", "")
 	}
 
-	err := client.GetWithModel(resource, queryArgs, nil, &sc.model)
+	var model securityConfigModel
+	err := client.GetWithModel(resource, queryArgs, nil, &model)
 	if err != nil {
-		sc.beLoaded = true
+		return errors.WithStack(err)
 	}
-
-	return errors.WithStack(err)
+	sc.model = model
+	sc.beLoaded = true
+	return nil
 }
 
 func (sc *Config) Update(supervisionToken string) error {
@@ -193,7 +195,7 @@ func (sc *Config) EnableProjectProtectionWithExceptionPolicy(exceptionPolicy str
 }
 
 func (sc *Config) DisableProjectProtection() {
-	sc.model.ProjectProtection.Protected = "true"
+	sc.model.ProjectProtection.Protected = "false"
 	sc.model.ProjectProtection.Exceptions = ""
 }
 

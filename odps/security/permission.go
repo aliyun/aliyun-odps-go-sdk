@@ -82,7 +82,7 @@ func (perm *Permission) Resource() string {
 	case ObjectTypeFunction:
 		return rb.Function(perm.ObjectName)
 	case ObjectTypeInstance:
-		return rb.Function(perm.ProjectName)
+		return rb.Instance(perm.ObjectName)
 	case ObjectTypeResource:
 		return rb.Resource(perm.ObjectName)
 	default:

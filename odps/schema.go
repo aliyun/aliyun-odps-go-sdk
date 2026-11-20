@@ -47,17 +47,11 @@ func (s *Schema) Tables() *Tables {
 // Exists check if the schema exists
 func (s *Schema) Exists() (bool, error) {
 	err := s.Load()
-
 	var httpErr restclient.HttpError
-	if errors.As(err, &httpErr) {
-		if httpErr.Status == "404 Not Found" {
-			return false, nil
-		}
-
-		return false, err
+	if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+		return false, nil
 	}
-
-	return true, nil
+	return err == nil, err
 }
 
 // ChangeComment Modify the comment content of the schema.
@@ -137,26 +131,31 @@ func (s *Schema) IsLoaded() bool {
 func (s *Schema) Load() error {
 	client := s.odpsIns.restClient
 	resource := s.ResourceUrl()
-	s.beLoaded = true
+	s.beLoaded = false
 
-	GMT, _ := time.LoadLocation("GMT")
+	model := schemaModel{Name: s.Name(), ProjectName: s.ProjectName()}
 	parseFunc := func(res *http.Response) error {
-		decoder := xml.NewDecoder(res.Body)
-		err := decoder.Decode(&s.model)
-		if err != nil {
+		if err := xml.NewDecoder(res.Body).Decode(&model); err != nil {
 			return errors.WithStack(err)
 		}
 
-		createTime, err := time.ParseInLocation(time.RFC1123, res.Header.Get(common.HttpHeaderOdpsCreationTime), GMT)
-		s.model.CreateTime = createTime
-
-		lastModifiedTime, err := time.ParseInLocation(time.RFC1123, res.Header.Get(common.HttpHeaderLastModified), GMT)
-		s.model.ModifiedTime = lastModifiedTime
-
+		if value := res.Header.Get(common.HttpHeaderOdpsCreationTime); value != "" {
+			var err error
+			model.CreateTime, err = http.ParseTime(value)
+			if err != nil {
+				return errors.Wrap(err, "schema creation time")
+			}
+		}
+		var err error
+		model.ModifiedTime, err = http.ParseTime(res.Header.Get(common.HttpHeaderLastModified))
+		return errors.Wrap(err, "schema last modified time")
+	}
+	if err := client.GetWithParseFunc(resource, nil, nil, parseFunc); err != nil {
 		return errors.WithStack(err)
 	}
-	err := client.GetWithParseFunc(resource, nil, nil, parseFunc)
-	return errors.WithStack(err)
+	s.model = model
+	s.beLoaded = true
+	return nil
 }
 
 func (s *Schema) ResourceUrl() string {

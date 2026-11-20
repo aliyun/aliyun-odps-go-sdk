@@ -3,6 +3,7 @@
 package odps_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -241,6 +242,161 @@ func TestEmulatorTablePaginationAndLoadState(t *testing.T) {
 		errorCount++
 	})
 	require.Equal(t, 1, errorCount)
+}
+
+func TestEmulatorTableTruncateRenameAndDelete(t *testing.T) {
+	service := emulatorService(t)
+	name := fmt.Sprintf("go_sdk_table_%d", time.Now().UnixNano())
+	target := name + "_renamed"
+	tables := service.Tables()
+	schema := tableschema.NewSchemaBuilder().Name(name).
+		Column(tableschema.Column{Name: "id", Type: datatype.BigIntType}).Build()
+	require.NoError(t, tables.Create(schema, false, nil, nil))
+	t.Cleanup(func() {
+		require.NoError(t, tables.Delete(name, true))
+		require.NoError(t, tables.Delete(target, true))
+	})
+	require.ErrorContains(t, tables.Create(schema, false, nil, nil), "TableAlreadyExists")
+
+	table := service.Table(name)
+	insert, err := table.ExecSql("fixture_insert", "insert into "+name+" values (17)")
+	require.NoError(t, err)
+	require.NoError(t, insert.WaitForSuccessContext(t.Context()))
+
+	readRows := func(tableName string) string {
+		t.Helper()
+		query, err := service.ExecSQl("select id from " + tableName)
+		require.NoError(t, err)
+		require.NoError(t, query.WaitForSuccessContext(t.Context()))
+		require.Len(t, query.TaskResults(), 1)
+		result := query.TaskResults()[0]
+		return result.Content()
+	}
+	require.Equal(t, "id\n17\n", readRows(name))
+	require.NoError(t, table.Rename(target))
+	exists, err := table.Exists()
+	require.NoError(t, err)
+	require.False(t, exists)
+	require.Equal(t, "id\n17\n", readRows(target))
+
+	renamed := tables.Get(target)
+	require.NoError(t, renamed.Truncate())
+	require.Equal(t, "id\n", readRows(target))
+	require.NoError(t, renamed.Delete())
+	exists, err = renamed.Exists()
+	require.NoError(t, err)
+	require.False(t, exists)
+	require.ErrorContains(t, renamed.Truncate(), "NoSuchTable")
+}
+
+func TestEmulatorPartitionSpecsAndStrictDDL(t *testing.T) {
+	service := emulatorService(t)
+	name := fmt.Sprintf("go_sdk_partition_%d", time.Now().UnixNano())
+	schema := tableschema.NewSchemaBuilder().Name(name).
+		Column(tableschema.Column{Name: "id", Type: datatype.BigIntType}).
+		PartitionColumn(tableschema.Column{Name: "ds", Type: datatype.StringType}).
+		PartitionColumn(tableschema.Column{Name: "region", Type: datatype.StringType}).Build()
+	tables := service.Tables()
+	require.NoError(t, tables.Create(schema, false, nil, nil))
+	t.Cleanup(func() { require.NoError(t, tables.Delete(name, true)) })
+
+	table := tables.Get(name)
+	const value = "ds=20261120/region=east=2"
+	const malformed = "ds=20261120/region"
+	require.ErrorContains(t, table.AddPartitions(false, []string{value, malformed}), "column=value")
+	values, err := table.GetPartitionValues()
+	require.NoError(t, err)
+	require.Empty(t, values)
+
+	require.NoError(t, table.AddPartition(false, value))
+	require.ErrorContains(t, table.AddPartition(false, value), "PartitionAlreadyExists")
+	require.NoError(t, table.AddPartition(true, value))
+
+	partition, err := table.GetPartition(value)
+	require.NoError(t, err)
+	require.Equal(t, value, partition.Value())
+	require.Equal(t, "ds='20261120',region='east=2'", partition.Spec())
+	require.NoError(t, partition.Load())
+	require.NoError(t, partition.LoadExtended())
+	require.False(t, partition.CreatedTime().IsZero())
+	partitions, err := table.GetPartitions()
+	require.NoError(t, err)
+	require.Len(t, partitions, 1)
+	require.Equal(t, value, partitions[0].Value())
+
+	_, err = table.GetPartition(malformed)
+	require.ErrorContains(t, err, "column=value")
+	invalid := odps.NewPartition(service, service.DefaultProjectName(), service.CurrentSchemaName(), name, malformed)
+	require.ErrorContains(t, invalid.Load(), "column=value")
+	require.ErrorContains(t, invalid.LoadExtended(), "column=value")
+	require.ErrorContains(t, table.DeletePartition(false, malformed), "column=value")
+	require.NoError(t, table.DeletePartition(false, value))
+	require.ErrorContains(t, table.DeletePartition(false, value), "NoSuchPartition")
+	require.NoError(t, table.DeletePartition(true, value))
+}
+
+func TestEmulatorSchemaLifecycle(t *testing.T) {
+	service := emulatorService(t)
+	client := http.Client{Timeout: 5 * time.Second}
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, os.Getenv("MAXCOMPUTE_EMULATOR_ENDPOINT")+"/capabilities", nil)
+	require.NoError(t, err)
+	response, err := client.Do(request)
+	require.NoError(t, err)
+	defer response.Body.Close()
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	var capabilities struct {
+		Schemas []string `json:"schemas"`
+	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&capabilities))
+	if len(capabilities.Schemas) == 0 {
+		t.Skip("this Emulator image does not provide schema management")
+	}
+
+	name := fmt.Sprintf("go_sdk_schema_%d", time.Now().UnixNano())
+	project := service.DefaultProjectName()
+	schemas := service.Schemas()
+	schema := schemas.Get(name)
+	exists, err := schema.Exists()
+	require.NoError(t, err)
+	require.False(t, exists)
+	require.False(t, schema.IsLoaded())
+	require.NoError(t, schemas.Create(name, false, "test & readback"))
+	t.Cleanup(func() { _ = schemas.Delete(name) })
+	requireEmulatorServiceError(t, schemas.Create(name, false, "duplicate"), http.StatusConflict, "ObjectAlreadyExists")
+	require.NoError(t, schemas.Create(name, true, "must preserve comment"))
+	exists, err = schema.Exists()
+	require.NoError(t, err)
+	require.True(t, exists)
+	require.True(t, schema.IsLoaded())
+	require.Equal(t, name, schema.Name())
+	require.Equal(t, project, schema.ProjectName())
+	require.Equal(t, "test & readback", schema.Comment())
+	require.Equal(t, "MANAGED", schema.Type())
+	require.Equal(t, "emulator", schema.Owner())
+	require.False(t, schema.CreateTime().IsZero())
+	require.False(t, schema.ModifiedTime().IsZero())
+
+	var listed []string
+	require.NoError(t, schemas.ListWithFilter(func(item *odps.Schema, err error) {
+		require.NoError(t, err)
+		listed = append(listed, item.Name())
+	}, nil, odps.SchemaFilter.NamePrefix(name), odps.SchemaFilter.Owner("emulator")))
+	require.Equal(t, []string{name}, listed)
+
+	tableSchema := tableschema.NewSchemaBuilder().Name("schema_scoped").
+		Column(tableschema.Column{Name: "id", Type: datatype.BigIntType}).Build()
+	require.NoError(t, schema.Tables().Create(tableSchema, false, nil, nil))
+	exists, err = schema.Tables().Get("schema_scoped").Exists()
+	require.NoError(t, err)
+	require.True(t, exists)
+	exists, err = service.Table("schema_scoped").Exists()
+	require.NoError(t, err)
+	require.False(t, exists)
+	require.NoError(t, schemas.Delete(name))
+	exists, err = schema.Exists()
+	require.NoError(t, err)
+	require.False(t, exists)
+	require.False(t, schema.IsLoaded())
 }
 
 func TestEmulatorFileResourceLifecycle(t *testing.T) {

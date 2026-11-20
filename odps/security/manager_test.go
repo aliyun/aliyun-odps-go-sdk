@@ -3,10 +3,12 @@
 package security_test
 
 import (
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -64,17 +66,29 @@ func TestSecurityManagerPolicyRoundTrip(t *testing.T) {
 }
 
 func TestSecurityManagerLoadsAndUpdatesConfig(t *testing.T) {
+	var fullReads, redactedReads atomic.Int32
 	manager := testManager(t, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/projects/fixture", r.URL.Path)
 		switch r.Method {
 		case http.MethodGet:
-			assert.True(t, r.URL.Query().Has("security_configuration_without_exception_policy"))
-			fmt.Fprint(w, `<SecurityConfiguration><SupportACL>true</SupportACL><AuthorizationVersion>2</AuthorizationVersion></SecurityConfiguration>`)
+			if r.URL.Query().Has("security_configuration_without_exception_policy") {
+				redactedReads.Add(1)
+				fmt.Fprint(w, `<SecurityConfiguration><SupportACL>true</SupportACL><AuthorizationVersion>2</AuthorizationVersion></SecurityConfiguration>`)
+				return
+			}
+			assert.True(t, r.URL.Query().Has("security_configuration"))
+			if fullReads.Add(1) == 1 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			fmt.Fprint(w, `<SecurityConfiguration><ProjectProtection><Protected>true</Protected><Exceptions>fixture</Exceptions></ProjectProtection></SecurityConfiguration>`)
 		case http.MethodPut:
 			assert.True(t, r.URL.Query().Has("security_configuration"))
+			assert.Equal(t, "fixture-supervision", r.Header.Get("odps-x-supervision-token"))
 			body, err := io.ReadAll(r.Body)
 			assert.NoError(t, err)
 			assert.Contains(t, string(body), "<EnableDownloadPrivilege>true</EnableDownloadPrivilege>")
+			assert.Contains(t, string(body), "<Protected>false</Protected>")
 			w.WriteHeader(http.StatusOK)
 		default:
 			t.Errorf("unexpected method %s", r.Method)
@@ -84,22 +98,67 @@ func TestSecurityManagerLoadsAndUpdatesConfig(t *testing.T) {
 
 	config, err := manager.GetSecurityConfig(true)
 	require.NoError(t, err)
+	require.True(t, config.BeLoaded())
 	require.True(t, config.SupportAcl())
 	require.Equal(t, "2", config.GetAuthorizationVersion())
+	cached, err := manager.GetSecurityConfig(true)
+	require.NoError(t, err)
+	require.True(t, cached.BeLoaded())
+	require.Equal(t, int32(1), redactedReads.Load())
+
+	config, err = manager.GetSecurityConfig(false)
+	require.Error(t, err)
+	require.False(t, config.BeLoaded())
+	config, err = manager.GetSecurityConfig(false)
+	require.NoError(t, err)
+	require.True(t, config.ProjectProtection())
+	require.Equal(t, "fixture", config.ProjectProtectionExceptionPolicy())
+	require.Equal(t, int32(2), fullReads.Load())
+
+	config.DisableProjectProtection()
+	require.False(t, config.ProjectProtection())
+	require.Empty(t, config.ProjectProtectionExceptionPolicy())
 	require.False(t, config.CheckDownloadPrivilege())
 	config.EnableDownloadPrivilege()
 	require.True(t, config.CheckDownloadPrivilege())
-	require.NoError(t, manager.SetSecurityConfig(config, ""))
+	require.NoError(t, manager.SetSecurityConfig(config, "fixture-supervision"))
+	updated, err := manager.GetSecurityConfig(false)
+	require.NoError(t, err)
+	require.False(t, updated.ProjectProtection())
+	require.True(t, updated.CheckDownloadPrivilege())
+	require.Equal(t, int32(2), fullReads.Load())
 }
 
 func TestSecurityManagerListsUsersAndRoles(t *testing.T) {
+	const usersXML = `<Users><User><ID>42</ID><DisplayName>role-owner</DisplayName><Comment>first user</Comment></User></Users>`
+	const rolesXML = `<Roles><Role><Name>reader</Name><Comment>first role</Comment></Role></Roles>`
 	manager := testManager(t, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method)
+		q := r.URL.Query()
 		switch r.URL.Path {
 		case "/projects/fixture/users":
-			fmt.Fprint(w, `<Users><User><ID>42</ID><DisplayName>role-owner</DisplayName><Comment>first user</Comment></User></Users>`)
+			fmt.Fprint(w, usersXML)
 		case "/projects/fixture/roles":
-			fmt.Fprint(w, `<Roles><Role><Name>reader</Name><Comment>first role</Comment></Role></Roles>`)
+			fmt.Fprint(w, rolesXML)
+		case "/projects/fixture/users/role-owner":
+			assert.True(t, q.Has("roles"))
+			assert.Equal(t, "displayname", q.Get("type"))
+			fmt.Fprint(w, rolesXML)
+		case "/projects/fixture/users/42":
+			if q.Has("roles") {
+				assert.Empty(t, q.Get("type"))
+				fmt.Fprint(w, rolesXML)
+			} else {
+				fmt.Fprint(w, `<User><ID>42</ID><DisplayName>role-owner</DisplayName><Comment>updated user</Comment></User>`)
+			}
+		case "/projects/fixture/roles/reader":
+			if q.Has("users") {
+				fmt.Fprint(w, usersXML)
+			} else {
+				fmt.Fprint(w, `<Role><Name>reader</Name><Comment>updated role</Comment></Role>`)
+			}
+		case "/projects/fixture/roles/missing", "/projects/fixture/users/missing":
+			w.WriteHeader(http.StatusNotFound)
 		default:
 			t.Errorf("unexpected path %s", r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
@@ -117,6 +176,98 @@ func TestSecurityManagerListsUsersAndRoles(t *testing.T) {
 	require.Len(t, roles, 1)
 	require.Equal(t, "reader", roles[0].Name())
 	require.Equal(t, "first role", roles[0].Comment())
+	require.NoError(t, roles[0].Load())
+	require.Equal(t, "updated role", roles[0].Comment())
+	require.NoError(t, users[0].Load())
+	require.Equal(t, "updated user", users[0].Comment())
+
+	byName, err := manager.ListRolesForUserWithName("role-owner")
+	require.NoError(t, err)
+	require.Len(t, byName, 1)
+	require.Equal(t, "reader", byName[0].Name())
+	byID, err := manager.ListRolesForUserWithId("42", "")
+	require.NoError(t, err)
+	require.Len(t, byID, 1)
+	require.Equal(t, "reader", byID[0].Name())
+	members, err := manager.ListUsersForRole("reader")
+	require.NoError(t, err)
+	require.Len(t, members, 1)
+	require.Equal(t, "42", members[0].ID())
+	_, err = manager.ListRolesForUserWithName("missing")
+	require.Error(t, err)
+	_, err = manager.ListUsersForRole("missing")
+	require.Error(t, err)
+}
+
+func TestAuthorizationQueryLifecycle(t *testing.T) {
+	var polls atomic.Int32
+	const policy = `{"Version":"1","Statement":[]}`
+	manager := testManager(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/projects/fixture/authorization":
+			assert.Equal(t, http.MethodPost, r.Method)
+			if r.URL.Query().Has("sign_bearer_token") {
+				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+				body, err := io.ReadAll(r.Body)
+				assert.NoError(t, err)
+				assert.JSONEq(t, policy, string(body))
+				fmt.Fprint(w, `<Authorization><Result>fixture-token</Result></Authorization>`)
+				return
+			}
+			var request struct {
+				Query                string
+				ResponseInJsonFormat bool
+			}
+			assert.NoError(t, xml.NewDecoder(r.Body).Decode(&request))
+			switch request.Query {
+			case "fixture synchronous":
+				assert.True(t, request.ResponseInJsonFormat)
+				assert.Equal(t, "fixture-supervision", r.Header.Get("odps-x-supervision-token"))
+				fmt.Fprint(w, `<Authorization><Result>{"authorized":true}</Result></Authorization>`)
+			case "fixture asynchronous":
+				assert.False(t, request.ResponseInJsonFormat)
+				w.WriteHeader(http.StatusAccepted)
+				fmt.Fprint(w, `<Authorization><Result>pending</Result></Authorization>`)
+			case "fixture unsuccessful":
+				w.WriteHeader(http.StatusAccepted)
+				fmt.Fprint(w, `<Authorization><Result>failed</Result></Authorization>`)
+			case "fixture missing":
+				w.WriteHeader(http.StatusAccepted)
+				fmt.Fprint(w, `<Authorization><Result>missing</Result></Authorization>`)
+			default:
+				w.WriteHeader(http.StatusForbidden)
+			}
+		case "/projects/fixture/authorization/pending":
+			assert.Equal(t, http.MethodGet, r.Method)
+			if polls.Add(1) == 1 {
+				fmt.Fprint(w, `<AuthorizationQuery><Status>Running</Status></AuthorizationQuery>`)
+			} else {
+				fmt.Fprint(w, `<AuthorizationQuery><Status>Terminated</Status><Result>complete</Result></AuthorizationQuery>`)
+			}
+		case "/projects/fixture/authorization/failed":
+			fmt.Fprint(w, `<AuthorizationQuery><Status>Failed</Status><Result>fixture denied</Result></AuthorizationQuery>`)
+		case "/projects/fixture/authorization/missing":
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	})
+	result, err := manager.RunQuery("fixture synchronous", true, "fixture-supervision")
+	require.NoError(t, err)
+	require.JSONEq(t, `{"authorized":true}`, result)
+	result, err = manager.RunQuery("fixture asynchronous", false, "")
+	require.NoError(t, err)
+	require.Equal(t, "complete", result)
+	require.Equal(t, int32(2), polls.Load())
+	_, err = manager.RunQuery("fixture unsuccessful", false, "")
+	require.ErrorContains(t, err, "fixture denied")
+	_, err = manager.RunQuery("fixture missing", false, "")
+	require.Error(t, err)
+	_, err = manager.RunQuery("fixture forbidden", false, "")
+	require.Error(t, err)
+	token, err := manager.GenerateAuthorizationToken(policy)
+	require.NoError(t, err)
+	require.Equal(t, "fixture-token", token)
 }
 
 func TestSecurityManagerPreservesServiceErrors(t *testing.T) {

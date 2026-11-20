@@ -37,6 +37,7 @@ type Partition struct {
 	tableName     string
 	model         partitionModel
 	extendedModel partitionExtendedModel
+	valueErr      error
 }
 
 type PartitionColumn struct {
@@ -66,28 +67,30 @@ type partitionExtendedModel struct {
 // NewPartition get partition object by table and partitionSpec, this method does not actually create a Partition in MaxCompute,
 // but only obtains the Partition object.
 func NewPartition(odpsIns *Odps, projectName, schemaName, tableName string, value string) *Partition {
-	parts := strings.Split(value, "/")
-	columns := make([]PartitionColumn, len(parts))
-
-	for i, p := range parts {
-		kv := strings.Split(p, "=")
-		columns[i] = PartitionColumn{
-			Name:  kv[0],
-			Value: kv[1],
-		}
-	}
-
-	pm := partitionModel{
-		Value: columns,
-	}
-
+	columns, err := parsePartitionValue(value)
 	return &Partition{
 		odpsIns:     odpsIns,
 		projectName: projectName,
 		schemaName:  schemaName,
 		tableName:   tableName,
-		model:       pm,
+		model:       partitionModel{Value: columns},
+		valueErr:    err,
 	}
+}
+
+func parsePartitionValue(value string) ([]PartitionColumn, error) {
+	parts := strings.Split(value, "/")
+	columns := make([]PartitionColumn, len(parts))
+
+	for i, part := range parts {
+		name, value, ok := strings.Cut(part, "=")
+		if !ok || strings.TrimSpace(name) == "" {
+			return nil, errors.Errorf("invalid partition component %q: expected column=value", part)
+		}
+		columns[i] = PartitionColumn{Name: name, Value: value}
+	}
+
+	return columns, nil
 }
 
 // Deprecated: Do not use this function. Use Value instead
@@ -115,22 +118,29 @@ func (p *Partition) Value() string {
 
 // Spec return partition value with format like "a='xx',b='yy'"
 func (p *Partition) Spec() string {
+	return formatPartitionSpec(p.model.Value)
+}
+
+func formatPartitionSpec(columns []PartitionColumn) string {
 	var sb strings.Builder
 
-	n := len(p.model.Value)
-	for i, c := range p.model.Value {
-		sb.WriteString(fmt.Sprintf("%s='%s'", c.Name, c.Value))
-		i += 1
-
-		if i < n {
+	for i, column := range columns {
+		if i > 0 {
 			sb.WriteString(",")
 		}
+		sb.WriteString(column.Name)
+		sb.WriteByte('=')
+		sb.WriteString(common.QuoteString(column.Value))
 	}
 
 	return sb.String()
 }
 
 func (p *Partition) Load() error {
+	if p.valueErr != nil {
+		return p.valueErr
+	}
+
 	var rb common.ResourceBuilder
 	rb.SetProject(p.projectName)
 	resource := rb.Table("", p.tableName)
@@ -170,6 +180,10 @@ func (p *Partition) Load() error {
 }
 
 func (p *Partition) LoadExtended() error {
+	if p.valueErr != nil {
+		return p.valueErr
+	}
+
 	var rb common.ResourceBuilder
 	rb.SetProject(p.projectName)
 	resource := rb.Table("", p.tableName)

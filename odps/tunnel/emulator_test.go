@@ -330,14 +330,20 @@ func TestEmulatorProtobufReadFaults(t *testing.T) {
 		wantPrefix int
 		cause      error
 		message    string
+		compress   bool
 	}{
-		{"early EOF", map[string]any{"type": "early_eof", "rows": 1}, 1, io.ErrUnexpectedEOF, ""},
-		{"disconnect", map[string]any{"type": "disconnect_after_bytes", "bytes": 1}, 0, io.ErrUnexpectedEOF, ""},
-		{"checksum", map[string]any{"type": "crc_mismatch"}, 3, nil, "checksum is invalid"},
-		{"malformed protobuf", map[string]any{"type": "malformed_protobuf"}, 0, nil, ""},
+		{name: "early EOF", effect: map[string]any{"type": "early_eof", "rows": 1}, wantPrefix: 1, cause: io.ErrUnexpectedEOF},
+		{name: "disconnect", effect: map[string]any{"type": "disconnect_after_bytes", "bytes": 1}, cause: io.ErrUnexpectedEOF},
+		{name: "truncated deflate header", effect: map[string]any{"type": "disconnect_after_bytes", "bytes": 1}, cause: io.ErrUnexpectedEOF, compress: true},
+		{name: "checksum", effect: map[string]any{"type": "crc_mismatch"}, wantPrefix: 3, message: "checksum is invalid"},
+		{name: "malformed protobuf", effect: map[string]any{"type": "malformed_protobuf"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			snapshot, err := e.tunnel.CreateDownloadSession(emulatorProject, table)
+			var opts []tunnel.Option
+			if tc.compress {
+				opts = append(opts, tunnel.SessionCfg.WithDefaultDeflateCompressor())
+			}
+			snapshot, err := e.tunnel.CreateDownloadSession(emulatorProject, table, opts...)
 			require.NoError(t, err)
 			wasApplied := e.fault(t, map[string]any{
 				"action": "read", "project": emulatorProject, "table": table, "format": "protobuf",

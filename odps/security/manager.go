@@ -46,20 +46,24 @@ func NewSecurityManager(restClient restclient.RestClient, projectName string) Ma
 }
 
 func (sm *Manager) GetSecurityConfig(withoutExceptionPolicy bool) (Config, error) {
-	if sm.securityConfig.BeLoaded() {
+	if sm.securityConfig.BeLoaded() && sm.securityConfig.withoutExceptionPolicy == withoutExceptionPolicy {
 		return sm.securityConfig, nil
 	}
 
-	sm.securityConfig.withoutExceptionPolicy = withoutExceptionPolicy
-	err := sm.securityConfig.Load()
-
-	return sm.securityConfig, errors.WithStack(err)
+	config := NewSecurityConfig(sm.restClient, withoutExceptionPolicy, sm.projectName)
+	if err := config.Load(); err != nil {
+		return config, errors.WithStack(err)
+	}
+	sm.securityConfig = config
+	return config, nil
 }
 
 func (sm *Manager) SetSecurityConfig(config Config, supervisionToken string) error {
-	err := config.Update(supervisionToken)
+	if err := config.Update(supervisionToken); err != nil {
+		return errors.WithStack(err)
+	}
 	sm.securityConfig = config
-	return errors.WithStack(err)
+	return nil
 }
 
 func (sm *Manager) CheckPermissionV1(p Permission) (*PermissionCheckResult, error) {
@@ -78,6 +82,9 @@ func (sm *Manager) CheckPermissionV1(p Permission) (*PermissionCheckResult, erro
 	}
 
 	req, err := client.NewRequest(common.HttpMethod.PostMethod, resource, bytes.NewReader(body))
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
 	req.Header.Set(common.HttpHeaderContentType, "application/json")
 	var resModel ResModel
 	err = client.DoWithModel(req, &resModel)
@@ -237,14 +244,14 @@ func (sm *Manager) ListRoles() ([]Role, error) {
 	return roles, nil
 }
 
-func (sm *Manager) listRolesForUser(userIdOrName, _type string) ([]Role, error) {
+func (sm *Manager) listRolesForUser(userIdOrName, userType string) ([]Role, error) {
 	rb := sm.rb()
 	resource := rb.User(userIdOrName)
 	client := sm.restClient
 	queryArgs := make(url.Values, 2)
-	queryArgs.Set("role", "")
-	if _type != "" {
-		queryArgs.Set("type", _type)
+	queryArgs.Set("roles", "")
+	if userType != "" {
+		queryArgs.Set("type", userType)
 	}
 
 	type ResModel struct {
@@ -254,7 +261,7 @@ func (sm *Manager) listRolesForUser(userIdOrName, _type string) ([]Role, error) 
 
 	var resModel ResModel
 
-	err := client.GetWithModel(resource, nil, nil, &resModel)
+	err := client.GetWithModel(resource, queryArgs, nil, &resModel)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -273,8 +280,8 @@ func (sm *Manager) ListRolesForUserWithName(userName string) ([]Role, error) {
 	return sm.listRolesForUser(userName, "displayname")
 }
 
-func (sm *Manager) ListRolesForUserWithId(userId, _type string) ([]Role, error) {
-	return sm.listRolesForUser(userId, "")
+func (sm *Manager) ListRolesForUserWithId(userId, userType string) ([]Role, error) {
+	return sm.listRolesForUser(userId, userType)
 }
 
 func (sm *Manager) ListUsersForRole(roleName string) ([]User, error) {
@@ -283,7 +290,7 @@ func (sm *Manager) ListUsersForRole(roleName string) ([]User, error) {
 	client := sm.restClient
 
 	queryArgs := make(url.Values, 1)
-	queryArgs.Set("usesrs", "")
+	queryArgs.Set("users", "")
 
 	type ResModel struct {
 		XMLName xml.Name    `xml:"Users"`
@@ -340,18 +347,14 @@ func (sm *Manager) Run(query string, jsonOutput bool, supervisionToken string) (
 	var isAsync bool
 	headers := make(map[string]string)
 	if supervisionToken != "" {
-		headers["odps-x-supervision-token"] = supervisionToken
+		headers[common.HttpHeaderOdpsSupervisionToken] = supervisionToken
 	}
 
-	err := client.DoXmlWithParseRes(common.HttpMethod.PostMethod, resource, nil, nil, reqBody, func(res *http.Response) error {
+	err := client.DoXmlWithParseRes(common.HttpMethod.PostMethod, resource, nil, headers, reqBody, func(res *http.Response) error {
 		isAsync = res.StatusCode != 200
 		decoder := xml.NewDecoder(res.Body)
 		return errors.WithStack(decoder.Decode(&resModel))
 	})
-
-	if _, ok := err.(restclient.HttpError); ok {
-		return nil, errors.WithStack(err)
-	}
 
 	if err != nil {
 		return nil, errors.WithStack(err)
