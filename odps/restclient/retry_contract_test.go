@@ -288,16 +288,13 @@ func TestRestClientRetryContractTransportErrorKeepsOriginalError(t *testing.T) {
 }
 
 // TestRestClientRetryContractTimeoutIsOneAttempt pins that a timeout bounds the
-// call once - the client does not retry on timeout - and records the two very
-// different shapes of the error, because a caller has to know them to react:
-// HttpTimeout (http.Client.Timeout) only says "timeout" in text and is not
-// comparable to context.DeadlineExceeded, while a deadline carried by the
-// request context stays comparable.
+// call once. Client timeouts retain net/http's timeout classification, while
+// an explicit request-context deadline remains comparable to DeadlineExceeded.
 func TestRestClientRetryContractTimeoutIsOneAttempt(t *testing.T) {
-	t.Run("HttpTimeout is text-only", func(t *testing.T) {
-		release, hits := retryContractBlockingServer(t)
+	t.Run("client timeout remains a transport timeout", func(t *testing.T) {
+		endpoint, hits := retryContractBlockingServer(t)
 
-		client := NewOdpsRestClient(MockAccount{}, release)
+		client := NewOdpsRestClient(MockAccount{}, endpoint)
 		client.HttpTimeout = 150 * time.Millisecond
 
 		var decoded struct {
@@ -314,14 +311,10 @@ func TestRestClientRetryContractTimeoutIsOneAttempt(t *testing.T) {
 		assert.Less(t, elapsed, 2*time.Second,
 			"one attempt at HttpTimeout=150ms; a longer call would mean an implicit retry")
 		assert.Equal(t, int32(1), atomic.LoadInt32(hits))
-		// The text says "deadline exceeded", but the error is produced by
-		// http.Client.Timeout and is NOT comparable to context.DeadlineExceeded:
-		// a caller that wants to tell a timeout from another transport failure
-		// has to match text, which is why the request-context form below is the
-		// one worth using in new code.
-		assert.Contains(t, err.Error(), "deadline exceeded")
-		assert.False(t, stderrors.Is(err, context.DeadlineExceeded),
-			"a Client.Timeout is not comparable to context.DeadlineExceeded, got %#v", err)
+		var transportErr *url.Error
+		if assert.True(t, stderrors.As(err, &transportErr), "timeout must retain the transport error") {
+			assert.True(t, transportErr.Timeout(), "transport error must report a timeout")
+		}
 	})
 
 	t.Run("request context deadline stays typed", func(t *testing.T) {
