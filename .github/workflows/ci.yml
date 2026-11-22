@@ -43,6 +43,13 @@ jobs:
     - name: Build
       run: go build -v ./...
 
+    # #93 落地后六个 Example 命名已对齐，默认 vet 不再拦 ./odps；但 go test 的
+    # 默认 vet 子集在不同 Go 版本上覆盖不同（1.21 上就不查 Example 命名），
+    # 所以这里显式跑一遍 vet，范围与 test 步骤一致（排除 ./arrow，arrow 里另有
+    # 61 条既有 composites 发现，混进来只会让这条腿常年红）。
+    - name: Vet
+      run: go vet $(go list ./... | grep -v './arrow')
+
     # tee 会把管道退出码变成 tee 自己的，所以这里显式 pipefail：go test 红了这条腿必须红。
     # -count=1 是必须的：不带它，Go 会重放缓存结果并照样打印 "ok ... (cached)" 与
     # 全部 "--- PASS" 行，那么下面数的就是历史而不是这一轮真跑过的用例。
