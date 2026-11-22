@@ -144,7 +144,7 @@ func ExampleStructField() {
 	// Output:
 }
 
-func ExampleInsert() {
+func Example_insert() {
 	if !liveServiceConfigured() {
 		return
 	}
@@ -207,7 +207,7 @@ func ExampleInsert() {
 	// Output:
 }
 
-func ExampleCreateTable() {
+func Example_createTable() {
 	if !liveServiceConfigured() {
 		return
 	}

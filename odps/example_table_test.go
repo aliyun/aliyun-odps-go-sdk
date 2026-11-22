@@ -168,7 +168,7 @@ func ExampleTable_ExecSql() {
 	// Output:
 }
 
-func ExampleTable_GetClusterInfo() {
+func ExampleTable_ClusterInfo() {
 	if !liveServiceConfigured() {
 		return
 	}
@@ -208,7 +208,7 @@ func ExampleTable_GetClusterInfo() {
 	// Output:
 }
 
-func ExampleTable_GetPrimaryKey() {
+func ExampleTable_PrimaryKeys() {
 	if !liveServiceConfigured() {
 		return
 	}
@@ -234,7 +234,7 @@ func ExampleTable_GetPrimaryKey() {
 	// Output:
 }
 
-func ExampleTable_IsTransactional() {
+func ExampleTable_Transactional() {
 	if !liveServiceConfigured() {
 		return
 	}
