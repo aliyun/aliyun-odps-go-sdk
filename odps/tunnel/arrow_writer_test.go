@@ -15,6 +15,7 @@ import (
 )
 
 func TestArrowStreamWriter_WriteBasicType(t *testing.T) {
+	skipWithoutLiveService(t)
 	tableName := "ArrowTest_basic_type"
 
 	allTypeSchema := tableschema.NewSchemaBuilder().Name(tableName).
@@ -176,6 +177,7 @@ func TestArrowStreamWriter_WriteBasicType(t *testing.T) {
 }
 
 func TestArrowStreamReader_ReadBasicType(t *testing.T) {
+	skipWithoutLiveService(t)
 	tableName := "ArrowTest_basic_type"
 
 	session, err := tunnelIns.CreateDownloadSession(ProjectName, tableName, tunnel.SessionCfg.WithSchemaName(SchemaName))

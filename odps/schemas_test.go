@@ -24,6 +24,7 @@ import (
 )
 
 func TestSchemas_List(t *testing.T) {
+	skipWithoutLiveService(t)
 	schemas := odps.NewSchemas(odpsIns, defaultProjectName)
 	schemas.List(func(schema *odps.Schema, err error) {
 		print(schema.Name() + "\n")
@@ -31,6 +32,7 @@ func TestSchemas_List(t *testing.T) {
 }
 
 func TestSchemas_ListWithFilter(t *testing.T) {
+	skipWithoutLiveService(t)
 	schemas := odps.NewSchemas(odpsIns, defaultProjectName)
 
 	schemas.ListWithFilter(func(schema *odps.Schema, err error) {
@@ -43,6 +45,7 @@ func TestSchemas_ListWithFilter(t *testing.T) {
 }
 
 func TestSchemas_GetSchema(t *testing.T) {
+	skipWithoutLiveService(t)
 	schema := odps.NewSchema(odpsIns, defaultProjectName, "exist_schema")
 	err := schema.Load()
 	if err != nil {
@@ -52,6 +55,7 @@ func TestSchemas_GetSchema(t *testing.T) {
 }
 
 func TestSchemas_ListTableBySchema(te *testing.T) {
+	skipWithoutLiveService(te)
 	ts := odps.NewTables(odpsIns, defaultProjectName, "exist_schema")
 	f := func(t *odps.Table, err error) {
 		if err != nil {
@@ -64,6 +68,7 @@ func TestSchemas_ListTableBySchema(te *testing.T) {
 }
 
 func TestSchemas_CheckExists(t *testing.T) {
+	skipWithoutLiveService(t)
 	schemas := odps.NewSchemas(odpsIns, defaultProjectName)
 	schema := schemas.Get("not_exists")
 	exists, err := schema.Exists()
@@ -80,6 +85,7 @@ func TestSchemas_CheckExists(t *testing.T) {
 }
 
 func TestSchemas_CreateSchema(t *testing.T) {
+	skipWithoutLiveService(t)
 	schemas := odps.NewSchemas(odpsIns, defaultProjectName)
 	err := schemas.Create("new_schema", true, "new comment")
 	if err != nil {
@@ -92,6 +98,7 @@ func TestSchemas_CreateSchema(t *testing.T) {
 }
 
 func TestSchemas_DeleteSchema(t *testing.T) {
+	skipWithoutLiveService(t)
 	schemas := odps.NewSchemas(odpsIns, defaultProjectName)
 
 	err := schemas.Create("to_delete_schema", true, "to delete")

@@ -17,6 +17,7 @@
 package sqldriver_test
 
 import (
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	"os"
 	"strings"
 	"testing"
@@ -46,12 +47,14 @@ import (
 func realServiceSetup(t *testing.T) (endpoint, project string, cred credentials.Credential) {
 	t.Helper()
 
+	skipWithoutLiveService(t)
+
 	endpoint = os.Getenv("odps_endpoint")
-	project = os.Getenv("MAXCOMPUTE_PROJECT")
+	project = livetest.ProjectExplicit()
 	if endpoint == "" || project == "" ||
 		os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_ID") == "" ||
 		os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET") == "" {
-		t.Skip("set odps_endpoint, MAXCOMPUTE_PROJECT and ALIBABA_CLOUD_ACCESS_KEY_ID/SECRET to run the real-service smoke")
+		t.Skip("set odps_endpoint, ODPS_LIVE_TEST_PROJECT (or MAXCOMPUTE_PROJECT) and ALIBABA_CLOUD_ACCESS_KEY_ID/SECRET to run the real-service smoke")
 	}
 
 	// The default chain picks up the environment, including a security token

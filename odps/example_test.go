@@ -18,7 +18,9 @@ package odps_test
 
 import (
 	"log"
+	"sync"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	datatype2 "github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
@@ -27,29 +29,43 @@ import (
 )
 
 var (
-	account            = account2.AccountFromEnv()
+	account = account2.AccountFromEnv()
+	// endpoint is read here for the examples that print or reuse it; the gate
+	// that decides whether anything may talk to a service is internal/livetest,
+	// which re-reads it and validates it.
 	endpoint           = restclient.LoadEndpointFromEnv()
 	odpsIns            = odps.NewOdps(account, endpoint)
-	defaultProjectName = "go_sdk_regression_testing"
+	defaultProjectName = livetest.ProjectOrDefault()
 )
 
-func init() {
-	// The setup below creates tables and a schema on a live service. When no
-	// credentials are configured there is nothing to create them on, and
-	// panicking here would also keep the offline contract tests in this
-	// package from running at all, so skip the live setup instead.
-	if account == nil {
-		return
-	}
+var fixtureOnce sync.Once
 
-	// odpsIns.SetDefaultProjectName("odps_smoke_test")
-	odpsIns.SetDefaultProjectName(defaultProjectName)
-	// 在这里初始化表、分区等
-	createUserTable("user")
-	createUserTable("user_temp")
-	createTableWithComplexData()
-	createSaleDetailTable()
-	createTestSchema()
+// ensureLiveFixtures creates the tables and the schema the examples in this
+// package read. It used to run in a package init(), guarded only by
+// "account != nil" - which meant two things nobody wanted:
+//
+//   - it ran before any test was selected, so even `go test -run '^$'` created
+//     tables in a live project;
+//   - it never looked at the endpoint, so an environment with an account and no
+//     usable endpoint reached log.Fatalf and aborted the test binary.
+//
+// It is now called from liveServiceConfigured(), which only says true once
+// internal/livetest has an explicit opt-in (ODPS_RUN_LIVE_TESTS=1) and a
+// complete configuration, and it runs at most once per test binary.
+//
+// A failure still stops the process: a live run that cannot build its own
+// fixtures has no business reporting results, and that can now only happen
+// when someone asked for a live run.
+func ensureLiveFixtures() {
+	fixtureOnce.Do(func() {
+		odpsIns.SetDefaultProjectName(defaultProjectName)
+		// 在这里初始化表、分区等
+		createUserTable("user")
+		createUserTable("user_temp")
+		createTableWithComplexData()
+		createSaleDetailTable()
+		createTestSchema()
+	})
 }
 
 func createUserTable(tableName string) {

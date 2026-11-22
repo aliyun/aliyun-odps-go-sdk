@@ -19,7 +19,6 @@ package tunnel_test
 import (
 	"errors"
 	"io"
-	"os"
 	"testing"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
@@ -36,9 +35,9 @@ import (
 // 注：MaxCompute 服务端 instance-result tunnel 暂不支持 GEOGRAPHY 列，必须走表下载。
 // 镜像 Java SDK GeographyTest.testInstanceTunnel.
 func TestGeographyEndToEnd(t *testing.T) {
-	if os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET") == "" {
-		t.Skip("ALIBABA_CLOUD_ACCESS_KEY_SECRET not set, skipping FT")
-	}
+	// "A secret happens to be exported" is not consent to create a table in a
+	// live project: this needs the explicit opt-in, like every other live case.
+	skipWithoutLiveService(t)
 
 	tableName := "odps_sdk_geography_test_go"
 	hints := map[string]string{"odps.sql.type.system.odps2": "true"}

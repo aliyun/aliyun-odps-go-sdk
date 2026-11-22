@@ -17,6 +17,7 @@
 package tunnel_test
 
 import (
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	"log"
 	"os"
 
@@ -31,7 +32,7 @@ import (
 var (
 	tunnelIns   *tunnel.Tunnel
 	odpsIns     *odps.Odps
-	ProjectName = "go_sdk_regression_testing"
+	ProjectName = livetest.ProjectOrDefault()
 	SchemaName  = "tunnel"
 )
 
@@ -108,7 +109,7 @@ func createSaleDetailTable() {
 }
 
 func createUploadSampleArrowTable() {
-	ins, err := odpsIns.ExecSQl("CREATE TABLE IF NOT EXISTS go_sdk_regression_testing.upload_sample_arrow(payload STRING);")
+	ins, err := odpsIns.ExecSQl("CREATE TABLE IF NOT EXISTS " + ProjectName + ".upload_sample_arrow(payload STRING);")
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

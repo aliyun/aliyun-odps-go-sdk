@@ -25,6 +25,9 @@ import (
 )
 
 func ExampleInstances_List() {
+	if !liveServiceConfigured() {
+		return
+	}
 	ins := odpsIns.Instances()
 	timeFormat := "2006-01-02 15:04:05"
 	startTime, _ := time.Parse(timeFormat, "2021-11-15 02:15:30")
@@ -43,6 +46,9 @@ func ExampleInstances_List() {
 }
 
 func ExampleInstances_ListInstancesQueued() {
+	if !liveServiceConfigured() {
+		return
+	}
 	ins := odpsIns.Instances()
 
 	instances, err := ins.ListInstancesQueued()
@@ -58,6 +64,9 @@ func ExampleInstances_ListInstancesQueued() {
 }
 
 func ExampleInstances_CreateTask() {
+	if !liveServiceConfigured() {
+		return
+	}
 	instances := odpsIns.Instances()
 	sqlTask := odps.NewSqlTask("hello", "select count(*) from sale_detail;", nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
@@ -120,6 +129,9 @@ Loop:
 }
 
 func ExampleInstance_Terminate() {
+	if !liveServiceConfigured() {
+		return
+	}
 	instances := odps.NewInstances(odpsIns)
 	sqlTask := odps.NewSqlTask("hello", "select count(*) from user;", nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
@@ -145,6 +157,9 @@ func ExampleInstance_Terminate() {
 }
 
 func ExampleInstance_GetTaskProgress() {
+	if !liveServiceConfigured() {
+		return
+	}
 	instances := odps.NewInstances(odpsIns)
 	sqlTask := odps.NewSqlTask("hello", "select count(*) from sale_detail;", nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
@@ -178,6 +193,9 @@ func ExampleInstance_GetTaskProgress() {
 }
 
 func ExampleInstance_GetTaskSummary() {
+	if !liveServiceConfigured() {
+		return
+	}
 	instances := odps.NewInstances(odpsIns)
 	sqlTask := odps.NewSqlTask("hello1", "select count(*) from sale_detail;", nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
@@ -197,6 +215,9 @@ func ExampleInstance_GetTaskSummary() {
 }
 
 func ExampleInstance_GetCachedInfo() {
+	if !liveServiceConfigured() {
+		return
+	}
 	instances := odps.NewInstances(odpsIns)
 	sqlTask := odps.NewSqlTask("hello1", "select * from user;", nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
