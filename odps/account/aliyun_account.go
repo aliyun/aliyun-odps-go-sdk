@@ -72,18 +72,68 @@ func AliyunAccountFromEnv() *AliyunAccount {
 	return &account
 }
 
-func AccountFromEnv() Account {
-	accessId, found := os.LookupEnv("ALIBABA_CLOUD_ACCESS_KEY_ID")
-	accessKey, found := os.LookupEnv("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
+// lookupCredentialEnv reads one credential environment variable and reports
+// whether it holds a usable value. A variable that is exported but empty, or
+// holds nothing but whitespace, counts as not configured: that is how a missing
+// value usually shows up in a container or in a script that interpolated an empty
+// variable, and signing with it only surfaces later as a service-side 4xx far
+// away from the configuration that caused it.
+//
+// The value itself is returned untouched. This reports whether a credential is
+// configured; it does not repair one.
+func lookupCredentialEnv(key string) (string, bool) {
+	value, found := os.LookupEnv(key)
 	if !found {
+		return "", false
+	}
+	if strings.TrimSpace(value) == "" {
+		return "", false
+	}
+
+	return value, true
+}
+
+// AccountFromEnv builds an account from ALIBABA_CLOUD_ACCESS_KEY_ID,
+// ALIBABA_CLOUD_ACCESS_KEY_SECRET and, for a temporary credential,
+// ALIBABA_CLOUD_SECURITY_TOKEN.
+//
+// It returns nil unless both the access key id and the secret are exported and
+// non-blank, so `AccountFromEnv() != nil` means "there is a key pair here that
+// can be signed with" and nothing more. Whether that key pair is accepted, whether
+// the project exists and whether the endpoint is reachable are only known by the
+// service, so a caller that needs a "this configuration works" answer has to make
+// a request (or check the account it built by itself).
+//
+// Two shapes changed relative to the previous implementation, and they do not
+// change in the same direction:
+//
+//   - An incomplete key pair (id or secret missing, empty or blank) returns nil.
+//     A caller that treats nil as "not configured, use my other credential source"
+//     now takes that fallback instead of signing with empty credential material.
+//   - A complete key pair plus an exported-but-blank ALIBABA_CLOUD_SECURITY_TOKEN
+//     returns a non-nil *AliyunAccount. That is a configuration that counts, not a
+//     nil, so it does not activate a nil-based fallback. Dropping the blank token
+//     only selects the Aliyun account and its signing path; it cannot turn a
+//     temporary AccessKey pair into usable permanent credentials, and whether the
+//     pair is accepted is still the service's answer.
+//
+// nil is a signal, not graceful failure handling. Handing a nil Account to
+// odps.NewOdps or restclient.NewOdpsRestClient panics on the first request,
+// because RestClient embeds account.Account and calls through it when signing, so
+// the nil check belongs before the client is built. See the credential section of
+// README.md for that migration example.
+func AccountFromEnv() Account {
+	accessId, accessIdFound := lookupCredentialEnv("ALIBABA_CLOUD_ACCESS_KEY_ID")
+	accessKey, accessKeyFound := lookupCredentialEnv("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
+	if !accessIdFound || !accessKeyFound {
 		return nil
 	}
-	securityToken, found := os.LookupEnv("ALIBABA_CLOUD_SECURITY_TOKEN")
-	if found {
+
+	if securityToken, tokenFound := lookupCredentialEnv("ALIBABA_CLOUD_SECURITY_TOKEN"); tokenFound {
 		return NewStsAccount(accessId, accessKey, securityToken)
-	} else {
-		return NewAliyunAccount(accessId, accessKey)
 	}
+
+	return NewAliyunAccount(accessId, accessKey)
 }
 
 func (account *AliyunAccount) AccessId() string {

@@ -1,2 +1,15 @@
 builds:
   - skip: true
+
+release:
+  header: |
+    {{- if eq .Tag "v0.4.27" }}
+    ## Go compatibility
+
+    This is the final release before v1.0.0. The MaxCompute SDK APIs and SQL driver remain compatible with Go 1.15. Starting with v1.0.0, the minimum Go version is Go 1.26.
+
+    ## Known limitations
+
+    - This release retains `github.com/klauspost/compress v1.15.9` for Go 1.15 compatibility. The dependency is affected by a Zstandard decoding issue that can cause a panic. This applies to Zstd decoding in Tunnel and Arrow IPC. Use a supported alternative codec or uncompressed data where you control the format of untrusted inputs. The upstream fix is available in v1.20.2. [GO-2026-6865](https://pkg.go.dev/vuln/GO-2026-6865)
+    - Use Protobuf to upload to tables with MAP columns via Tunnel.
+    {{- end -}}
