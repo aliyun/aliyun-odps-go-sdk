@@ -3,6 +3,10 @@ This SDK is used in production, including the control-plane surfaces (`SQLTask`,
 
 It is still under active development toward v1.0. CI coverage in this repository is not comprehensive yet. Tunnel Protobuf records support nested NULL values in complex types and detect truncated checksum trailers. Use Protobuf to upload to tables with MAP columns.
 
+Fixes land on `master` first and are not necessarily included in a tagged release: a dependency pinned to a commit or a pseudo-version can already carry a fix that no tag contains, and a tag contains only what was on `master` when it was cut. Do not read any status sentence here - including this one - as a statement about the version you depend on.
+
+Two Tunnel fixes worth locating for a pinned version: NULL inside `ARRAY`/`MAP`/`STRUCT` records (#27, merged as `16b3dbf222`, PR #79) and truncated checksum trailer detection (#82, merged as `a62b7896f`, PR #83). Measured 2026-11-22: after fetching tags, `git tag --contains` lists `v0.4.27` (cut 2026-11-20) for both merges and no earlier tag. Tag ancestry is not a behavioural statement and does not see cherry-picks or backports - fetch the history and tags you actually build against, and read the implementation plus its regression tests at that version for behaviour.
+
 # Install
 The MaxCompute SDK APIs and SQL driver require Go 1.15 or later in v0.4.x.
 ```shell
