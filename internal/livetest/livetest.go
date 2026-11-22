@@ -61,11 +61,14 @@ const (
 // process environment.
 type EnvFunc func(key string) (string, bool)
 
-// Config is a validated live-service configuration. It is never built from a
-// partially read account: with only a secret exported,
-// odps/account.AccountFromEnv still returns an account whose AccessId is empty
-// (it overwrites the "found" flag of the ID lookup with the secret lookup's),
-// so "account is not nil" does not mean "configuration is complete".
+// Config is a validated live-service configuration, built from the environment
+// and not from account.AccountFromEnv. Two separate reasons, kept separate on
+// purpose: AccountFromEnv is public API and answers "did the caller configure
+// credentials" (since #95 it returns nil unless ID and secret are both usable),
+// while this package additionally answers "was a live run asked for, and is the
+// endpoint usable" - opt-in, endpoint shape and a non-empty token when one is
+// supplied. Feeding the live gate off the exported function would tie test
+// isolation to a public behaviour that exists for a different question.
 type Config struct {
 	AccessID  string
 	AccessKey string

@@ -174,9 +174,10 @@ func TestInspectUsesExplicitProject(t *testing.T) {
 }
 
 // TestInspectOrderIsIdAndSecretFirst pins the check order the reviewer asked
-// about: an environment with only a secret (the case account.AccountFromEnv
-// accepts, because it overwrites the ID lookup's "found" flag) has to be
-// rejected on the ID, not silently treated as configured.
+// about: an environment with only a secret - the shape
+// account.AccountFromEnv accepted until #95 fixed it - has to be rejected on
+// the ID here too, because this gate also has to catch a missing opt-in and an
+// unusable endpoint rather than leaning on the exported function.
 func TestInspectRejectsSecretOnlyEnvironment(t *testing.T) {
 	values := complete()
 	delete(values, "ALIBABA_CLOUD_ACCESS_KEY_ID")
