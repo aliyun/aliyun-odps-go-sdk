@@ -36,6 +36,9 @@ func ParseDataType(name string) (DataType, error) {
 	}
 
 	dataType, err := parser.parse()
+	if err != nil {
+		return nil, errors.Wrapf(err, "parse datatype %q", name)
+	}
 
 	if parser.hasTokenLeft() {
 		return nil, errors.Errorf(
@@ -43,39 +46,41 @@ func ParseDataType(name string) (DataType, error) {
 			name, parser.peekToken(), parser.index)
 	}
 
-	if err != nil {
-		err = errors.Errorf("parse datatype error: %s, %s", name, err.Error())
-	}
-
-	return dataType, err
+	return dataType, nil
 }
 
 func tokenize(name string) []string {
-	name = strings.TrimSpace(name)
 	tokens := make([]string, 0)
 	var tokenBuilder strings.Builder
+	flush := func() {
+		if tokenBuilder.Len() > 0 {
+			tokens = append(tokens, tokenBuilder.String())
+			tokenBuilder.Reset()
+		}
+	}
 
+	quoted := false
 	for _, c := range name {
-		if unicode.IsSpace(c) {
-			continue
-		}
-
-		if isIdentifierChar(c) {
-			tokenBuilder.WriteRune(c)
-		} else {
-			if tokenBuilder.Len() > 0 {
-				tokens = append(tokens, tokenBuilder.String())
-				tokenBuilder.Reset()
+		switch {
+		case c == '`':
+			if !quoted {
+				flush()
 			}
-
-			tokens = append(tokens, string(c))
+			tokenBuilder.WriteRune(c)
+			quoted = !quoted
+			if !quoted {
+				flush()
+			}
+		case quoted || isIdentifierChar(c):
+			tokenBuilder.WriteRune(c)
+		default:
+			flush()
+			if !unicode.IsSpace(c) {
+				tokens = append(tokens, string(c))
+			}
 		}
 	}
-
-	if len(tokens) == 0 && len(name) > 0 {
-		tokens = append(tokens, strings.Fields(name)...)
-	}
-
+	flush()
 	return tokens
 }
 
@@ -110,6 +115,9 @@ func (parser *typeParser) parse() (DataType, error) {
 }
 
 func (parser *typeParser) consumeToken() string {
+	if !parser.hasTokenLeft() {
+		return ""
+	}
 	token := parser.tokens[parser.index]
 	parser.index += 1
 
@@ -291,46 +299,37 @@ func (parser *typeParser) parseStruct() (StructType, error) {
 
 	var fields []StructFieldType
 
-LOOP:
 	for {
-		filedName := parser.consumeToken()
+		fieldName := parser.consumeToken()
+		if quoted, ok := strings.CutPrefix(fieldName, "`"); ok {
+			name, closed := strings.CutSuffix(quoted, "`")
+			if !closed || name == "" {
+				return StructType{}, errors.New("invalid quoted struct field name")
+			}
+			fieldName = name
+		}
 		err = parser.expect(":")
 		if err != nil {
 			return StructType{}, err
 		}
-		filedType, err := parser.parse()
+		fieldType, err := parser.parse()
 		if err != nil {
 			return StructType{}, err
 		}
 
-		structFiled := StructFieldType{
-			Name: filedName,
-			Type: filedType,
-		}
-
-		fields = append(fields, structFiled)
+		fields = append(fields, NewStructFieldType(fieldName, fieldType))
 		nextToken := parser.peekToken()
 
 		switch nextToken {
 		case ",":
 			_ = parser.consumeToken()
 		case ">":
-			break LOOP
+			_ = parser.consumeToken()
+			return NewStructType(fields...), nil
 		default:
 			return StructType{}, errors.Errorf("unexpected token %s at %d", nextToken, parser.index)
 		}
 	}
-
-	err = parser.expect(">")
-	if err != nil {
-		return StructType{}, err
-	}
-
-	structType := StructType{
-		fields,
-	}
-
-	return structType, nil
 }
 
 func (parser *typeParser) parseJson() (JsonType, error) {

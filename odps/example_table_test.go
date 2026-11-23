@@ -99,7 +99,6 @@ func ExampleTable_Load() {
 
 	schema := table.Schema()
 	println(fmt.Sprintf("%+v", schema.Columns))
-	// Output:
 }
 
 func ExampleTable_AddPartition() {
@@ -108,8 +107,6 @@ func ExampleTable_AddPartition() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-
-	// Output:
 }
 
 func ExampleTable_GetPartitions() {
@@ -126,8 +123,6 @@ func ExampleTable_GetPartitions() {
 		println(fmt.Sprintf("Last Modified time: %s", p.LastModifiedTime()))
 		println("")
 	}
-
-	// Output:
 }
 
 func ExampleTable_ExecSql() {
@@ -152,8 +147,6 @@ func ExampleTable_ExecSql() {
 	}
 
 	println(fmt.Sprintf("%+v", results[0].Result))
-
-	// Output:
 }
 
 func ExampleTable_ClusterInfo() {
@@ -189,8 +182,6 @@ func ExampleTable_ClusterInfo() {
 	println(info.ClusterCols)
 	println(info.SortCols)
 	println(info.BucketNum)
-
-	// Output:
 }
 
 func ExampleTable_PrimaryKeys() {
@@ -213,7 +204,6 @@ func ExampleTable_PrimaryKeys() {
 	for _, str := range table.PrimaryKeys() {
 		println(str)
 	}
-	// Output:
 }
 
 func ExampleTable_Transactional() {
@@ -235,5 +225,4 @@ func ExampleTable_Transactional() {
 	}
 
 	println(table.Transactional())
-	// Output:
 }

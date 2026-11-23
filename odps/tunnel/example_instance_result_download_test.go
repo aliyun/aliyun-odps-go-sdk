@@ -93,6 +93,4 @@ func Example_tunnel_download_instance_result() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-
-	// Output:
 }

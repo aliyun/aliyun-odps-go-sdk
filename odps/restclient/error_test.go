@@ -20,6 +20,15 @@ func TestNewHttpNotOk(t *testing.T) {
 		expectedCode   int
 	}{
 		{
+			name: "MissingBody",
+			response: &http.Response{
+				Status:     "410 Gone",
+				StatusCode: http.StatusGone,
+			},
+			expectedStatus: "410 Gone",
+			expectedCode:   http.StatusGone,
+		},
+		{
 			name: "ValidResponse",
 			response: &http.Response{
 				Status:     "404 Not Found",

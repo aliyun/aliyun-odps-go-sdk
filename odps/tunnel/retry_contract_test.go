@@ -17,6 +17,7 @@
 package tunnel
 
 import (
+	"context"
 	stderrors "errors"
 	"io"
 	"net/http"
@@ -46,10 +47,34 @@ func withRetryContractSleep(t *testing.T) *[]time.Duration {
 
 	var waits []time.Duration
 	original := retrySleep
-	retrySleep = func(d time.Duration) { waits = append(waits, d) }
+	retrySleep = func(ctx context.Context, d time.Duration) error {
+		waits = append(waits, d)
+		return ctx.Err()
+	}
 	t.Cleanup(func() { retrySleep = original })
 
 	return &waits
+}
+
+func TestRetryContextStopsBeforeAnAttemptOrBackoff(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	err := retryContext(ctx, func() error {
+		t.Error("a canceled retry must not call its operation")
+		return nil
+	})
+	assert.ErrorIs(t, err, context.Canceled)
+
+	ctx, cancel = context.WithCancel(t.Context())
+	defer cancel()
+	calls := 0
+	err = retryContext(ctx, func() error {
+		calls++
+		cancel()
+		return stderrors.New("retryable read failure")
+	})
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, 1, calls)
 }
 
 // retryContractTunnelAccount signs with a stand-in value; the fake service never

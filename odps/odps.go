@@ -17,6 +17,9 @@
 package odps
 
 import (
+	"context"
+	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -37,12 +40,25 @@ type Odps struct {
 	restClient restclient.RestClient
 	rb         common.ResourceBuilder
 	projects   Projects
+	region     atomic.Pointer[projectRegion]
+}
+
+type projectRegion struct {
+	project string
+	id      string
 }
 
 func NewOdps(account account2.Account, endpoint string) *Odps {
+	return NewOdpsWithHTTPTransport(account, endpoint, nil)
+}
+
+// NewOdpsWithHTTPTransport sends signed ODPS, Tunnel and Storage requests
+// through transport. The caller owns the transport and its connection pool.
+// A nil transport selects the SDK default.
+func NewOdpsWithHTTPTransport(account account2.Account, endpoint string, transport http.RoundTripper) *Odps {
 	ins := Odps{
 		account:    account,
-		restClient: restclient.NewOdpsRestClient(account, endpoint),
+		restClient: restclient.NewOdpsRestClientWithTransport(account, endpoint, transport),
 		Options:    *options.NewOdpsOptions(),
 	}
 	if aliyunAccount, ok := account.(*account2.AliyunAccount); ok {
@@ -138,43 +154,68 @@ func (odps *Odps) Tenant() *Tenant {
 }
 
 func (odps *Odps) RegionId() string {
-	if odps.Options.RegionId == "cn" {
-		defaultProject := odps.DefaultProject()
-		err := defaultProject.Load()
-		if err == nil {
-			odps.Options.RegionId = defaultProject.RegionId()
-		}
+	return odps.regionID(context.Background(), odps.defaultProject)
+}
+
+func (odps *Odps) regionID(ctx context.Context, projectName string) string {
+	configured := odps.Options.RegionId
+	if configured != "cn" {
+		return configured
 	}
-	return odps.Options.RegionId
+	if cached := odps.region.Load(); cached != nil && cached.project == projectName {
+		return cached.id
+	}
+	project := odps.Project(projectName)
+	if err := project.load(ctx); err != nil {
+		return configured
+	}
+	regionID := project.RegionId()
+	if regionID == "" {
+		return configured
+	}
+	odps.region.Store(&projectRegion{project: projectName, id: regionID})
+	return regionID
 }
 
 func (odps *Odps) ExecSQlWithHints(sql string, hints map[string]string) (*Instance, error) {
-	if odps.defaultProject == "" {
-		return nil, errors.New("default project has not been set for odps")
-	}
-	option := options.NewSQLTaskOptions()
-	option.Hints = hints
-	return odps.ExecSQlWithOption(sql, option)
+	return odps.ExecSQLContext(context.Background(), sql, hints)
 }
 
 func (odps *Odps) ExecSQl(sql string, hints ...map[string]string) (*Instance, error) {
-	if len(hints) == 0 {
-		return odps.ExecSQlWithHints(sql, nil)
-	}
+	return odps.ExecSQLContext(context.Background(), sql, hints...)
+}
 
-	return odps.ExecSQlWithHints(sql, hints[0])
+// ExecSQLContext submits a SQL instance using ctx. If the request is canceled
+// before its response arrives, the server may already have accepted the job.
+func (odps *Odps) ExecSQLContext(ctx context.Context, sql string, hints ...map[string]string) (*Instance, error) {
+	option := options.NewSQLTaskOptions()
+	if len(hints) > 0 {
+		option.Hints = hints[0]
+	}
+	return odps.execSQLWithOption(ctx, sql, option)
 }
 
 // ExecSQlWithOption Create a SQLTask with options.SQLTaskOptions
 func (odps *Odps) ExecSQlWithOption(sql string, option *options.SQLTaskOptions) (*Instance, error) {
-	if option.Hints == nil {
-		option.Hints = make(map[string]string)
+	return odps.execSQLWithOption(context.Background(), sql, option)
+}
+
+func (odps *Odps) execSQLWithOption(ctx context.Context, sql string, option *options.SQLTaskOptions) (*Instance, error) {
+	if odps.defaultProject == "" {
+		return nil, errors.New("default project has not been set for odps")
 	}
-	if odps.currentSchema != "" && option.DefaultSchema != "" {
-		option.DefaultSchema = odps.currentSchema
+	if option == nil {
+		option = options.NewSQLTaskOptions()
 	}
-	task := NewSQLTaskWithOptions(sql, option)
+	taskOptions := *option
+	if taskOptions.Hints == nil {
+		taskOptions.Hints = make(map[string]string)
+	}
+	if taskOptions.DefaultSchema == "" {
+		taskOptions.DefaultSchema = odps.currentSchema
+	}
+	task := NewSQLTaskWithOptions(sql, &taskOptions)
 	instances := NewInstances(odps, odps.defaultProject)
-	i, err := instances.CreateTask(odps.defaultProject, &task, option.InstanceOption)
+	i, err := instances.createTask(ctx, odps.defaultProject, &task, taskOptions.InstanceOption)
 	return i, errors.WithStack(err)
 }

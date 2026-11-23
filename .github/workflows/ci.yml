@@ -1,45 +1,48 @@
-# This workflow will build a golang project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
-
 name: CI
 
 on:
-  workflow_dispatch: # 支持手动触发
+  pull_request:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
+  workflow_dispatch:
+    inputs:
+      release_check:
+        description: Require the SDK release coverage thresholds
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      release_check:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
 
 jobs:
-
   build:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write     # 获取 oidc token 的权限
     steps:
-    - name: get credentials
-      id: get-credentials
-      uses: aliyun/configure-aliyun-credentials-action@v1.0.3
-      with:
-        role-to-assume: '${{ secrets.ROLE_ARN }}'
-        oidc-provider-arn: '${{ secrets.OIDC_ARN }}'
-        audience: 'actions.github.com' # default value
-        
-    - name: Set up environment
-      run: |
-        echo "ALIBABA_CLOUD_ACCESS_KEY_ID=${{ steps.get-credentials.outputs.aliyun-access-key-id }}" >> $GITHUB_ENV
-        echo "ALIBABA_CLOUD_ACCESS_KEY_SECRET=${{ steps.get-credentials.outputs.aliyun-access-key-secret }}" >> $GITHUB_ENV
-        echo "ALIBABA_CLOUD_SECURITY_TOKEN=${{ steps.get-credentials.outputs.aliyun-security-token }}" >> $GITHUB_ENV
-        echo "odps_endpoint=${{ secrets.ENDPOINT }}" >> $GITHUB_ENV
-        echo "TZ=Asia/Shanghai" >> $GITHUB_ENV
-    
-    - uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.21'
-
-    - name: Build
-      run: go build -v ./...
-
-    - name: Test (Expect Arrow Package)
-      run: go test -v $(go list ./... | grep -v './arrow')
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Test using MaxCompute Emulator
+        env:
+          RELEASE_CHECK: ${{ inputs.release_check }}
+          SDK_TEST_REPORT_DIR: ${{ runner.temp }}/sdk-tests
+        run: |
+          args=()
+          if [[ "$RELEASE_CHECK" == "true" ]]; then
+            args+=(--release)
+          fi
+          bash scripts/test-emulator.sh "${args[@]}"
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-coverage
+          path: |
+            ${{ runner.temp }}/sdk-tests/**/go.cover
+            ${{ runner.temp }}/sdk-tests/**/*.branches.json
+            ${{ runner.temp }}/sdk-tests/**/*.branches.log

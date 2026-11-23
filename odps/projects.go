@@ -90,16 +90,11 @@ func (p *Projects) Get(projectName string) *Project {
 }
 
 func (p *Projects) Exists(projectName string) (bool, error) {
-	project := p.Get(projectName)
-
-	if !project.IsLoaded() {
-		err := project.Load()
-		if err != nil {
-			return false, errors.WithStack(err)
-		}
+	err := p.Get(projectName).Load()
+	if isNotFound(err) {
+		return false, nil
 	}
-
-	return project.Existed(), nil
+	return err == nil, err
 }
 
 // CreateExternalProject  unimplemented!

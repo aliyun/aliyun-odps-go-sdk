@@ -17,6 +17,7 @@
 package odps
 
 import (
+	"context"
 	stderrors "errors"
 	"fmt"
 	"io"
@@ -147,9 +148,10 @@ func withRetryContractClock(t *testing.T) *[]time.Duration {
 	current := time.Date(2026, time.September, 22, 12, 0, 0, 0, time.UTC)
 
 	originalSleep, originalNow := instanceCreateSleep, instanceCreateNow
-	instanceCreateSleep = func(d time.Duration) {
+	instanceCreateSleep = func(ctx context.Context, d time.Duration) error {
 		waits = append(waits, d)
 		current = current.Add(d)
+		return ctx.Err()
 	}
 	instanceCreateNow = func() time.Time { return current }
 	t.Cleanup(func() {

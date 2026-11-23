@@ -17,9 +17,8 @@
 package tunnel
 
 import (
-	"fmt"
+	"net"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -33,17 +32,15 @@ type slot struct {
 }
 
 func newSlot(id string, server string) (slot, error) {
-	parts := strings.Split(server, ":")
-
-	if len(parts) != 2 {
-		return slot{}, errors.Errorf("invalid slot format: %s", server)
+	ip, portText, err := net.SplitHostPort(server)
+	if err != nil {
+		return slot{}, errors.Wrap(err, "invalid slot format")
 	}
 
-	ip := parts[0]
 	if ip == "" {
 		return slot{}, errors.Errorf("empty server ip: %s", server)
 	}
-	port, err := strconv.Atoi(parts[1])
+	port, err := strconv.Atoi(portText)
 	if err != nil {
 		return slot{}, errors.WithStack(err)
 	}
@@ -58,28 +55,16 @@ func newSlot(id string, server string) (slot, error) {
 }
 
 func (s *slot) SetServer(server string) error {
-	parts := strings.Split(server, ":")
-
-	if len(parts) != 2 {
-		return errors.Errorf("invalid slot format: %s", server)
-	}
-
-	if parts[0] == "" {
-		return errors.Errorf("empty server ip: %s", server)
-	}
-
-	s.ip = parts[0]
-	port, err := strconv.Atoi(parts[1])
+	next, err := newSlot(s.id, server)
 	if err != nil {
-		return errors.WithStack(err)
+		return err
 	}
-
-	s.port = port
+	*s = next
 	return nil
 }
 
 func (s *slot) Server() string {
-	return fmt.Sprintf("%s:%d", s.ip, s.port)
+	return net.JoinHostPort(s.ip, strconv.Itoa(s.port))
 }
 
 // slotSelector rotates over the slots of a stream upload session. One session can

@@ -26,7 +26,6 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/arrow"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
@@ -49,7 +48,7 @@ const (
 // UploadSession works as "insert into", multiply sessions for the same table or partition do not affect each other.
 // Session id is the unique identifier of a session。
 //
-// UploadSession uses OpenRecordArrowWriter to create a RecordArrowWriter or OpenRecordWriter to create a RecordProtocWriter
+// UploadSession uses OpenRecordWriter to open a Protobuf writer. Use package storage for Arrow uploads.
 // for writing data into a table. Each RecordWriter uses a http connection to transfer data with the tunnel server, and
 // each UploadSession can create multiply RecordWriters, so multiply http connections can be used to upload data
 // in parallel.
@@ -88,7 +87,6 @@ type UploadSession struct {
 	shouldTransformDate bool
 	schema              tableschema.TableSchema
 	status              UploadStatus
-	arrowSchema         *arrow.Schema
 	blockIds            []int
 }
 
@@ -108,7 +106,7 @@ func (u *UploadSession) SetPartitionKey(partitionKey string) {
 // CreateUploadSession create a new upload session before uploading data。
 // The opts can be one or more of:
 // SessionCfg.WithPartitionKey
-// SessionCfg.WithSchemaName, it doesn't work now
+// SessionCfg.WithSchemaName
 // SessionCfg.WithDefaultDeflateCompressor, using deflate compressor with default level
 // SessionCfg.WithDeflateCompressor, using deflate compressor with specific level
 // SessionCfg.WithSnappyFramedCompressor
@@ -148,12 +146,11 @@ func CreateUploadSession(
 // AttachToExistedUploadSession get an existed session by the session id.
 // The opts can be one or more of:
 // SessionCfg.WithPartitionKey
-// SessionCfg.WithSchemaName, it doesn't work now
+// SessionCfg.WithSchemaName
 // SessionCfg.WithDefaultDeflateCompressor, using deflate compressor with default level
 // SessionCfg.WithDeflateCompressor, using deflate compressor with specific level
 // SessionCfg.WithSnappyFramedCompressor
 // SessionCfg.Overwrite, overwrite data
-// SessionCfg.UseArrow, it is the default config
 func AttachToExistedUploadSession(
 	sessionId, projectName, tableName string,
 	restClient restclient.RestClient,
@@ -164,6 +161,7 @@ func AttachToExistedUploadSession(
 	session := UploadSession{
 		Id:           sessionId,
 		ProjectName:  projectName,
+		SchemaName:   cfg.SchemaName,
 		TableName:    tableName,
 		partitionKey: cfg.PartitionKey,
 		RestClient:   restClient,
@@ -183,14 +181,6 @@ func (u *UploadSession) Schema() tableschema.TableSchema {
 	return u.schema
 }
 
-func (u *UploadSession) ArrowSchema() *arrow.Schema {
-	if u.arrowSchema != nil {
-		return u.arrowSchema
-	}
-	u.arrowSchema = u.schema.ToArrowSchema()
-	return u.arrowSchema
-}
-
 func (u *UploadSession) Status() UploadStatus {
 	return u.status
 }
@@ -204,18 +194,8 @@ func (u *UploadSession) ResourceUrl() string {
 	return rb.Table(u.SchemaName, u.TableName)
 }
 
-func (u *UploadSession) OpenRecordArrowWriter(blockId int) (*RecordArrowWriter, error) {
-	conn, err := u.newUploadConnection(blockId, true)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	writer := newRecordArrowWriter(conn, u.arrowSchema)
-	return &writer, nil
-}
-
 func (u *UploadSession) OpenRecordWriter(blockId int) (*RecordProtocWriter, error) {
-	conn, err := u.newUploadConnection(blockId, false)
+	conn, err := u.newUploadConnection(blockId)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -244,19 +224,15 @@ func (u *UploadSession) Commit(blockIds []int) error {
 		return errors.Errorf(errMsgFmt, u.blockIds, blockIds)
 	}
 
-	for _, idWanted := range blockIds {
-		found := false
-
-		for _, realId := range u.blockIds {
-			if idWanted == realId {
-				found = true
-				break
-			}
-		}
-
-		if !found {
+	uploaded := make(map[int]struct{}, len(u.blockIds))
+	for _, id := range u.blockIds {
+		uploaded[id] = struct{}{}
+	}
+	for _, id := range blockIds {
+		if _, ok := uploaded[id]; !ok {
 			return errors.Errorf(errMsgFmt, u.blockIds, blockIds)
 		}
+		delete(uploaded, id)
 	}
 
 	queryArgs := make(url.Values, 2)
@@ -310,10 +286,6 @@ func (u *UploadSession) loadInformation(req *http.Request) error {
 
 	var resModel ResModel
 	err := u.RestClient.DoWithParseFunc(req, func(res *http.Response) error {
-		if res.StatusCode/100 != 2 {
-			return errors.WithStack(restclient.NewHttpNotOk(res))
-		}
-
 		u.shouldTransformDate = res.Header.Get(common.HttpHeaderOdpsDateTransFrom) == "true"
 
 		decoder := json.NewDecoder(res.Body)
@@ -337,7 +309,6 @@ func (u *UploadSession) loadInformation(req *http.Request) error {
 
 	u.status = UploadStatusFromStr(resModel.Status)
 	u.schema = tableSchema
-	u.arrowSchema = tableSchema.ToArrowSchema()
 	u.blockIds = make([]int, len(resModel.UploadedBlockList))
 	for i, b := range resModel.UploadedBlockList {
 		u.blockIds[i] = b.BlockID
@@ -395,15 +366,11 @@ func (u *UploadSession) newLoadRequest() (*http.Request, error) {
 	return req, nil
 }
 
-func (u *UploadSession) newUploadConnection(blockId int, useArrow bool) (*httpConnection, error) {
+func (u *UploadSession) newUploadConnection(blockId int) (*httpConnection, error) {
 	headers := getCommonHeaders()
 	queryArgs := make(url.Values, 4)
 	queryArgs.Set("uploadid", u.Id)
 	queryArgs.Set("blockid", strconv.Itoa(blockId))
-
-	if useArrow {
-		queryArgs.Set("arrow", "")
-	}
 
 	if u.partitionKey != "" {
 		queryArgs.Set("partition", u.partitionKey)
@@ -416,7 +383,7 @@ func (u *UploadSession) newUploadConnection(blockId int, useArrow bool) (*httpCo
 	resource := u.ResourceUrl()
 	req, err := u.RestClient.NewRequestWithParamsAndHeaders(common.HttpMethod.PutMethod, resource, reader, queryArgs, headers)
 	if err != nil {
-		// Close the pipe writer if request creation fails to prevent resource leak
+		_ = reader.Close()
 		_ = writer.CloseWithError(err)
 		return nil, errors.WithStack(err)
 	}
@@ -426,10 +393,10 @@ func (u *UploadSession) newUploadConnection(blockId int, useArrow bool) (*httpCo
 		req.Header.Set("Content-Encoding", u.Compressor.Name())
 	}
 
-	resChan := make(chan resOrErr)
+	resChan := make(chan resOrErr, 1)
 
 	go func() {
-		defer reader.Close()
+		defer func() { _ = reader.Close() }()
 		res, err := u.RestClient.Do(req)
 		resChan <- resOrErr{err: err, res: res}
 	}()

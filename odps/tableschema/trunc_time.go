@@ -10,10 +10,8 @@ import (
 
 // TruncTime Implementation class of GenerateExpression, corresponding to SQL trunc_time('dateColumnName', 'datePart') syntax
 type TruncTime struct {
-	dateColumnName        string
-	cachedDataColumnIndex int
-	datePart              DatePart
-	formatter             *time.Time
+	dateColumnName string
+	datePart       DatePart
 }
 
 // DatePart Enumeration value, used to represent the unit of time type trunc
@@ -50,12 +48,7 @@ const (
 
 // NewTruncTime Create a TruncTime instance based on column name and date part
 func NewTruncTime(dateColumnName string, datePart DatePart) *TruncTime {
-	truncTime := &TruncTime{
-		dateColumnName:        dateColumnName,
-		datePart:              datePart,
-		cachedDataColumnIndex: -1,
-	}
-	return truncTime
+	return &TruncTime{dateColumnName: dateColumnName, datePart: datePart}
 }
 
 func newTruncTimeWithConstant(dateColumnName string, constant string) (*TruncTime, error) {
@@ -66,12 +59,7 @@ func newTruncTimeWithConstant(dateColumnName string, constant string) (*TruncTim
 	if dateColumnName == "" {
 		return nil, fmt.Errorf("TruncTime dateColumnName cannot be empty")
 	}
-	truncTime := &TruncTime{
-		dateColumnName:        dateColumnName,
-		datePart:              datePart,
-		cachedDataColumnIndex: -1,
-	}
-	return truncTime, nil
+	return NewTruncTime(dateColumnName, datePart), nil
 }
 
 func stringToDatePart(constant string) (DatePart, error) {
@@ -91,47 +79,36 @@ func stringToDatePart(constant string) (DatePart, error) {
 }
 
 func (t *TruncTime) generate(record *data.Record, schema *TableSchema) (string, error) {
-	var dataValue data.Data
-	if t.cachedDataColumnIndex != -1 {
-		dataValue = record.Get(t.cachedDataColumnIndex)
-	} else {
-		for i, column := range schema.Columns {
-			if column.Name == t.dateColumnName {
-				dataValue = record.Get(i)
-				t.cachedDataColumnIndex = i
-				break
+	if record == nil {
+		return nullValue, fmt.Errorf("missing record for trunc_time")
+	}
+	for i, column := range schema.Columns {
+		if column.Name == t.dateColumnName {
+			if i >= len(*record) {
+				return nullValue, fmt.Errorf("record is missing column %q for trunc_time", column.Name)
 			}
+			return t.generateValue(record.Get(i))
 		}
 	}
-	if dataValue == nil {
-		return nullValue, nil
-	}
-	var epochMillis int64
+	return nullValue, nil
+}
 
-	switch v := dataValue.(type) {
-	case data.Date:
-		t := v.Time()
-		epochMillis = t.UnixNano() / int64(time.Millisecond)
-	case data.DateTime:
-		t := v.Time()
-		epochMillis = t.UnixNano() / int64(time.Millisecond)
-	case data.Timestamp:
-		t := v.Time()
-		epochMillis = t.UnixNano() / int64(time.Millisecond)
-	case data.TimestampNtz:
-		t := v.Time()
-		epochMillis = t.UnixNano() / int64(time.Millisecond)
+func (t *TruncTime) generateValue(value data.Data) (string, error) {
+	switch v := value.(type) {
+	case nil, data.NullData:
+		return nullValue, nil
+	case interface{ Time() time.Time }:
+		return t.truncEpochMillis(v.Time().UnixMilli()), nil
 	default:
 		return nullValue, fmt.Errorf("unknown data type: %T", v)
 	}
-	return t.truncEpochMillis(epochMillis), nil
 }
 
 func (t *TruncTime) truncEpochMillis(epochMillis int64) string {
 	if epochMillis < minEpochMillis {
 		return t.minGenerateValue()
 	}
-	localDateTime := time.Unix(epochMillis/1000, 0).UTC()
+	localDateTime := time.UnixMilli(epochMillis).UTC()
 	switch t.datePart {
 	case YEAR:
 		return localDateTime.Format("2006")

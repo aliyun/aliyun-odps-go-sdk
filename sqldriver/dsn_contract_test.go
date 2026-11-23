@@ -1,0 +1,55 @@
+// Licensed under the Apache License, Version 2.0.
+
+package sqldriver
+
+import (
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestParseDSNIncludesExplicitOptions(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "env-id")
+	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "env-secret")
+	t.Setenv("ALIBABA_CLOUD_SECURITY_TOKEN", "env-token")
+	config, err := ParseDSN("http://dsn-id:dsn-secret@127.0.0.1:8080/api?project=fixture&stsToken=dsn-token" +
+		"&tcpConnectionTimeout=4&httpTimeout=9&tunnelEndpoint=http%3A%2F%2F127.0.0.1%3A8081" +
+		"&tunnelQuotaName=batch&enableLogview=false&odps.sql.type.system.odps2=true")
+	require.NoError(t, err)
+	require.Equal(t, "dsn-id", config.AccessId)
+	require.Equal(t, "dsn-secret", config.AccessKey)
+	require.Equal(t, "dsn-token", config.StsToken)
+	require.Equal(t, "fixture", config.ProjectName)
+	require.Equal(t, "http://127.0.0.1:8080/api", config.Endpoint)
+	require.Equal(t, "http://127.0.0.1:8081", config.TunnelEndpoint)
+	require.Equal(t, "batch", config.TunnelQuotaName)
+	require.Equal(t, 4*time.Second, config.TcpConnectionTimeout)
+	require.Equal(t, 9*time.Second, config.HttpTimeout)
+	require.Equal(t, map[string]string{"enableLogview": "false"}, config.Others)
+	require.Equal(t, map[string]string{"odps.sql.type.system.odps2": "true"}, config.Hints)
+
+	config, err = ParseDSN("http://127.0.0.1:8080/api?project=fixture&tcpConnectionTimeout=invalid&httpTimeout=invalid")
+	require.NoError(t, err)
+	require.Equal(t, "env-id", config.AccessId)
+	require.Equal(t, "env-secret", config.AccessKey)
+	require.Equal(t, "env-token", config.StsToken)
+	require.Equal(t, NewConfig().TcpConnectionTimeout, config.TcpConnectionTimeout)
+	require.Equal(t, NewConfig().HttpTimeout, config.HttpTimeout)
+	require.Empty(t, config.Hints)
+}
+
+func TestParseDSNRejectsIncompleteCredentials(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "")
+	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "")
+	t.Setenv("ALIBABA_CLOUD_SECURITY_TOKEN", "")
+	for _, tc := range []struct{ dsn, message string }{
+		{"http://%", "invalid URL"},
+		{"http://127.0.0.1/api?project=fixture", "AccessId"},
+		{"http://fake-id@127.0.0.1/api?project=fixture", "AccessKey"},
+		{"http://fake-id:fake-secret@127.0.0.1/api", "project name"},
+	} {
+		_, err := ParseDSN(tc.dsn)
+		require.ErrorContains(t, err, tc.message)
+	}
+}

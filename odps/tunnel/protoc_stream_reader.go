@@ -18,6 +18,7 @@ package tunnel
 
 import (
 	"bufio"
+	"encoding/binary"
 	"io"
 	"math"
 
@@ -42,7 +43,7 @@ func (r *ProtocStreamReader) ReadTag() (protowire.Number, protowire.Type, error)
 	}
 
 	num, typ := protowire.DecodeTag(m)
-	if num < protowire.MinValidNumber {
+	if !num.IsValid() {
 		return 0, 0, errors.New("failed to read a tag from the proto stream")
 	}
 
@@ -50,56 +51,27 @@ func (r *ProtocStreamReader) ReadTag() (protowire.Number, protowire.Type, error)
 }
 
 func (r *ProtocStreamReader) ReadVarint() (uint64, error) {
-	b := []byte{'0'}
-	buf := make([]byte, 0, 1)
-
-	// 每次读取一个字节，直到读到合法的varint-encoded length值
-	for {
-		n, err := r.inner.Read(b)
-		if n <= 0 {
-			return 0, errors.WithStack(err)
-		}
-
-		buf = append(buf, b...)
-
-		// 为了支持64位整数表示的长度，varInts最多需要10个字节
-		if len(buf) > 10 {
-			return 0, errors.New("invalid bytes for varint")
-		}
-
-		v, n := protowire.ConsumeVarint(buf)
-		if n > 0 {
-			return v, nil
-		}
+	value, err := binary.ReadUvarint(r.inner)
+	if err != nil {
+		return 0, errors.WithStack(err)
 	}
+	return value, nil
 }
 
 func (r *ProtocStreamReader) ReadFixed32() (uint32, error) {
-	b := []byte{'0', '0', '0', '0'}
-
-	for {
-		n, err := io.ReadFull(r.inner, b)
-		if n != 4 {
-			return 0, errors.WithStack(err)
-		}
-
-		v, _ := protowire.ConsumeFixed32(b)
-		return v, nil
+	var b [4]byte
+	if _, err := io.ReadFull(r.inner, b[:]); err != nil {
+		return 0, errors.WithStack(err)
 	}
+	return binary.LittleEndian.Uint32(b[:]), nil
 }
 
 func (r *ProtocStreamReader) ReadFixed64() (uint64, error) {
-	b := []byte{'0', '0', '0', '0', '0', '0', '0', '0'}
-
-	for {
-		n, err := io.ReadFull(r.inner, b)
-		if n != 8 {
-			return 0, errors.WithStack(err)
-		}
-
-		v, _ := protowire.ConsumeFixed64(b)
-		return v, nil
+	var b [8]byte
+	if _, err := io.ReadFull(r.inner, b[:]); err != nil {
+		return 0, errors.WithStack(err)
 	}
+	return binary.LittleEndian.Uint64(b[:]), nil
 }
 
 func (r *ProtocStreamReader) ReadBytes() ([]byte, error) {
@@ -108,12 +80,26 @@ func (r *ProtocStreamReader) ReadBytes() ([]byte, error) {
 		return nil, errors.WithStack(err)
 	}
 
-	b := make([]byte, m)
-	_, err = io.ReadFull(r.inner, b)
+	if m > math.MaxInt64 {
+		return nil, errors.New("protobuf byte string length exceeds int64")
+	}
+	if m <= uint64(r.inner.Size()) {
+		b := make([]byte, int(m))
+		if _, err := io.ReadFull(r.inner, b); err != nil {
+			return nil, errors.WithStack(err)
+		}
+		return b, nil
+	}
+
+	// Grow with the bytes actually received so an incomplete stream cannot
+	// force the allocation of the advertised length.
+	b, err := io.ReadAll(io.LimitReader(r.inner, int64(m)))
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-
+	if uint64(len(b)) != m {
+		return nil, errors.WithStack(io.ErrUnexpectedEOF)
+	}
 	return b, nil
 }
 
@@ -149,7 +135,9 @@ func (r *ProtocStreamReader) ReadUInt32() (uint32, error) {
 	if err != nil {
 		return 0, errors.WithStack(err)
 	}
-
+	if m > math.MaxUint32 {
+		return 0, errors.New("protobuf varint exceeds uint32")
+	}
 	return uint32(m), nil
 }
 
@@ -172,12 +160,7 @@ func (r *ProtocStreamReader) ReadSInt64() (int64, error) {
 }
 
 func (r *ProtocStreamReader) ReadUInt64() (uint64, error) {
-	m, err := r.ReadVarint()
-	if err != nil {
-		return 0, errors.WithStack(err)
-	}
-
-	return uint64(m), nil
+	return r.ReadVarint()
 }
 
 func (r *ProtocStreamReader) ReadSFixed32() (int32, error) {

@@ -45,6 +45,9 @@ import (
 // environment chain, and the assertions quote only the query result.
 func realServiceSetup(t *testing.T) (endpoint, project string, cred credentials.Credential) {
 	t.Helper()
+	if os.Getenv("MAXCOMPUTE_LIVE_TESTS") != "1" {
+		t.Skip("requires MAXCOMPUTE_LIVE_TESTS=1")
+	}
 
 	endpoint = os.Getenv("odps_endpoint")
 	project = os.Getenv("MAXCOMPUTE_PROJECT")

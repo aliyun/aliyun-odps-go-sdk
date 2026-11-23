@@ -17,6 +17,7 @@
 package account
 
 import (
+	"context"
 	stderrors "errors"
 	"fmt"
 	"net/http"
@@ -28,9 +29,58 @@ import (
 
 	"github.com/aliyun/credentials-go/credentials"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
+
+type blockingSDKCredential struct {
+	credentials.Credential
+	started chan struct{}
+	release chan struct{}
+	calls   atomic.Int32
+}
+
+func (c *blockingSDKCredential) GetCredential() (*credentials.CredentialModel, error) {
+	if c.calls.Add(1) == 1 {
+		close(c.started)
+		<-c.release
+	}
+	return &credentials.CredentialModel{AccessKeyId: strp("fixture-ak"), AccessKeySecret: strp("fixture-secret")}, nil
+}
+
+func TestStsAccountCanceledWhileWaitingForCredential(t *testing.T) {
+	provider := &blockingSDKCredential{started: make(chan struct{}), release: make(chan struct{})}
+	signer := NewStsAccountWithCredential(provider)
+	var release sync.Once
+	stopBlocking := func() { release.Do(func() { close(provider.release) }) }
+	t.Cleanup(stopBlocking)
+	const endpoint = "https://fixture.invalid"
+	first := newSignedRequest(t, http.MethodGet, endpoint+"/projects/p")
+	firstResult := make(chan error, 1)
+	go func() { firstResult <- signer.SignRequest(first, endpoint) }()
+	select {
+	case <-provider.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("credential refresh did not start")
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	second := newSignedRequest(t, http.MethodGet, endpoint+"/projects/p").WithContext(ctx)
+	secondResult := make(chan error, 1)
+	go func() { secondResult <- signer.SignRequest(second, endpoint) }()
+	select {
+	case err := <-secondResult:
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	case <-time.After(2 * time.Second):
+		t.Fatal("canceled signing waited for the first credential refresh")
+	}
+	require.EqualValues(t, 1, provider.calls.Load())
+	stopBlocking()
+	require.NoError(t, <-firstResult)
+	require.NotEmpty(t, first.Header.Get(common.HttpHeaderAuthorization))
+}
 
 // These tests pin how temporary credentials reach a request, and where the
 // boundary of "refresh" actually is. They use local fake providers only - no
@@ -47,6 +97,31 @@ import (
 // strp avoids pulling a helper dependency into the test just to build a
 // CredentialModel.
 func strp(value string) *string { return &value }
+
+func TestApplicationSigningHeadersAndProviderSigningFailure(t *testing.T) {
+	const endpoint = "http://example.test/api"
+	request := newSignedRequest(t, http.MethodGet, endpoint+"/projects/p")
+	app := NewAppAccount("id", "secret")
+	if err := app.SignRequest(request, endpoint); err != nil {
+		t.Fatal(err)
+	}
+	assert.Contains(t, request.Header.Get(common.HttpHeaderAuthorization), "ODPS id:")
+	assert.Contains(t, request.Header.Get(common.HttpHeaderAppAuthentication), "account_provider:aliyun,signature_method:hmac-sha1,access_id:id,signature:")
+
+	request = newSignedRequest(t, http.MethodGet, endpoint+"/projects/p")
+	appSTS := NewAppStsAccount("id", "secret", "token")
+	if err := appSTS.SignRequest(request, endpoint); err != nil {
+		t.Fatal(err)
+	}
+	assert.Contains(t, request.Header.Get(common.HttpHeaderSTSAuthentication), "access_id:id,signature:")
+	assert.Equal(t, "token", request.Header.Get(common.HttpHeaderSTSToken))
+
+	provider := NewStsAccountWithProvider(&fakeCredentialProvider{model: generation{accessId: "id", accessKey: "secret", token: "token"}.model()})
+	request = newSignedRequest(t, http.MethodGet, endpoint+"/projects/p")
+	assert.ErrorContains(t, provider.SignRequest(request, "http://%invalid"), "invalid signing endpoint")
+	assert.Empty(t, request.Header.Get(common.HttpHeaderAuthorization))
+	assert.Empty(t, request.Header.Get(common.HttpHeaderAuthorizationSTSToken))
+}
 
 // fixedDate is the Date header these tests sign with. The signature covers it,
 // so a fixed value is what lets a test compare "the same request signed with
@@ -412,6 +487,23 @@ func TestStsAccountRetryContractTokenFieldSelection(t *testing.T) {
 			}
 			assert.NotEmpty(t, req.Header.Get(common.HttpHeaderAuthorization))
 		})
+	}
+}
+
+func TestStsAccountClearsPreviousTokenWhenCredentialsChangeType(t *testing.T) {
+	const endpoint = "http://127.0.0.1:1"
+	provider := &fakeCredentialProvider{models: []*credentials.CredentialModel{
+		{AccessKeyId: strp("temporary"), AccessKeySecret: strp("test-secret"), SecurityToken: strp("test-token")},
+		{AccessKeyId: strp("permanent"), AccessKeySecret: strp("test-secret")},
+	}}
+	signer := NewStsAccountWithProvider(provider)
+	req := newSignedRequest(t, http.MethodGet, endpoint+"/projects/p")
+	if assert.NoError(t, signer.SignRequest(req, endpoint)) {
+		assert.Equal(t, "test-token", req.Header.Get(common.HttpHeaderAuthorizationSTSToken))
+	}
+	if assert.NoError(t, signer.SignRequest(req, endpoint)) {
+		assert.Contains(t, req.Header.Get(common.HttpHeaderAuthorization), "ODPS permanent:")
+		assert.Empty(t, req.Header.Values(common.HttpHeaderAuthorizationSTSToken))
 	}
 }
 

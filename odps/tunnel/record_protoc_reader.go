@@ -17,6 +17,7 @@
 package tunnel
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -36,6 +37,8 @@ type RecordProtocReader struct {
 	recordCrc           Crc32CheckSum
 	crcOfCrc            Crc32CheckSum // crc of record crc
 	count               int64
+	expectedRows        *int64
+	finished            bool
 }
 
 func newRecordProtocReader(httpRes *http.Response, columns []tableschema.Column, shouldTransformDate bool) RecordProtocReader {
@@ -53,7 +56,23 @@ func (r *RecordProtocReader) HttpRes() *http.Response {
 	return r.httpRes
 }
 
-func (r *RecordProtocReader) Read() (data.Record, error) {
+func (r *RecordProtocReader) expectRange(start, count, total int) {
+	if total >= 0 {
+		expected := int64(min(count, max(total-start, 0)))
+		r.expectedRows = &expected
+	}
+}
+
+func (r *RecordProtocReader) Read() (_ data.Record, err error) {
+	if r.finished {
+		return nil, io.EOF
+	}
+	defer func() {
+		if !r.finished && errors.Is(err, io.EOF) {
+			err = errors.WithStack(io.ErrUnexpectedEOF)
+		}
+	}()
+
 	record := make([]data.Data, len(r.columns))
 
 LOOP:
@@ -98,21 +117,24 @@ LOOP:
 
 			crcOfCrc, err := r.protocReader.ReadUInt32()
 			if err != nil {
-				// EOF inside the required checksum is a truncated stream, not
-				// the successful EOF that Iterator treats as completion.
-				if errors.Is(err, io.EOF) {
-					err = io.ErrUnexpectedEOF
-				}
 				return nil, errors.WithStack(err)
 			}
-			_, err = r.protocReader.inner.Read([]byte{'0'})
-			if (!errors.Is(err, io.EOF)) && (!errors.Is(err, io.ErrUnexpectedEOF)) {
+			_, err = r.protocReader.inner.ReadByte()
+			if err == nil {
 				return nil, errors.New("expect end of stream, but not")
+			}
+			if !errors.Is(err, io.EOF) {
+				return nil, errors.WithStack(err)
 			}
 
 			if r.crcOfCrc.Value() != crcOfCrc {
 				return nil, errors.New("checksum is invalid")
 			}
+			if r.expectedRows != nil && r.count != *r.expectedRows {
+				return nil, fmt.Errorf("read %d of %d rows: %w", r.count, *r.expectedRows, io.ErrUnexpectedEOF)
+			}
+			r.finished = true
+			return nil, io.EOF
 		default:
 			columnIndex := int32(tag)
 			if int(columnIndex) > len(r.columns) {
@@ -130,6 +152,9 @@ LOOP:
 	}
 
 	r.count += 1
+	if r.expectedRows != nil && r.count > *r.expectedRows {
+		return nil, fmt.Errorf("received more than %d rows for the requested range", *r.expectedRows)
+	}
 	return record, nil
 }
 
@@ -236,7 +261,10 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 		}
 		r.recordCrc.Update(v)
 		t := dt.(datatype.VarcharType)
-		fieldValue, _ = data.MakeVarChar(t.Length, string(v))
+		fieldValue, err = data.MakeVarChar(t.Length, string(v))
+		if err != nil {
+			return nil, errors.Wrap(err, "decode VARCHAR")
+		}
 	case datatype.CHAR:
 		v, err := r.protocReader.ReadBytes()
 		if err != nil {
@@ -244,7 +272,10 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 		}
 		r.recordCrc.Update(v)
 		t := dt.(datatype.CharType)
-		fieldValue, _ = data.MakeChar(t.Length, string(v))
+		fieldValue, err = data.MakeChar(t.Length, string(v))
+		if err != nil {
+			return nil, errors.Wrap(err, "decode CHAR")
+		}
 	case datatype.BINARY:
 		v, err := r.protocReader.ReadBytes()
 		if err != nil {
@@ -370,27 +401,23 @@ func (r *RecordProtocReader) readArray(t datatype.DataType) (*data.Array, error)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	arrayData := make([]data.Data, arraySize)
+	array := data.NewArrayWithType(datatype.NewArrayType(t))
 
-	for i := uint32(0); i < arraySize; i++ {
-		b, err := r.protocReader.ReadBool()
+	for range arraySize {
+		isNull, err := r.protocReader.ReadBool()
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
-
-		if b {
-			arrayData[i] = nil
-		} else {
-			arrayData[i], err = r.readField(t)
-			if err != nil {
-				return nil, errors.WithStack(err)
-			}
+		if isNull {
+			array.UnSafeAppend(nil)
+			continue
 		}
+		value, err := r.readField(t)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		array.UnSafeAppend(value)
 	}
-
-	at := datatype.NewArrayType(t)
-	array := data.NewArrayWithType(at)
-	array.UnSafeAppend(arrayData...)
 	return array, nil
 }
 
@@ -413,33 +440,34 @@ func (r *RecordProtocReader) readMap(t datatype.MapType) (*data.Map, error) {
 	for i, n := 0, keys.Len(); i < n; i++ {
 		key := keys.Index(i)
 		value := values.Index(i)
-		dm.Set(key, value)
+		if err := dm.Set(key, value); err != nil {
+			return nil, errors.Wrap(err, "invalid protobuf map entry")
+		}
 	}
 
 	return dm, nil
 }
 
 func (r *RecordProtocReader) readStruct(t datatype.StructType) (*data.Struct, error) {
-	sd := data.NewStructWithTyp(t)
+	record := data.NewStructWithTyp(t)
 
-	for _, ft := range t.Fields {
-		fn := ft.Name
-		b, err := r.protocReader.ReadBool()
+	for _, field := range t.Fields {
+		isNull, err := r.protocReader.ReadBool()
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
 
-		if b {
-			sd.SetField(fn, nil)
-		} else {
-			fd, err := r.readField(ft.Type)
+		var value data.Data
+		if !isNull {
+			value, err = r.readField(field.Type)
 			if err != nil {
 				return nil, errors.WithStack(err)
 			}
-
-			sd.SetField(fn, fd)
+		}
+		if err := record.SetField(field.Name, value); err != nil {
+			return nil, errors.Wrapf(err, "invalid protobuf struct field %q", field.Name)
 		}
 	}
 
-	return sd, nil
+	return record, nil
 }

@@ -2,8 +2,9 @@ package restclient
 
 import (
 	"context"
-	"math/rand"
+	"math/rand/v2"
 	"net"
+	"slices"
 	"sync"
 	"time"
 )
@@ -16,6 +17,9 @@ type Dialer struct {
 }
 
 func (dialer *Dialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	if dialer.Resolver == nil {
+		return dialer.Dialer.DialContext(ctx, network, address)
+	}
 	host, port, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, err
@@ -23,16 +27,12 @@ func (dialer *Dialer) DialContext(ctx context.Context, network, address string) 
 
 	ips, _ := dialer.Resolver.Lookup(ctx, host)
 
-	ipsNum := len(ips)
-	if ipsNum > 0 {
-		rand.Seed(time.Now().UnixNano())
-		rand.Shuffle(ipsNum, func(i, j int) {
-			ips[i], ips[j] = ips[j], ips[i]
-		})
-	}
+	rand.Shuffle(len(ips), func(i, j int) {
+		ips[i], ips[j] = ips[j], ips[i]
+	})
 
 	for _, ip := range ips {
-		conn, err := dialer.Dialer.DialContext(ctx, network, ip+":"+port)
+		conn, err := dialer.Dialer.DialContext(ctx, network, net.JoinHostPort(ip, port))
 		if err == nil {
 			return conn, nil
 		}
@@ -71,7 +71,7 @@ func (r *Resolver) Lookup(ctx context.Context, host string) ([]string, error) {
 			return r.lookup(ctx, host)
 		}
 
-		return ce.ips, nil
+		return slices.Clone(ce.ips), nil
 	}
 
 	return r.lookup(ctx, host)
@@ -84,17 +84,16 @@ func (r *Resolver) lookup(ctx context.Context, host string) ([]string, error) {
 		return nil, err
 	}
 
-	if len(ips) == 0 {
-		return nil, nil
-	}
-
 	strIPs := make([]string, len(ips))
 	for index, ip := range ips {
 		strIPs[index] = ip.String()
 	}
 
 	r.lock.Lock()
-	r.cache[host] = cacheEntry{ips: strIPs, createTime: time.Now().Unix()}
+	if r.cache == nil {
+		r.cache = make(map[string]cacheEntry)
+	}
+	r.cache[host] = cacheEntry{ips: slices.Clone(strIPs), createTime: time.Now().Unix()}
 	r.lock.Unlock()
 
 	return strIPs, nil

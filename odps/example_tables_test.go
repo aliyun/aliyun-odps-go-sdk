@@ -35,8 +35,6 @@ func ExampleTables_List() {
 		println(fmt.Sprintf("%s, %s, %s", t.Name(), t.Owner(), t.Type()))
 	}
 	ts.List(f, odps.TableFilter.Extended())
-
-	// Output:
 }
 
 func ExampleTables_BatchLoadTables() {
@@ -62,8 +60,6 @@ func ExampleTables_BatchLoadTables() {
 	for _, c := range schema.Columns {
 		println(fmt.Sprintf("%s, %s, %t, %s", c.Name, c.Type, c.NotNull, c.Comment))
 	}
-
-	// Output:
 }
 
 func ExampleTables_Create() {
@@ -114,8 +110,6 @@ func ExampleTables_Create() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-
-	// Output:
 }
 
 func ExampleTables_Delete() {
@@ -124,6 +118,4 @@ func ExampleTables_Delete() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-
-	// Output:
 }

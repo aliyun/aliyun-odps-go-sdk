@@ -39,12 +39,12 @@ func IsDataEqual(d1 Data, d2 Data) bool {
 
 func isMapEqual(d1 Data, d2 Data) bool {
 	m1, ok := d1.(*Map)
-	if !ok {
+	if !ok || m1 == nil {
 		return false
 	}
 
 	m2, ok := d2.(*Map)
-	if !ok {
+	if !ok || m2 == nil {
 		return false
 	}
 

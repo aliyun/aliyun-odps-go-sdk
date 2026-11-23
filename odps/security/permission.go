@@ -53,6 +53,9 @@ func NewPermission(
 }
 
 func (perm *Permission) SetColumns(columns []string) {
+	if perm.Params == nil {
+		perm.Params = make(map[string]string)
+	}
 	j, _ := json.Marshal(columns)
 	perm.Params["odps:SelectColumn"] = string(j)
 }
@@ -82,7 +85,7 @@ func (perm *Permission) Resource() string {
 	case ObjectTypeFunction:
 		return rb.Function(perm.ObjectName)
 	case ObjectTypeInstance:
-		return rb.Function(perm.ProjectName)
+		return rb.Instance(perm.ObjectName)
 	case ObjectTypeResource:
 		return rb.Resource(perm.ObjectName)
 	default:

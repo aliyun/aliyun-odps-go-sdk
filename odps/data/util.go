@@ -23,31 +23,17 @@ import (
 )
 
 func tryConvertType(src interface{}, dst interface{}) error {
-	if src == nil {
-		// TODO 这个地方要看一下, 要不要做: dst = nil
+	source := reflect.Indirect(reflect.ValueOf(src))
+	if !source.IsValid() {
 		return nil
 	}
-
-	srcT := reflect.TypeOf(src)
-	srcV := reflect.ValueOf(src)
-
-	dstT := reflect.TypeOf(dst)
-	dstV := reflect.ValueOf(dst)
-
-	if srcV.Kind() == reflect.Ptr {
-		srcT = srcT.Elem()
-		srcV = srcV.Elem()
+	target := reflect.Indirect(reflect.ValueOf(dst))
+	if !target.CanSet() {
+		return errors.Errorf("cannot assign to %T", dst)
 	}
-
-	if dstV.Kind() == reflect.Ptr {
-		dstT = dstT.Elem()
-		dstV = dstV.Elem()
+	if !source.Type().AssignableTo(target.Type()) {
+		return errors.Errorf("cannot convert %s to %s", source.Type(), target.Type())
 	}
-
-	if srcT.AssignableTo(dstT) {
-		dstV.Set(srcV)
-		return nil
-	}
-
-	return errors.Errorf("cannot convert %s to %s", srcT.Name(), dstT.Name())
+	target.Set(source)
+	return nil
 }
