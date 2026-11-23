@@ -185,7 +185,8 @@ func Example_insert() {
 		log.Fatalf("%+v", err)
 	}
 
-	_, err = db.Exec("insert into simple_struct values (?);", sql.Named("", odpsStruct.Sql()))
+	_, err = db.Exec("insert into simple_struct values (named_struct('a', cast(? as int), 'b', named_struct('b1', ?)));",
+		simpleStruct.A, simpleStruct.B.B1)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -228,7 +229,7 @@ func Example_createTable() {
 		)),
 	)
 
-	_, err = db.Exec("create table if not exists simple_struct (struct_field @f);", sql.Named("f", structType.String()))
+	_, err = db.Exec("create table if not exists simple_struct (struct_field " + structType.String() + ");")
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

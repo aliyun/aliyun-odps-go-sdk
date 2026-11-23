@@ -17,6 +17,7 @@
 package odps
 
 import (
+	"context"
 	"encoding/xml"
 	"net/url"
 
@@ -78,33 +79,22 @@ func (ss *Schemas) ListWithFilter(f func(*Schema, error), filters ...SchemaFilte
 		}
 	}
 
-	rb := common.ResourceBuilder{ProjectName: ss.projectName}
-	resource := rb.Schemas()
 	client := ss.odpsIns.restClient
 
-	type ResModel struct {
-		XMLName  xml.Name      `xml:"Schemas"`
-		Schemas  []schemaModel `xml:"Schema"`
-		Marker   string
-		MaxItems int
-	}
-
-	var resModel ResModel
 	for {
-		err := client.GetWithModel(resource, queryArgs, nil, &resModel)
+		page, err := schemasPage(context.Background(), client, ss.projectName, queryArgs)
 		if err != nil {
 			f(nil, err)
 			return err
 		}
 
-		for _, schemaModel := range resModel.Schemas {
+		for _, schemaModel := range page.Items {
 			schema := NewSchema(ss.odpsIns, ss.projectName, schemaModel.Name)
 			f(schema, nil)
 		}
 
-		if resModel.Marker != "" {
-			queryArgs.Set("marker", resModel.Marker)
-			resModel = ResModel{}
+		if page.NextPageToken != "" {
+			queryArgs.Set("marker", page.NextPageToken)
 		} else {
 			break
 		}

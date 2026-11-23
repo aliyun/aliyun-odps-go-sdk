@@ -156,11 +156,20 @@ func AttachToExistedUploadSession(
 	restClient restclient.RestClient,
 	opts ...Option,
 ) (*UploadSession, error) {
+	return attachUploadSession(sessionId, projectName, tableName, "", restClient, opts...)
+}
+
+func attachUploadSession(
+	sessionId, projectName, tableName, quotaName string,
+	restClient restclient.RestClient,
+	opts ...Option,
+) (*UploadSession, error) {
 	cfg := newSessionConfig(opts...)
 
 	session := UploadSession{
 		Id:           sessionId,
 		ProjectName:  projectName,
+		QuotaName:    quotaName,
 		SchemaName:   cfg.SchemaName,
 		TableName:    tableName,
 		partitionKey: cfg.PartitionKey,
@@ -303,7 +312,7 @@ func (u *UploadSession) loadInformation(req *http.Request) error {
 	u.Id = resModel.UploadID
 	u.fieldMaxSize = resModel.MaxFieldSize
 
-	if resModel.QuotaName != "" {
+	if u.QuotaName == "" {
 		u.QuotaName = resModel.QuotaName
 	}
 

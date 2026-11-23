@@ -15,7 +15,10 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	dsn := config.FormatDsn()
+	dsn, err := config.FormatDSN()
+	if err != nil {
+		log.Fatal(err)
+	}
 	// or dsn := "http://<accessId>:<accessKey>@<endpoint>?project=<project>"
 
 	db, err := sql.Open("odps", dsn)
@@ -34,7 +37,7 @@ func main() {
 
 	// sql of creating table json_demo :
 	// CREATE TABLE IF NOT EXISTS json_demo(id int, json JSON);
-	insertSql := "insert into json_table values (@id, @json);"
+	insertSql := "insert into json_table values (@id, json_parse(@json));"
 
 	records := [][]data.Data{
 		{
@@ -83,10 +86,14 @@ func main() {
 	}
 
 	for _, record := range records {
+		var jsonText any
+		if value, ok := record[1].(*data.Json); ok && value != nil {
+			jsonText = value.GetData()
+		}
 		_, err = db.Exec(
 			insertSql,
-			sql.Named("id", record[0].Sql()),
-			sql.Named("json", record[1].Sql()),
+			sql.Named("id", int64(record[0].(data.Int))),
+			sql.Named("json", jsonText),
 		)
 		if err != nil {
 			log.Fatalf("%+v", err)

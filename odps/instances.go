@@ -223,12 +223,20 @@ func (instances *Instances) createTask(ctx context.Context, projectName string, 
 				return errors.New("invalid response, Location header required")
 			}
 
-			splitAt := strings.LastIndex(location, "/")
-			if splitAt < 0 || splitAt == len(location)-1 {
+			ref, err := url.Parse(location)
+			if err != nil {
 				return errors.New("invalid response, value of Location header is invalid")
 			}
-
-			instanceId = location[splitAt+1:]
+			locationPath := ref.EscapedPath()
+			splitAt := strings.LastIndex(locationPath, "/")
+			if splitAt < 0 || splitAt == len(locationPath)-1 {
+				return errors.New("invalid response, value of Location header is invalid")
+			}
+			id, err := url.PathUnescape(locationPath[splitAt+1:])
+			if err != nil || validateName("instance", id) != nil {
+				return errors.New("invalid response, value of Location header is invalid")
+			}
+			instanceId = id
 			if res.StatusCode == 201 {
 				maxqaQueryCookie = res.Header.Get(common.HttpHeaderMaxQAQueryCookie)
 				return nil
@@ -237,8 +245,13 @@ func (instances *Instances) createTask(ctx context.Context, projectName string, 
 			return errors.WithStack(decoder.Decode(&resModel))
 		})
 		if err != nil {
-			if ctxErr := ctx.Err(); instanceId != "" && ctxErr != nil && errors.Is(err, ctxErr) {
-				return NewInstance(instances.odpsIns, projectName, instanceId), err
+			if instanceId != "" {
+				instance := NewInstance(instances.odpsIns, projectName, instanceId)
+				instance.taskNameCommitted = task.GetName()
+				instance.MaxQA.IsMaxQA = maxqaOptions.UseMaxQA
+				instance.MaxQA.SessionID = maxqaOptions.SessionID
+				instance.MaxQA.QueryCookie = maxqaQueryCookie
+				return instance, err
 			}
 
 			// Only a 409 is retried here. Every other failure - transport
@@ -289,30 +302,13 @@ func (instances *Instances) List(f func(*Instance), filters ...InsFilterFunc) er
 	}
 
 	client := instances.odpsIns.restClient
-	rb := common.ResourceBuilder{ProjectName: instances.projectName}
-	resources := rb.Instances()
-
-	type ResModel struct {
-		XMLName   xml.Name `xml:"Instances"`
-		Marker    string
-		MaxItems  int
-		Instances []struct {
-			Name      string
-			Owner     string
-			StartTime common.GMTTime
-			EndTime   common.GMTTime `xml:"EndTime"`
-			Status    InstanceStatus
-		} `xml:"Instance"`
-	}
-
-	var resModel ResModel
 	for {
-		err := client.GetWithModel(resources, queryArgs, nil, &resModel)
+		page, err := instancesPage(context.Background(), client, instances.projectName, queryArgs)
 		if err != nil {
 			return err
 		}
 
-		for _, model := range resModel.Instances {
+		for _, model := range page.Items {
 			instance := NewInstance(instances.odpsIns, instances.projectName, model.Name)
 			instance.startTime = time.Time(model.StartTime)
 			instance.endTime = time.Time(model.EndTime)
@@ -322,9 +318,8 @@ func (instances *Instances) List(f func(*Instance), filters ...InsFilterFunc) er
 			f(instance)
 		}
 
-		if resModel.Marker != "" {
-			queryArgs.Set("marker", resModel.Marker)
-			resModel = ResModel{}
+		if page.NextPageToken != "" {
+			queryArgs.Set("marker", page.NextPageToken)
 		} else {
 			break
 		}

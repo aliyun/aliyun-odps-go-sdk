@@ -19,7 +19,6 @@ package tunnel
 import (
 	"context"
 	"slices"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -147,7 +146,7 @@ func (t *Tunnel) AttachToExistedUploadSession(
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	session, err := AttachToExistedUploadSession(sessionId, projectName, tableName, client, opts...)
+	session, err := attachUploadSession(sessionId, projectName, tableName, t.quotaName, client, opts...)
 	return session, errors.WithStack(err)
 }
 
@@ -168,7 +167,7 @@ func (t *Tunnel) AttachToExistedDownloadSession(
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	session, err := AttachToExistedDownloadSession(sessionId, projectName, tableName, client, opts...)
+	session, err := attachDownloadSession(sessionId, projectName, tableName, t.quotaName, client, opts...)
 	return session, errors.WithStack(err)
 }
 
@@ -186,7 +185,7 @@ func (t *Tunnel) CreateInstanceResultDownloadSessionContext(
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	session, err := createInstanceResultDownloadSession(ctx, projectName, instanceId, t.quotaName, client, opts...)
+	session, err := createInstanceResultDownloadSession(ctx, projectName, instanceId, t.quotaName, client, newInstanceSessionConfig(opts...))
 	return session, errors.WithStack(err)
 }
 
@@ -291,7 +290,6 @@ func openPreviewReader(ctx context.Context, client *storage.Client, table *odps.
 		options.PartitionColumns[i] = column.Name
 	}
 	if partition != "" {
-		partition = strings.NewReplacer("'", "", "\"", "", "/", ",").Replace(partition)
 		options.Partitions = []string{partition}
 	}
 	snapshot, err := client.CreateTableReadSession(ctx, target, options)
@@ -299,8 +297,14 @@ func openPreviewReader(ctx context.Context, client *storage.Client, table *odps.
 		return nil, err
 	}
 	const maxPreviewRows = 10000
-	if limit < 0 || limit > maxPreviewRows {
+	if limit <= 0 || limit > maxPreviewRows {
 		limit = maxPreviewRows
 	}
-	return snapshot.OpenReader(ctx, &storage.RowRange{Count: min(limit, snapshot.RecordCount())})
+	if count := snapshot.RecordCount(); count >= 0 {
+		if count == 0 {
+			return snapshot.OpenReader(ctx, nil)
+		}
+		limit = min(limit, count)
+	}
+	return snapshot.OpenReader(ctx, &storage.RowRange{Count: limit})
 }

@@ -137,14 +137,19 @@ LOOP:
 			return nil, io.EOF
 		default:
 			columnIndex := int32(tag)
-			if int(columnIndex) > len(r.columns) {
+			if columnIndex < 1 || int(columnIndex) > len(r.columns) {
 				return nil, errors.New("invalid protobuf tag")
 			}
-			r.recordCrc.Update(columnIndex)
 			c := r.columns[columnIndex-1]
+			// Tunnel uses the schema to decode the payload. Some services
+			// label CHAR result fields differently in the Protobuf tag.
+			if c.Type == nil || record[columnIndex-1] != nil {
+				return nil, fmt.Errorf("missing schema type or duplicate tag for column %q", c.Name)
+			}
+			r.recordCrc.Update(columnIndex)
 			fv, err := r.readField(c.Type)
 			if err != nil {
-				return nil, errors.WithStack(err)
+				return nil, errors.Wrapf(err, "column %q", c.Name)
 			}
 
 			record[columnIndex-1] = fv
@@ -221,6 +226,10 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 			return nil, errors.WithStack(err)
 		}
 
+		lo, hi, _ := integerRange(dt.ID())
+		if v < lo || v > hi {
+			return nil, fmt.Errorf("integer out of range for %s", dt.ID())
+		}
 		r.recordCrc.Update(v)
 		fieldValue = data.IntervalYearMonth(v)
 	case datatype.INT:
@@ -229,6 +238,10 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 			return nil, errors.WithStack(err)
 		}
 
+		lo, hi, _ := integerRange(dt.ID())
+		if v < lo || v > hi {
+			return nil, fmt.Errorf("integer out of range for %s", dt.ID())
+		}
 		r.recordCrc.Update(v)
 		fieldValue = data.Int(v)
 	case datatype.SMALLINT:
@@ -237,6 +250,10 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 			return nil, errors.WithStack(err)
 		}
 
+		lo, hi, _ := integerRange(dt.ID())
+		if v < lo || v > hi {
+			return nil, fmt.Errorf("integer out of range for %s", dt.ID())
+		}
 		r.recordCrc.Update(v)
 		fieldValue = data.SmallInt(v)
 	case datatype.TINYINT:
@@ -245,6 +262,10 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 			return nil, errors.WithStack(err)
 		}
 
+		lo, hi, _ := integerRange(dt.ID())
+		if v < lo || v > hi {
+			return nil, fmt.Errorf("integer out of range for %s", dt.ID())
+		}
 		r.recordCrc.Update(v)
 		fieldValue = data.TinyInt(v)
 	case datatype.STRING:
@@ -437,8 +458,20 @@ func (r *RecordProtocReader) readMap(t datatype.MapType) (*data.Map, error) {
 	}
 
 	dm := data.NewMapWithType(t)
+	seen := make(protobufMapKeys, keys.Len())
 	for i, n := 0, keys.Len(); i < n; i++ {
 		key := keys.Index(i)
+		if err := seen.add(key); err != nil {
+			return nil, errors.Wrap(err, "invalid protobuf map entry")
+		}
+		// Slice-backed keys need a pointer to be stored in a Go map. The
+		// duplicate check above uses their byte content.
+		switch v := key.(type) {
+		case data.Binary:
+			key = &v
+		case data.Geography:
+			key = &v
+		}
 		value := values.Index(i)
 		if err := dm.Set(key, value); err != nil {
 			return nil, errors.Wrap(err, "invalid protobuf map entry")

@@ -37,6 +37,7 @@ type RecordProtocWriter struct {
 	crcOfCrc            Crc32CheckSum // crc of record crc
 	count               int64
 	closed              bool
+	writeErr            error
 }
 
 func newRecordProtocWriter(w io.WriteCloser, columns []tableschema.Column, shouldTransformDate bool) RecordProtocWriter {
@@ -65,34 +66,56 @@ func newRecordProtocHttpWriter(conn *httpConnection, columns []tableschema.Colum
 }
 
 func (r *RecordProtocWriter) Write(record data.Record) error {
-	err := r.write(record)
-	return errors.WithStack(err)
+	if r.closed {
+		return errors.New("cannot write to a closed RecordProtocWriter")
+	}
+	if r.writeErr != nil {
+		return r.writeErr
+	}
+	if err := r.validateRecord(record); err != nil {
+		return errors.WithStack(err)
+	}
+	r.writeErr = errors.WithStack(r.writeRecord(record))
+	return r.writeErr
 }
 
-func (r *RecordProtocWriter) write(record data.Record) error {
-	// 这里加一个判断会引起不必要的耗时
-	//if r.closed {
-	//	return errors.New("cannot write to a closed RecordProtocWriter")
-	//}
-	recordColNum := record.Len()
-
-	if recordColNum > len(r.columns) {
-		return errors.New("record values are more than schema.")
+func (r *RecordProtocWriter) validateRecord(record data.Record) error {
+	if record.Len() > len(r.columns) {
+		return errors.New("record values are more than schema")
 	}
+	// Validate the full row before writing any bytes so callers can correct
+	// invalid input and retry the row on the same stream.
+	for i, col := range r.columns {
+		var value data.Data
+		if i < record.Len() {
+			value = wireValue(record[i])
+		}
+		if value == nil && col.NotNull {
+			return errors.Errorf("column %q requires a value", col.Name)
+		}
+		if err := validateRecordValue(col.Type, value); err != nil {
+			return errors.Wrapf(err, "column %q", col.Name)
+		}
+	}
+	return nil
+}
 
-	for colIndex, value := range record {
-		if value == nil || value.Type() == datatype.NullType {
+func (r *RecordProtocWriter) writeRecord(record data.Record) error {
+	for i, value := range record {
+		value = wireValue(value)
+		if value == nil {
 			continue
 		}
-
-		r.recordCrc.Update(int32(colIndex + 1))
-		err := r.writeFieldTag(colIndex+1, r.columns[colIndex].Type)
+		column := r.columns[i]
+		r.recordCrc.Update(int32(i + 1))
+		wireType, err := recordFieldWireType(column.Type)
 		if err != nil {
+			return err
+		}
+		if err := r.protocWriter.WriteTag(protowire.Number(i+1), wireType); err != nil {
 			return errors.WithStack(err)
 		}
-
-		err = r.writeField(value)
-		if err != nil {
+		if err := r.writeField(column.Type, value); err != nil {
 			return errors.WithStack(err)
 		}
 	}
@@ -114,8 +137,10 @@ func (r *RecordProtocWriter) write(record data.Record) error {
 	return nil
 }
 
-func (r *RecordProtocWriter) writeFieldTag(colIndex int, dt datatype.DataType) error {
-	var wireType protowire.Type
+func recordFieldWireType(dt datatype.DataType) (protowire.Type, error) {
+	if dt == nil {
+		return 0, errors.New("missing data type in schema")
+	}
 
 	switch dt.ID() {
 	case datatype.DATETIME,
@@ -126,11 +151,11 @@ func (r *RecordProtocWriter) writeFieldTag(colIndex int, dt datatype.DataType) e
 		datatype.INT,
 		datatype.DATE,
 		datatype.IntervalYearMonth:
-		wireType = protowire.VarintType
+		return protowire.VarintType, nil
 	case datatype.DOUBLE:
-		wireType = protowire.Fixed64Type
+		return protowire.Fixed64Type, nil
 	case datatype.FLOAT:
-		wireType = protowire.Fixed32Type
+		return protowire.Fixed32Type, nil
 	case datatype.IntervalDayTime,
 		datatype.TIMESTAMP,
 		datatype.TIMESTAMP_NTZ,
@@ -144,20 +169,13 @@ func (r *RecordProtocWriter) writeFieldTag(colIndex int, dt datatype.DataType) e
 		datatype.STRUCT,
 		datatype.JSON,
 		datatype.GEOGRAPHY:
-		wireType = protowire.BytesType
+		return protowire.BytesType, nil
 	default:
-		return errors.Errorf("Invalid data type, %s", dt.Name())
+		return 0, errors.Errorf("invalid data type %s", dt.ID())
 	}
-
-	err := r.protocWriter.WriteTag(protowire.Number(int32(colIndex)), wireType)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return nil
 }
 
-func (r *RecordProtocWriter) writeField(val data.Data) error {
+func (r *RecordProtocWriter) writeField(t datatype.DataType, val data.Data) error {
 	switch val := val.(type) {
 	case data.Double:
 		r.recordCrc.Update(val)
@@ -183,23 +201,11 @@ func (r *RecordProtocWriter) writeField(val data.Data) error {
 	case data.TinyInt:
 		r.recordCrc.Update(int64(val))
 		return errors.WithStack(r.protocWriter.WriteSInt64(int64(val)))
-	case *data.String:
-		b := []byte(string(*val))
-		r.recordCrc.Update(b)
-		return errors.WithStack(r.protocWriter.WriteBytes(b))
 	case data.String:
 		b := []byte(string(val))
 		r.recordCrc.Update(b)
 		return errors.WithStack(r.protocWriter.WriteBytes(b))
-	case *data.VarChar:
-		b := []byte(val.Data())
-		r.recordCrc.Update(b)
-		return errors.WithStack(r.protocWriter.WriteBytes(b))
 	case data.VarChar:
-		b := []byte(val.Data())
-		r.recordCrc.Update(b)
-		return errors.WithStack(r.protocWriter.WriteBytes(b))
-	case *data.Char:
 		b := []byte(val.Data())
 		r.recordCrc.Update(b)
 		return errors.WithStack(r.protocWriter.WriteBytes(b))
@@ -277,38 +283,27 @@ func (r *RecordProtocWriter) writeField(val data.Data) error {
 		b := []byte(val.Value())
 		r.recordCrc.Update(b)
 		return errors.WithStack(r.protocWriter.WriteBytes(b))
-	case *data.Decimal:
-		b := []byte(val.Value())
-		r.recordCrc.Update(b)
-		return errors.WithStack(r.protocWriter.WriteBytes(b))
 	case data.Array:
-		return errors.WithStack(r.writeArray(val.ToSlice()))
-	case *data.Array:
-		return errors.WithStack(r.writeArray(val.ToSlice()))
+		return errors.WithStack(r.writeArray(t.(datatype.ArrayType).ElementType, val.ToSlice()))
 	case data.Map:
-		return errors.WithStack(r.writeMap(&val))
-	case *data.Map:
-		return errors.WithStack(r.writeMap(val))
+		return errors.WithStack(r.writeMap(t.(datatype.MapType), &val))
 	case data.Struct:
-		return errors.WithStack(r.writeStruct(&val))
-	case *data.Struct:
-		return errors.WithStack(r.writeStruct(val))
+		return errors.WithStack(r.writeStruct(t.(datatype.StructType), &val))
 	case data.Json:
 		return errors.WithStack(r.writeJson(&val))
-	case *data.Json:
-		return errors.WithStack(r.writeJson(val))
 	}
 
 	return errors.Errorf("invalid data type %v", val.Type())
 }
 
-func (r *RecordProtocWriter) writeArray(val []data.Data) error {
+func (r *RecordProtocWriter) writeArray(t datatype.DataType, val []data.Data) error {
 	err := r.protocWriter.WriteInt32(int32(len(val)))
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
 	for _, d := range val {
+		d = wireValue(d)
 		if d == nil {
 			err = r.protocWriter.WriteBool(true)
 			if err != nil {
@@ -320,7 +315,7 @@ func (r *RecordProtocWriter) writeArray(val []data.Data) error {
 				return errors.WithStack(err)
 			}
 
-			err = r.writeField(d)
+			err = r.writeField(t, d)
 			if err != nil {
 				return errors.WithStack(err)
 			}
@@ -330,7 +325,7 @@ func (r *RecordProtocWriter) writeArray(val []data.Data) error {
 	return nil
 }
 
-func (r *RecordProtocWriter) writeMap(val *data.Map) error {
+func (r *RecordProtocWriter) writeMap(t datatype.MapType, val *data.Map) error {
 	m := val.ToGoMap()
 	l := len(m)
 	keys, values := make([]data.Data, 0, l), make([]data.Data, 0, l)
@@ -340,17 +335,18 @@ func (r *RecordProtocWriter) writeMap(val *data.Map) error {
 		values = append(values, v)
 	}
 
-	err := r.writeArray(keys)
+	err := r.writeArray(t.KeyType, keys)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	return errors.WithStack(r.writeArray(values))
+	return errors.WithStack(r.writeArray(t.ValueType, values))
 }
 
-func (r *RecordProtocWriter) writeStruct(val *data.Struct) error {
-	for _, field := range val.Fields() {
-		if field.Value == nil {
+func (r *RecordProtocWriter) writeStruct(t datatype.StructType, val *data.Struct) error {
+	for _, field := range t.Fields {
+		value := wireValue(val.GetField(field.Name))
+		if value == nil {
 			err := r.protocWriter.WriteBool(true)
 			if err != nil {
 				return errors.WithStack(err)
@@ -361,7 +357,7 @@ func (r *RecordProtocWriter) writeStruct(val *data.Struct) error {
 				return errors.WithStack(err)
 			}
 
-			err = r.writeField(field.Value)
+			err = r.writeField(field.Type, value)
 			if err != nil {
 				return errors.WithStack(err)
 			}
@@ -386,6 +382,10 @@ func (r *RecordProtocWriter) close() (err error) {
 			err = errors.WithStack(closeErr)
 		}
 	}()
+
+	if r.writeErr != nil {
+		return r.writeErr
+	}
 
 	err = r.protocWriter.WriteTag(MetaCount, protowire.VarintType)
 	if err != nil {
@@ -421,7 +421,7 @@ func (r *RecordProtocWriter) Close() error {
 	if r.httpRes != nil {
 		closeHttpError := errors.WithStack(r.httpRes.closeRes())
 
-		if closeHttpError != nil {
+		if err == nil && closeHttpError != nil {
 			return errors.WithStack(closeHttpError)
 		}
 	}

@@ -54,17 +54,15 @@ func CreateInstanceResultDownloadSession(
 	restClient restclient.RestClient,
 	opts ...InstanceOption,
 ) (*InstanceResultDownloadSession, error) {
-	return createInstanceResultDownloadSession(context.Background(), projectName, instanceId, quotaName, restClient, opts...)
+	return createInstanceResultDownloadSession(context.Background(), projectName, instanceId, quotaName, restClient, newInstanceSessionConfig(opts...))
 }
 
 func createInstanceResultDownloadSession(
 	ctx context.Context,
 	projectName, instanceId, quotaName string,
 	restClient restclient.RestClient,
-	opts ...InstanceOption,
+	cfg *instanceSessionConfig,
 ) (*InstanceResultDownloadSession, error) {
-	cfg := newInstanceSessionConfig(opts...)
-
 	session := InstanceResultDownloadSession{
 		InstanceId:   instanceId,
 		ProjectName:  projectName,
@@ -142,6 +140,12 @@ func (is *InstanceResultDownloadSession) RecordCount() int {
 
 func (is *InstanceResultDownloadSession) ShouldTransformDate() bool {
 	return is.shouldTransformDate
+}
+
+// CloseIdleConnections closes SDK-owned connections for the result session.
+// Active readers and caller-owned transports remain usable.
+func (is *InstanceResultDownloadSession) CloseIdleConnections() {
+	is.RestClient.CloseIdleConnections()
 }
 
 func (is *InstanceResultDownloadSession) ResourceUrl() string {

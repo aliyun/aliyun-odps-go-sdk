@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 )
 
@@ -15,7 +14,10 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	dsn := config.FormatDsn()
+	dsn, err := config.FormatDSN()
+	if err != nil {
+		log.Fatal(err)
+	}
 	// or dsn := "http://<accessId>:<accessKey>@<endpoint>?project=<project>"
 
 	db, err := sql.Open("odps", dsn)
@@ -23,22 +25,17 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	insertSql := "insert into user_test partition (age=20, hometown='hangzhou') values (" +
-		"@name, @score, @birthday, @extra);"
-
-	birthday, _ := data.NewDateTime("2010-11-11 15:20:00")
-	addresses := data.NewArray()
-	_ = addresses.Append("apsaras", "efc")
-	extra := data.NewStruct()
-	_ = extra.SetField("address", addresses)
-	_ = extra.SetField("hobby", "swimming")
+	insertSQL := "insert into user_test partition (age=20, hometown='hangzhou') values (" +
+		"@name, @score, cast(@birthday as datetime), named_struct('address', array(@first, @second), 'hobby', @hobby));"
 
 	_, err = db.Exec(
-		insertSql,
-		sql.Named("name", "'xiaoming'"),
+		insertSQL,
+		sql.Named("name", "xiaoming"),
 		sql.Named("score", 99),
-		sql.Named("birthday", birthday.Sql()), // datetime'2010-11-11 15:20:00'
-		sql.Named("extra", extra.Sql()),       // named_struct('address', array('apsaras', 'efc'), 'hobby', 'swimming')
+		sql.Named("birthday", "2010-11-11 15:20:00"),
+		sql.Named("first", "apsaras"),
+		sql.Named("second", "efc"),
+		sql.Named("hobby", "swimming"),
 	)
 	if err != nil {
 		log.Fatalf("%+v", err)

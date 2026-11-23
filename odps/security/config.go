@@ -101,6 +101,9 @@ func (sc *Config) Load() error {
 }
 
 func (sc *Config) Update(supervisionToken string) error {
+	if !sc.beLoaded || sc.withoutExceptionPolicy {
+		return errors.New("load the complete security configuration before updating it")
+	}
 	rb := common.NewResourceBuilder(sc.projectName)
 	resource := rb.Project()
 	client := sc.restClient

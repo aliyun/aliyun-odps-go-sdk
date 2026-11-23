@@ -3,6 +3,11 @@
 ## 1.0.0 (unreleased)
 
 - Require Go 1.26.11 or later and use Apache Arrow Go v18 for public Arrow types.
+- Add a scoped client with validated construction, context-aware catalog pages, and `SubmitSQL`, `Wait`, and `Cancel` for SQL jobs.
+- Add versioned Storage read and write descriptors. Preserve initializing snapshots across canceled waits and expose read metadata and closed stream versions.
+- Bind SQL values with type-aware escaping and perform a service request for database/sql ping.
+- Validate Protobuf values against the column schema before writing and reject out-of-range integers when reading.
+- Resolve DSN credentials from a single source, require complete matching security configuration snapshots before updates, and preserve view types and quotas during listing and Tunnel resumption.
 - Add Storage API V2 clients for reading SQL instance and table results and for staging, resuming, committing, and aborting batch writes.
 - Validate all Storage API V2 stream versions before explicit commits and use the Storage quota when discovering the Tunnel endpoint.
 - Match the Storage API V2 wire format for table snapshots, Arrow streams, and write-session resumption.

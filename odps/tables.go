@@ -17,6 +17,7 @@
 package odps
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
 	"maps"
@@ -66,35 +67,28 @@ func (ts *Tables) List(f func(*Table, error), filters ...TFilterFunc) {
 		}
 	}
 
-	rb := common.ResourceBuilder{ProjectName: ts.projectName}
-	resource := rb.Tables()
 	client := ts.odpsIns.restClient
 
-	type ResModel struct {
-		XMLName  xml.Name     `xml:"Tables"`
-		Tables   []tableModel `xml:"Table"`
-		Marker   string
-		MaxItems int
-	}
-
-	var resModel ResModel
 	for {
-		err := client.GetWithModel(resource, queryArgs, nil, &resModel)
+		page, err := tablesPage(context.Background(), client, ts.projectName, queryArgs)
 		if err != nil {
 			f(nil, err)
 			break
 		}
 
-		for _, tableModel := range resModel.Tables {
+		for _, tableModel := range page.Items {
 			table := NewTable(ts.odpsIns, ts.projectName, ts.schemaName, tableModel.Name)
-			table.model.Owner = tableModel.Owner
+			tableModel.ProjectName = ts.projectName
+			if tableModel.SchemaName == "" {
+				tableModel.SchemaName = ts.schemaName
+			}
+			table.model = tableModel
 
 			f(table, nil)
 		}
 
-		if resModel.Marker != "" {
-			queryArgs.Set("marker", resModel.Marker)
-			resModel = ResModel{}
+		if page.NextPageToken != "" {
+			queryArgs.Set("marker", page.NextPageToken)
 		} else {
 			break
 		}

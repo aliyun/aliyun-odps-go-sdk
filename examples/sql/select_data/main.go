@@ -15,7 +15,10 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	dsn := config.FormatDsn()
+	dsn, err := config.FormatDSN()
+	if err != nil {
+		log.Fatal(err)
+	}
 	// or dsn := "http://<accessId>:<accessKey>@<endpoint>?project=<project>"
 
 	db, err := sql.Open("odps", dsn)

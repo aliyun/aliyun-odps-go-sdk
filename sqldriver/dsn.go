@@ -18,11 +18,12 @@ package sqldriver
 
 import (
 	"errors"
+	"fmt"
 	"net/url"
 	"os"
-	"strconv"
-	"time"
+	"strings"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/configvalue"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 )
 
@@ -36,101 +37,82 @@ var (
 	NewConfigFromIni = odps.NewConfigFromIni
 )
 
-// ParseDSN dsn格式如下
-// http://AccessId:AccessKey@host:port/path?project=<project_name>&stsToken=<sts_token>&tcpConnectionTimeout=30&httpTimeout=60&tunnelQuotaName=<quota_name>
-// 其中project参数为必填项
+// ParseDSN parses an HTTP(S) endpoint with a required project query parameter.
+// Supply a complete AK/SK pair (and optional stsToken) in the DSN, or omit
+// credentials and use the ALIBABA_CLOUD_* environment variables as a group.
+// tcpConnectionTimeout and httpTimeout are non-negative seconds.
 func ParseDSN(dsn string) (*Config, error) {
 	u, err := url.Parse(dsn)
+	if err != nil || u.Fragment != "" {
+		return nil, errors.New("invalid URL for ODPS DSN")
+	}
+	params, err := url.ParseQuery(u.RawQuery)
+	if err != nil {
+		return nil, errors.New("invalid query parameters in ODPS DSN")
+	}
+	reserved := []string{"project", "stsToken", "tcpConnectionTimeout", "httpTimeout", "tunnelEndpoint", "tunnelQuotaName", "enableLogview"}
+	for _, key := range reserved {
+		if len(params[key]) > 1 {
+			return nil, fmt.Errorf("duplicate %s in ODPS DSN", key)
+		}
+	}
+
+	config := NewConfig()
+	config.ProjectName = params.Get("project")
+	if strings.TrimSpace(config.ProjectName) == "" {
+		return nil, errors.New("project name is not set")
+	}
+	user := u.User
+	u.User, u.RawQuery, u.ForceQuery = nil, "", false
+	if _, err := configvalue.Endpoint(u.String(), "endpoint"); err != nil {
+		return nil, err
+	}
+	config.Endpoint = u.String()
+	if user != nil {
+		config.AccessId = user.Username()
+		config.AccessKey, _ = user.Password()
+		config.StsToken = params.Get("stsToken")
+	} else {
+		if params.Get("stsToken") != "" {
+			return nil, errors.New("stsToken in the DSN requires an explicit AccessId and AccessKey")
+		}
+		config.AccessId = os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_ID")
+		config.AccessKey = os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
+		config.StsToken = os.Getenv("ALIBABA_CLOUD_SECURITY_TOKEN")
+	}
+	if strings.TrimSpace(config.StsToken) == "" {
+		config.StsToken = ""
+	}
+	if strings.TrimSpace(config.AccessId) == "" {
+		return nil, errors.New("AccessId is not set")
+	}
+	if strings.TrimSpace(config.AccessKey) == "" {
+		return nil, errors.New("AccessKey is not set")
+	}
+	config.TunnelEndpoint = params.Get("tunnelEndpoint")
+	config.TunnelQuotaName = params.Get("tunnelQuotaName")
+	if err := configvalue.SQLTunnelRoute(config.TunnelEndpoint, config.TunnelQuotaName); err != nil {
+		return nil, err
+	}
+	config.TcpConnectionTimeout, err = configvalue.TimeoutSeconds(params.Get("tcpConnectionTimeout"), "tcpConnectionTimeout", config.TcpConnectionTimeout)
+	if err != nil {
+		return nil, err
+	}
+	config.HttpTimeout, err = configvalue.TimeoutSeconds(params.Get("httpTimeout"), "httpTimeout", config.HttpTimeout)
 	if err != nil {
 		return nil, err
 	}
 
-	accessId := u.User.Username()
-	if accessId == "" {
-		accessId = os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_ID")
-
-		if accessId == "" {
-			return nil, errors.New("AccessId is not set")
-		}
-	}
-
-	accessKey, _ := u.User.Password()
-	if accessKey == "" {
-		accessKey = os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
-
-		if accessKey == "" {
-			return nil, errors.New("AccessKey is not set")
-		}
-	}
-
-	queryParams := u.Query()
-
-	projectName := queryParams.Get("project")
-	if projectName == "" {
-		return nil, errors.New("project name is not set")
-	}
-	queryParams.Del("project")
-
-	endpoint := (&url.URL{
-		Scheme: u.Scheme,
-		Host:   u.Host,
-		Path:   u.Path,
-	}).String()
-
-	config := NewConfig()
-	config.AccessId = accessId
-	config.AccessKey = accessKey
-	config.Endpoint = endpoint
-	config.ProjectName = projectName
-
-	var connTimeout, httpTimeout string
-
-	optionalParams := []string{"stsToken", "tcpConnectionTimeout", "httpTimeout", "tunnelEndpoint", "tunnelQuotaName"}
-	paramPointer := []*string{&config.StsToken, &connTimeout, &httpTimeout, &config.TunnelEndpoint, &config.TunnelQuotaName}
-	for i, p := range optionalParams {
-		v := queryParams.Get(p)
-		if v != "" {
-			*paramPointer[i] = v
-		}
-		queryParams.Del(p)
-	}
-
-	if config.StsToken == "" {
-		stsTokenFromEnv := os.Getenv("ALIBABA_CLOUD_SECURITY_TOKEN")
-		if stsTokenFromEnv != "" {
-			config.StsToken = stsTokenFromEnv
-		}
-	}
-
-	if connTimeout != "" {
-		n, err := strconv.ParseInt(connTimeout, 10, 32)
-		if err == nil {
-			config.TcpConnectionTimeout = time.Duration(n) * time.Second
-		}
-	}
-
-	if httpTimeout != "" {
-		n, err := strconv.ParseInt(httpTimeout, 10, 32)
-		if err == nil {
-			config.HttpTimeout = time.Duration(n) * time.Second
-		}
-	}
-
-	otherParams := []string{"enableLogview"}
 	config.Others = make(map[string]string)
-	for _, p := range otherParams {
-		if v := queryParams.Get(p); v != "" {
-			config.Others[p] = v
-			queryParams.Del(p)
-		}
+	if v := params.Get("enableLogview"); v != "" {
+		config.Others["enableLogview"] = v
 	}
-
-	config.Hints = make(map[string]string)
-	if len(queryParams) > 0 {
-		for k, params := range queryParams {
-			config.Hints[k] = params[0]
-		}
+	for _, key := range reserved {
+		params.Del(key)
 	}
-
+	config.Hints = make(map[string]string, len(params))
+	for key, values := range params {
+		config.Hints[key] = values[0]
+	}
 	return config, nil
 }

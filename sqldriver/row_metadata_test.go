@@ -35,10 +35,10 @@ func TestRowValuesAndColumnMetadata(t *testing.T) {
 		null  any
 	}{
 		{data.BigInt(-42), int64(-42), int64(0), NullInt64{}},
-		{data.Int(-12), int(-12), int(0), NullInt32{}},
-		{data.SmallInt(-2), int16(-2), int16(0), NullInt16{}},
-		{data.TinyInt(7), int8(7), int8(0), NullInt8{}},
-		{data.Float(3.25), float32(3.25), float32(0), NullFloat32{}},
+		{data.Int(-12), int64(-12), int64(0), NullInt32{}},
+		{data.SmallInt(-2), int64(-2), int64(0), NullInt16{}},
+		{data.TinyInt(7), int64(7), int64(0), NullInt8{}},
+		{data.Float(3.25), float64(3.25), float64(0), NullFloat32{}},
 		{data.Double(3.5), float64(3.5), float64(0), NullFloat64{}},
 		{data.String("text"), "text", "", NullString{}},
 		{char, char.Data(), "", NullString{}},
@@ -49,7 +49,7 @@ func TestRowValuesAndColumnMetadata(t *testing.T) {
 		{data.DateTime(dt), dt, NullDateTime{}, NullDateTime{}},
 		{data.Timestamp(dt), dt, NullTimeStamp{}, NullTimeStamp{}},
 		{data.TimestampNtz(dt), dt, NullTimeStampNtz{}, NullTimeStampNtz{}},
-		{decimal, decimal, Decimal{}, Decimal{}},
+		{decimal, "-1.020", Decimal{}, Decimal{}},
 		{list, list, Array{}, Array{}},
 		{mapping, mapping, Map{}, Map{}},
 		{structure, structure, Struct{}, Struct{}},
@@ -90,14 +90,14 @@ func TestRowReaderRejectsMismatchedColumnCount(t *testing.T) {
 
 func TestNullNumericScanners(t *testing.T) {
 	var i8 NullInt8
-	require.NoError(t, i8.Scan(int8(-4)))
+	require.NoError(t, i8.Scan(int64(-4)))
 	require.Equal(t, NullInt8{Int8: -4, Valid: true}, i8)
 	require.Error(t, i8.Scan("not a number"))
 	require.NoError(t, i8.Scan(nil))
 	require.Equal(t, NullInt8{}, i8)
 
 	var i16 NullInt16
-	require.NoError(t, i16.Scan(int16(-256)))
+	require.NoError(t, i16.Scan(int64(-256)))
 	require.Equal(t, NullInt16{Int16: -256, Valid: true}, i16)
 	require.Error(t, i16.Scan("not a number"))
 	require.NoError(t, i16.Scan(nil))
@@ -116,4 +116,58 @@ func TestNullNumericScanners(t *testing.T) {
 	require.Error(t, binary.Scan("not bytes"))
 	require.NoError(t, binary.Scan(nil))
 	require.Nil(t, binary)
+}
+
+func TestDecimalScannerPreservesScale(t *testing.T) {
+	var d Decimal
+	require.NoError(t, d.Scan("-1.020"))
+	require.Equal(t, "-1.020", (*data.Decimal)(&d).String())
+	require.Equal(t, 3, (*data.Decimal)(&d).Scale())
+}
+
+func TestCompatibilityScannersKeepWideDecimalAndNumericRanges(t *testing.T) {
+	const exact = "-123456789012345678901234567890123456789.020"
+	column := tableschema.Column{Name: "decimal_value", Type: datatype.NewDecimalType(45, 3)}
+	reader := &rowsReader{
+		columns: []tableschema.Column{column},
+		inner:   &fakeRecordReader{records: []data.Record{{data.NewDecimal(45, 3, exact)}}},
+	}
+	values := make([]driver.Value, 1)
+	require.NoError(t, reader.Next(values))
+	require.Equal(t, exact, values[0])
+	var core data.Decimal
+	require.NoError(t, core.Scan(values[0]))
+	require.Equal(t, exact, core.String())
+	require.Equal(t, 3, core.Scale())
+	var compat Decimal
+	require.NoError(t, compat.Scan(values[0]))
+	require.Equal(t, exact, (*data.Decimal)(&compat).String())
+	require.Error(t, compat.Scan("invalid"))
+	require.NoError(t, compat.Scan(nil))
+	require.False(t, (*data.Decimal)(&compat).Valid)
+	require.NoError(t, reader.Close())
+
+	var small NullInt16
+	require.NoError(t, small.Scan(int16(7)))
+	require.ErrorContains(t, small.Scan(int64(1<<16)), "SMALLINT")
+	var tiny NullInt8
+	require.NoError(t, tiny.Scan(int8(7)))
+	require.ErrorContains(t, tiny.Scan(int64(128)), "TINYINT")
+	var single NullFloat32
+	require.NoError(t, single.Scan(float64(1.25)))
+	require.Equal(t, float32(1.25), single.Float32)
+	require.ErrorContains(t, single.Scan(float64(1e100)), "FLOAT")
+}
+
+func TestColumnTypeReportsDeclaredDecimalPrecision(t *testing.T) {
+	var rows driver.RowsColumnTypePrecisionScale = &rowsReader{columns: []tableschema.Column{
+		{Name: "amount", Type: datatype.NewDecimalType(15, 3)},
+		{Name: "id", Type: datatype.BigIntType},
+	}}
+	p, s, ok := rows.ColumnTypePrecisionScale(0)
+	require.True(t, ok)
+	require.EqualValues(t, 15, p)
+	require.EqualValues(t, 3, s)
+	_, _, ok = rows.ColumnTypePrecisionScale(1)
+	require.False(t, ok)
 }

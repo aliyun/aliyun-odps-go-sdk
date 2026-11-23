@@ -177,7 +177,8 @@ func TestSecurityRequestsPropagateInvalidEndpointAndTokenRejection(t *testing.T)
 	_, err = manager.GenerateAuthorizationTokenContext(context.Background(), "{}")
 	require.ErrorContains(t, err, "invalid URL escape")
 	config := security.NewSecurityConfig(client, false, "fixture")
-	require.ErrorContains(t, config.Update(""), "invalid URL escape")
+	require.ErrorContains(t, config.Load(), "invalid URL escape")
+	require.ErrorContains(t, config.Update(""), "complete security configuration")
 
 	rejecting := testManager(t, func(w http.ResponseWriter, r *http.Request) {
 		assert.True(t, r.URL.Query().Has("sign_bearer_token"))
@@ -347,4 +348,34 @@ func TestSecurityManagerPreservesServiceErrors(t *testing.T) {
 		require.NotNil(t, response.ErrorMessage)
 		require.Equal(t, "NoPermission", response.ErrorMessage.ErrorCode)
 	}
+}
+
+func TestSecurityConfigurationUpdateRequiresCompleteMatchingScope(t *testing.T) {
+	var writes atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			writes.Add(1)
+			assert.Equal(t, "/projects/alpha", r.URL.Path)
+			return
+		}
+		fmt.Fprint(w, "<SecurityConfiguration><SupportACL>true</SupportACL></SecurityConfiguration>")
+	}))
+	t.Cleanup(server.Close)
+	rest := restclient.NewOdpsRestClient(account2.NewAliyunAccount("test-ak", "test-sk"), server.URL)
+	t.Cleanup(rest.CloseIdleConnections)
+	alpha := security.NewSecurityManager(rest, "alpha")
+	beta := security.NewSecurityManager(rest, "beta")
+	foreign, err := beta.GetSecurityConfig(false)
+	require.NoError(t, err)
+	require.ErrorContains(t, alpha.SetSecurityConfig(foreign, ""), "different project")
+	empty := security.NewSecurityConfig(rest, false, "alpha")
+	require.ErrorContains(t, alpha.SetSecurityConfig(empty, ""), "complete security configuration")
+	redacted, err := alpha.GetSecurityConfig(true)
+	require.NoError(t, err)
+	require.ErrorContains(t, alpha.SetSecurityConfig(redacted, ""), "complete security configuration")
+	require.Zero(t, writes.Load())
+	full, err := alpha.GetSecurityConfig(false)
+	require.NoError(t, err)
+	require.NoError(t, alpha.SetSecurityConfig(full, ""))
+	require.EqualValues(t, 1, writes.Load())
 }

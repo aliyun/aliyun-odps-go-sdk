@@ -5,6 +5,7 @@ package sqldriver
 import (
 	"context"
 	"database/sql"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -38,13 +39,17 @@ func TestUnsupportedDatabaseSQLOperations(t *testing.T) {
 func TestRejectConflictingTunnelOptionsBeforeSubmission(t *testing.T) {
 	f := newFakeService(t)
 	cfg := f.config()
-	cfg.TunnelQuotaName = "test-quota"
-	db, err := sql.Open("odps", cfg.FormatDsn())
+	dsn, err := cfg.FormatDSN()
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-
-	_, err = db.QueryContext(t.Context(), "select 1")
-	require.ErrorContains(t, err, "cannot be configured both")
+	cfg.TunnelQuotaName = "test-quota"
+	_, err = cfg.FormatDSN()
+	require.ErrorContains(t, err, "mutually exclusive")
+	require.Empty(t, cfg.FormatDsn())
+	conflict := dsn + "&tunnelQuotaName=test-quota"
+	_, err = ParseDSN(conflict)
+	require.ErrorContains(t, err, "mutually exclusive")
+	_, err = sql.Open("odps", conflict)
+	require.ErrorContains(t, err, "mutually exclusive")
 	require.Zero(t, f.count(&f.submits))
 }
 
@@ -282,4 +287,79 @@ func TestDatabaseSQLDeadlineLimitsRetry(t *testing.T) {
 			require.EqualValues(t, 1, attempts.Load())
 		})
 	}
+}
+
+func TestDatabaseSQLBindsBeforeSubmissionAndPingsProject(t *testing.T) {
+	var submits, pings atomic.Int32
+	f := newFakeServiceWithHandler(t, func(w http.ResponseWriter, r *http.Request) bool {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/instances"):
+			submits.Add(1)
+			var model struct {
+				Job struct {
+					Tasks struct {
+						SQL struct {
+							Query string
+						}
+					}
+				}
+			}
+			if err := xml.NewDecoder(r.Body).Decode(&model); err != nil {
+				t.Error(err)
+			}
+			if query := model.Job.Tasks.SQL.Query; !strings.Contains(query, "'?', 'O\\'Reilly\\\\北京'") {
+				t.Errorf("unexpected submitted SQL: %q", query)
+			}
+			return false
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/projects/"+fakeProjectName):
+			if pings.Add(1) == 1 {
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = io.WriteString(w, "<Error><Code>AccessDenied</Code><Message>denied</Message></Error>")
+			} else {
+				_, _ = io.WriteString(w, "<Project><Name>"+fakeProjectName+"</Name></Project>")
+			}
+			return true
+		}
+		return false
+	})
+	f.succeedAfterPolls = 1
+	db, err := sql.Open("odps", f.dsn())
+	require.NoError(t, err)
+	defer db.Close()
+
+	_, err = db.ExecContext(t.Context(), "select '?', ?;", "O'Reilly\\北京")
+	require.NoError(t, err)
+	_, err = db.ExecContext(t.Context(), "select ?;")
+	require.Error(t, err)
+	require.EqualValues(t, 1, submits.Load())
+
+	require.ErrorContains(t, db.PingContext(t.Context()), "denied")
+	require.NoError(t, db.PingContext(t.Context()))
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.ErrorIs(t, db.PingContext(ctx), context.Canceled)
+	require.EqualValues(t, 2, pings.Load())
+}
+
+func TestConnectorValidatesInputAndUsesBorrowedClient(t *testing.T) {
+	_, err := NewConnector(nil, ConnectorOptions{})
+	require.ErrorContains(t, err, "ODPS client")
+	f := newFakeService(t)
+	old := f.config()
+	client, err := odps.NewClient(old.GenAccount(), odps.ClientOptions{Endpoint: old.Endpoint, Project: old.ProjectName})
+	require.NoError(t, err)
+	t.Cleanup(client.CloseIdleConnections)
+	_, err = NewConnector(client, ConnectorOptions{TunnelEndpoint: "ftp://example.test"})
+	require.ErrorContains(t, err, "tunnelEndpoint")
+	_, err = NewConnector(client, ConnectorOptions{TunnelEndpoint: f.tunnel.URL, TunnelQuotaName: "named"})
+	require.ErrorContains(t, err, "mutually exclusive")
+	connector, err := NewConnector(client, ConnectorOptions{TunnelEndpoint: f.tunnel.URL})
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err = connector.Connect(ctx)
+	require.ErrorIs(t, err, context.Canceled)
+	db := sql.OpenDB(connector)
+	require.NoError(t, db.Close())
+	require.False(t, connector.ownsClient)
 }

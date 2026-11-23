@@ -17,6 +17,8 @@
 package data
 
 import (
+	"maps"
+	"math"
 	"reflect"
 	"strings"
 
@@ -118,11 +120,72 @@ func (m *Map) SafeSet(key, value Data) error {
 	return m.set(key, value)
 }
 
-func (m *Map) set(key, value Data) error {
+func comparableMapKey(key Data) error {
 	if key != nil && !reflect.ValueOf(key).Comparable() {
 		return errors.Errorf("map key of type %s is not comparable", key.Type())
 	}
+	return nil
+}
+
+func (m *Map) set(key, value Data) error {
+	if err := comparableMapKey(key); err != nil {
+		return err
+	}
+	if bits := nanKeyBits(key); bits != 0 {
+		m.removeNaNKey(bits)
+	}
 	m.data[key] = value
+	return nil
+}
+
+// NaNs are not equal to themselves in a Go map. Identify scalar NaN keys
+// by type and payload so that setting or deleting the same key works.
+func nanKeyBits(key Data) uint64 {
+	switch v := key.(type) {
+	case Float:
+		if math.IsNaN(float64(v)) {
+			return uint64(math.Float32bits(float32(v)))
+		}
+	case Double:
+		if math.IsNaN(float64(v)) {
+			return math.Float64bits(float64(v))
+		}
+	}
+	return 0
+}
+
+func (m *Map) removeNaNKey(bits uint64) {
+	// delete cannot remove even a NaN obtained by ranging over the map.
+	// Refill the same map so copies of this Map keep sharing its entries.
+	for key := range m.data {
+		if nanKeyBits(key) == bits {
+			entries := maps.Clone(m.data)
+			clear(m.data)
+			for k, v := range entries {
+				if nanKeyBits(k) != bits {
+					m.data[k] = v
+				}
+			}
+			return
+		}
+	}
+}
+
+// Delete removes the key using the same Go-to-ODPS conversion as Set.
+// Deleting a missing key succeeds.
+func (m *Map) Delete(key any) error {
+	k, err := TryConvertGoToOdpsData(key)
+	if err != nil {
+		return err
+	}
+	if err := comparableMapKey(k); err != nil {
+		return err
+	}
+	if bits := nanKeyBits(k); bits != 0 {
+		m.removeNaNKey(bits)
+	} else {
+		delete(m.data, k)
+	}
 	return nil
 }
 
@@ -179,6 +242,7 @@ func MapFromGoMap(m interface{}) (*Map, error) {
 	return ret, nil
 }
 
+// ToGoMap returns a shallow copy of the entries.
 func (m *Map) ToGoMap() map[Data]Data {
-	return m.data
+	return maps.Clone(m.data)
 }

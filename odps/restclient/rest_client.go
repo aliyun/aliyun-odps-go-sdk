@@ -304,6 +304,7 @@ func (client *RestClient) prepareRequest(req *http.Request) error {
 	}
 	req.URL.RawQuery = query.Encode()
 
+	setRequestMetadata(req)
 	return client.SignRequest(req, client.endpoint)
 }
 

@@ -16,14 +16,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-	selectSql := ` select date_col 
- 				   from @table_name;
-				`
-
-	rows, err := db.Query(
-		selectSql,
-		sql.Named("table_name", "table1"),
-	)
+	rows, err := db.Query("select date_col from table1;")
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

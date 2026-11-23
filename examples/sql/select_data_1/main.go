@@ -15,7 +15,10 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	dsn := config.FormatDsn()
+	dsn, err := config.FormatDSN()
+	if err != nil {
+		log.Fatal(err)
+	}
 	// or dsn := "http://<accessId>:<accessKey>@<endpoint>?project=<project>"
 
 	db, err := sql.Open("odps", dsn)
@@ -23,7 +26,7 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
-	selectSql := "select * from all_types_demo where bigint_type=@bigint_type and p1=@p1 and p2='@p2';"
+	selectSql := "select * from all_types_demo where bigint_type=@bigint_type and p1=@p1 and p2=@p2;"
 
 	rows, err := db.Query(
 		selectSql,

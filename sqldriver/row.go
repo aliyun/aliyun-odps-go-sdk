@@ -169,71 +169,68 @@ func (rr *rowsReader) Next(dst []driver.Value) error {
 		return errors.Errorf("expect %d columns, but get %d", len(dst), record.Len())
 	}
 
-	for i := range dst {
-		ri := record.Get(i)
-		dst[i] = ri
-
-		if ri == nil {
-			continue
-		}
-
-		switch ri.Type().ID() {
-		case datatype.BIGINT:
-			dst[i] = int64(ri.(data.BigInt))
-		case datatype.INT:
-			dst[i] = int(ri.(data.Int))
-		case datatype.SMALLINT:
-			dst[i] = int16(ri.(data.SmallInt))
-		case datatype.TINYINT:
-			dst[i] = int8(ri.(data.TinyInt))
-		case datatype.DOUBLE:
-			dst[i] = float64(ri.(data.Double))
-		case datatype.FLOAT:
-			dst[i] = float32(ri.(data.Float))
-		case datatype.STRING:
-			dst[i] = string(ri.(data.String))
-		case datatype.CHAR:
-			char := ri.(data.Char)
-			dst[i] = char.Data()
-		case datatype.VARCHAR:
-			char := ri.(data.VarChar)
-			dst[i] = char.Data()
-		case datatype.BINARY:
-			dst[i] = []byte(ri.(data.Binary))
-		case datatype.BOOLEAN:
-			dst[i] = bool(ri.(data.Bool))
-		case datatype.DATETIME:
-			dst[i] = time.Time(ri.(data.DateTime))
-		case datatype.DATE:
-			dst[i] = time.Time(ri.(data.Date))
-		case datatype.TIMESTAMP:
-			dst[i] = time.Time(ri.(data.Timestamp))
-		case datatype.TIMESTAMP_NTZ:
-			dst[i] = time.Time(ri.(data.TimestampNtz))
-		// case datatype.DECIMAL:
-		//	dst[i] = ri
-		// case datatype.MAP:
-		//	dst[i] = ri
-		// case datatype.ARRAY:
-		//	dst[i] = ri
-		// case datatype.STRUCT:
-		//	dst[i] = ri
-		// case datatype.VOID:
-		//	dst[i] = ri
-		// case datatype.IntervalDayTime:
-		//	dst[i] = ri
-		// case datatype.IntervalYearMonth:
-		//	dst[i] = ri
+	for i, value := range record {
+		switch v := value.(type) {
+		case nil, data.NullData:
+			dst[i] = nil
+		case data.BigInt:
+			dst[i] = int64(v)
+		case data.Int:
+			dst[i] = int64(v)
+		case data.SmallInt:
+			dst[i] = int64(v)
+		case data.TinyInt:
+			dst[i] = int64(v)
+		case data.Double:
+			dst[i] = float64(v)
+		case data.Float:
+			dst[i] = float64(v)
+		case data.String:
+			dst[i] = string(v)
+		case data.Char:
+			dst[i] = v.Data()
+		case data.VarChar:
+			dst[i] = v.Data()
+		case data.Binary:
+			dst[i] = []byte(v)
+		case data.Bool:
+			dst[i] = bool(v)
+		case data.DateTime:
+			dst[i] = time.Time(v)
+		case data.Date:
+			dst[i] = time.Time(v)
+		case data.Timestamp:
+			dst[i] = time.Time(v)
+		case data.TimestampNtz:
+			dst[i] = time.Time(v)
+		case data.Decimal:
+			dst[i] = decimalValue(&v)
+		case *data.Decimal:
+			dst[i] = decimalValue(v)
 		default:
-			dst[i] = ri
+			// Complex values retain their schema and use the SDK Scanner types.
+			dst[i] = value
 		}
 	}
 
 	return nil
 }
 
+func decimalValue(value *data.Decimal) driver.Value {
+	if value == nil || !value.Valid {
+		return nil
+	}
+	return value.String()
+}
+
 func (rr *rowsReader) ColumnTypeDatabaseTypeName(index int) string {
 	return rr.columns[index].Type.Name()
+}
+
+// ColumnTypePrecisionScale exposes the declared DECIMAL type through sql.ColumnType.DecimalSize.
+func (rr *rowsReader) ColumnTypePrecisionScale(index int) (int64, int64, bool) {
+	typ, ok := rr.columns[index].Type.(datatype.DecimalType)
+	return int64(typ.Precision), int64(typ.Scale), ok
 }
 
 func (rr *rowsReader) ColumnTypeScanType(index int) reflect.Type {
@@ -253,19 +250,19 @@ func (rr *rowsReader) ColumnTypeScanType(index int) reflect.Type {
 			return reflect.TypeOf(NullInt32{})
 		}
 
-		return reflect.TypeOf(int(0))
+		return reflect.TypeOf(int64(0))
 	case datatype.SMALLINT:
 		if nullable {
 			return reflect.TypeOf(NullInt16{})
 		}
 
-		return reflect.TypeOf(int16(0))
+		return reflect.TypeOf(int64(0))
 	case datatype.TINYINT:
 		if nullable {
 			return reflect.TypeOf(NullInt8{})
 		}
 
-		return reflect.TypeOf(int8(0))
+		return reflect.TypeOf(int64(0))
 	case datatype.DOUBLE:
 		if nullable {
 			return reflect.TypeOf(NullFloat64{})
@@ -277,7 +274,7 @@ func (rr *rowsReader) ColumnTypeScanType(index int) reflect.Type {
 			return reflect.TypeOf(NullFloat32{})
 		}
 
-		return reflect.TypeOf(float32(0))
+		return reflect.TypeOf(float64(0))
 
 	case datatype.STRING, datatype.CHAR, datatype.VARCHAR:
 		if nullable {

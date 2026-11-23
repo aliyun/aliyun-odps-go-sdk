@@ -127,11 +127,20 @@ func AttachToExistedDownloadSession(
 	restClient restclient.RestClient,
 	opts ...Option,
 ) (*DownloadSession, error) {
+	return attachDownloadSession(sessionId, projectName, tableName, "", restClient, opts...)
+}
+
+func attachDownloadSession(
+	sessionId, projectName, tableName, quotaName string,
+	restClient restclient.RestClient,
+	opts ...Option,
+) (*DownloadSession, error) {
 	cfg := newSessionConfig(opts...)
 
 	session := DownloadSession{
 		Id:           sessionId,
 		ProjectName:  projectName,
+		QuotaName:    quotaName,
 		SchemaName:   cfg.SchemaName,
 		TableName:    tableName,
 		RestClient:   restClient,

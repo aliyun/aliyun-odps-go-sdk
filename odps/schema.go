@@ -1,6 +1,7 @@
 package odps
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
 	"net/http"
@@ -116,6 +117,10 @@ func (s *Schema) IsLoaded() bool {
 
 // Load load the schema information
 func (s *Schema) Load() error {
+	return s.loadContext(context.Background())
+}
+
+func (s *Schema) loadContext(ctx context.Context) error {
 	client := s.odpsIns.restClient
 	resource := s.ResourceUrl()
 	s.beLoaded = false
@@ -133,11 +138,14 @@ func (s *Schema) Load() error {
 				return errors.Wrap(err, "schema creation time")
 			}
 		}
-		var err error
-		model.ModifiedTime, err = http.ParseTime(res.Header.Get(common.HttpHeaderLastModified))
-		return errors.Wrap(err, "schema last modified time")
+		if value := res.Header.Get(common.HttpHeaderLastModified); value != "" {
+			var err error
+			model.ModifiedTime, err = http.ParseTime(value)
+			return errors.Wrap(err, "schema last modified time")
+		}
+		return nil
 	}
-	if err := client.GetWithParseFunc(resource, nil, nil, parseFunc); err != nil {
+	if err := client.GetWithParseFuncContext(ctx, resource, nil, nil, parseFunc); err != nil {
 		return errors.WithStack(err)
 	}
 	s.model = model

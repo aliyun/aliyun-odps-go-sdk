@@ -87,7 +87,10 @@ func TestTableReadSessionCancellationDuringLookup(t *testing.T) {
 	})
 	session, err := client.GetTableReadSession(ctx, Table{Name: "table"}, Session{ID: "snapshot", RouteToken: "route"})
 	require.ErrorIs(t, err, context.Canceled)
-	require.Nil(t, session)
+	require.NotNil(t, session)
+	require.Equal(t, "snapshot", session.Descriptor().ID)
+	require.Equal(t, "route", session.Descriptor().RouteToken)
+	require.Equal(t, "INIT", session.Status())
 	require.EqualValues(t, 2, lookups.Load())
 }
 
@@ -100,7 +103,8 @@ func TestTableReadSessionTerminalStatus(t *testing.T) {
 			})
 			session, err := client.GetTableReadSession(t.Context(), Table{Name: "table"}, Session{ID: "snapshot"})
 			require.ErrorContains(t, err, status)
-			require.Nil(t, session)
+			require.NotNil(t, session)
+			require.Equal(t, status, session.Status())
 		})
 	}
 }

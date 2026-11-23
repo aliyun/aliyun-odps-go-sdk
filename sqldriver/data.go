@@ -2,6 +2,7 @@ package sqldriver
 
 import (
 	"database/sql"
+	"math"
 	"reflect"
 
 	"github.com/pkg/errors"
@@ -94,36 +95,36 @@ func (n *Json) Scan(value interface{}) error {
 }
 
 func (n *NullInt16) Scan(value interface{}) error {
-	if value == nil {
-		n.Int16, n.Valid = 0, false
-		return nil
-	}
-
-	n.Valid = true
-
-	v, ok := value.(int16)
-	if !ok {
+	switch v := value.(type) {
+	case nil:
+		*n = NullInt16{}
+	case int16:
+		*n = NullInt16{Int16: v, Valid: true}
+	case int64:
+		if v < math.MinInt16 || v > math.MaxInt16 {
+			return errors.New("SMALLINT value out of range")
+		}
+		*n = NullInt16{Int16: int16(v), Valid: true}
+	default:
 		return newConvertError(value, *n)
 	}
-
-	n.Int16 = v
 	return nil
 }
 
 func (n *NullInt8) Scan(value interface{}) error {
-	if value == nil {
-		n.Int8, n.Valid = 0, false
-		return nil
-	}
-
-	n.Valid = true
-
-	v, ok := value.(int8)
-	if !ok {
+	switch v := value.(type) {
+	case nil:
+		*n = NullInt8{}
+	case int8:
+		*n = NullInt8{Int8: v, Valid: true}
+	case int64:
+		if v < math.MinInt8 || v > math.MaxInt8 {
+			return errors.New("TINYINT value out of range")
+		}
+		*n = NullInt8{Int8: int8(v), Valid: true}
+	default:
 		return newConvertError(value, *n)
 	}
-
-	n.Int8 = v
 	return nil
 }
 
@@ -133,19 +134,19 @@ type NullFloat32 struct {
 }
 
 func (n *NullFloat32) Scan(value interface{}) error {
-	if value == nil {
-		n.Float32, n.Valid = 0, false
-		return nil
-	}
-
-	n.Valid = true
-
-	v, ok := value.(float32)
-	if !ok {
+	switch v := value.(type) {
+	case nil:
+		*n = NullFloat32{}
+	case float32:
+		*n = NullFloat32{Float32: v, Valid: true}
+	case float64:
+		if !math.IsInf(v, 0) && math.Abs(v) > math.MaxFloat32 {
+			return errors.New("FLOAT value out of range")
+		}
+		*n = NullFloat32{Float32: float32(v), Valid: true}
+	default:
 		return newConvertError(value, *n)
 	}
-
-	n.Float32 = v
 	return nil
 }
 

@@ -28,22 +28,26 @@ func run(ctx context.Context) error {
 	if credentials == nil || endpoint == "" || project == "" {
 		return fmt.Errorf("set MaxCompute credentials, odps_endpoint, and MAXCOMPUTE_PROJECT")
 	}
-	service := odps.NewOdps(credentials, endpoint)
-	service.SetDefaultProjectName(project)
-	client, err := storage.NewClient(ctx, service, storage.ClientOptions{TunnelEndpoint: os.Getenv("tunnel_odps_endpoint")})
+	service, err := odps.NewClient(credentials, odps.ClientOptions{Endpoint: endpoint, Project: project})
+	if err != nil {
+		return err
+	}
+	defer service.CloseIdleConnections()
+	client, err := storage.Open(ctx, service, storage.ClientOptions{TunnelEndpoint: os.Getenv("tunnel_odps_endpoint")})
 	if err != nil {
 		return err
 	}
 	defer client.Close()
 
-	instance, err := service.ExecSQl("select cast(1 as bigint) as id")
+	job, err := service.SubmitSQL(ctx, odps.SQLRequest{Statement: "select cast(1 as bigint) as id"})
 	if err != nil {
 		return err
 	}
-	if err := instance.WaitForSuccessContext(ctx); err != nil {
+	result, err := job.Wait(ctx)
+	if err != nil {
 		return err
 	}
-	session, err := client.CreateInstanceReadSession(ctx, instance.Id(), storage.InstanceReadOptions{})
+	session, err := client.OpenSQLResult(ctx, result.Ref(), storage.InstanceReadOptions{})
 	if err != nil {
 		return err
 	}

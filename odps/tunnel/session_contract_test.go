@@ -3,6 +3,7 @@
 package tunnel
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -339,4 +341,116 @@ func TestTunnelSessionStatusRoundTrip(t *testing.T) {
 	}
 	require.Equal(t, DownloadStatusUnknown, DownloadStatusFromStr("future status"))
 	require.Equal(t, DownloadStatusUnknown.String(), DownLoadStatus(-1).String())
+}
+
+func TestAttachedSessionsKeepNamedQuota(t *testing.T) {
+	const quota = "dedicated"
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		assert.Equal(t, quota, q.Get("quotaName"))
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/tunnel"):
+			_, _ = fmt.Fprint(w, r.Host+"/routed")
+		case q.Has("uploadid"):
+			fmt.Fprint(w, "{\"UploadID\":\"u\",\"Status\":\"NORMAL\",\"Schema\":{\"columns\":[{\"name\":\"id\",\"type\":\"bigint\"}]}}")
+		case q.Has("downloadid") && q.Has("data"):
+			w.WriteHeader(http.StatusForbidden)
+		case q.Has("downloadid"):
+			fmt.Fprint(w, "{\"DownloadID\":\"d\",\"Status\":\"NORMAL\",\"RecordCount\":1,\"Schema\":{\"columns\":[{\"name\":\"id\",\"type\":\"bigint\"}]}}")
+		default:
+			t.Errorf("unexpected request %s", r.URL)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	service := odps.NewOdps(account.NewAliyunAccount("test-ak", "test-sk"), server.URL+"/api")
+	client := NewTunnel(service)
+	client.SetQuotaName(quota)
+	upload, err := client.AttachToExistedUploadSession("project", "table", "u")
+	require.NoError(t, err)
+	require.Equal(t, quota, upload.QuotaName)
+	download, err := client.AttachToExistedDownloadSession("project", "table", "d")
+	require.NoError(t, err)
+	require.Equal(t, quota, download.QuotaName)
+	_, err = download.OpenRecordReader(0, 1, nil)
+	require.Error(t, err)
+}
+
+func TestScopedSQLResultPoolLifetime(t *testing.T) {
+	for _, reuse := range []bool{false, true} {
+		t.Run(fmt.Sprintf("keepalive=%t", reuse), func(t *testing.T) {
+			var idle, closed atomic.Int32
+			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/projects/project/instances/known", r.URL.Path)
+				assert.Equal(t, "project", r.URL.Query().Get("curr_project"))
+				fmt.Fprint(w, "{\"DownloadID\":\"session\",\"Status\":\"NORMAL\",\"RecordCount\":0,\"Schema\":{\"columns\":[{\"name\":\"id\",\"type\":\"bigint\"}]}}")
+			}))
+			server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+				if state == http.StateIdle {
+					idle.Add(1)
+				}
+				if state == http.StateClosed {
+					closed.Add(1)
+				}
+			}
+			server.Start()
+			t.Cleanup(server.Close)
+			client, err := odps.NewClient(account.NewAliyunAccount("fixture-ak", "fixture-sk"), odps.ClientOptions{
+				Endpoint: server.URL, Project: "project",
+			})
+			require.NoError(t, err)
+			t.Cleanup(client.CloseIdleConnections)
+			session, err := OpenSQLResult(t.Context(), client, odps.SQLJobRef{InstanceID: "known"},
+				ResultOptions{Endpoint: server.URL, KeepAlive: reuse})
+			require.NoError(t, err)
+			if reuse {
+				require.Eventually(t, func() bool { return idle.Load() > 0 }, time.Second, time.Millisecond)
+				session.CloseIdleConnections()
+			}
+			require.Eventually(t, func() bool { return closed.Load() > 0 }, time.Second, time.Millisecond)
+		})
+	}
+}
+
+func TestOpenSQLResultRejectsMaxQAReferenceBeforeDiscovery(t *testing.T) {
+	client, err := odps.NewClient(account.NewAliyunAccount("test-ak", "test-sk"),
+		odps.ClientOptions{Endpoint: "https://api.example.test", Project: "project"})
+	require.NoError(t, err)
+	t.Cleanup(client.CloseIdleConnections)
+	_, err = OpenSQLResult(t.Context(), client, odps.SQLJobRef{InstanceID: "known", MaxQA: true}, ResultOptions{})
+	require.ErrorIs(t, err, errors.ErrUnsupported)
+}
+
+func TestSQLResultKeepsTheReferencedTaskAcrossTunnelProtocols(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if requests.Add(1) == 1 {
+			assert.False(t, q.Has("cached"))
+			assert.False(t, q.Has("taskname"))
+		} else {
+			assert.True(t, q.Has("cached"))
+			assert.Equal(t, "original", q.Get("taskname"))
+			assert.Equal(t, "7", q.Get("queryid"))
+		}
+		fmt.Fprint(w, `{"DownloadID":"session","Status":"NORMAL","RecordCount":0,"Schema":{"columns":[]}}`)
+	}))
+	defer server.Close()
+	client, err := odps.NewClient(account.NewAliyunAccount("test-ak", "test-sk"), odps.ClientOptions{Endpoint: server.URL, Project: "project"})
+	require.NoError(t, err)
+	defer client.CloseIdleConnections()
+	ref := odps.SQLJobRef{InstanceID: "job", TaskName: "original"}
+	route := ResultOptions{Endpoint: server.URL}
+	_, err = OpenSQLResult(t.Context(), client, ref, route, InstanceSessionCfg.WithTaskName("other"))
+	require.ErrorContains(t, err, "task name conflicts")
+	_, err = OpenSQLResult(t.Context(), client, odps.SQLJobRef{InstanceID: "job"}, route, InstanceSessionCfg.WithQueryId(7))
+	require.ErrorContains(t, err, "requires a task name")
+	require.Zero(t, requests.Load())
+	for _, options := range [][]InstanceOption{nil, {InstanceSessionCfg.WithQueryId(7)}} {
+		session, err := OpenSQLResult(t.Context(), client, ref, route, options...)
+		require.NoError(t, err)
+		session.CloseIdleConnections()
+	}
+	require.EqualValues(t, 2, requests.Load())
 }

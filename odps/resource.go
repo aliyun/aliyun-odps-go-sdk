@@ -1,6 +1,8 @@
 package odps
 
 import (
+	"context"
+	"encoding/xml"
 	"io"
 	"net/http"
 	"net/url"
@@ -101,11 +103,29 @@ type resourceModel struct {
 	LastModifiedTime string
 	LastUpdator      string
 	ResourceSize     int64
+	reportedSize     *int64
 	SourceTableName  string
 	ContentMD5       string
 	IsTempResource   bool
 	VolumePath       string
 	TableName        string
+}
+
+func (m *resourceModel) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	type model resourceModel
+	var entry struct {
+		model
+		Size *int64 `xml:"ResourceSize"`
+	}
+	if err := d.DecodeElement(&entry, &start); err != nil {
+		return err
+	}
+	*m = resourceModel(entry.model)
+	m.reportedSize = entry.Size
+	if entry.Size != nil {
+		m.ResourceSize = *entry.Size
+	}
+	return nil
 }
 
 // NewResource create a new Resource
@@ -119,6 +139,13 @@ func NewResource(model resourceModel, projectName string, odpsIns *Odps) *Resour
 
 // Load load resource meta
 func (r *Resource) Load() error {
+	return r.loadContext(context.Background())
+}
+
+func (r *Resource) loadContext(ctx context.Context) error {
+	if r.OdpsIns == nil {
+		return errors.New("resource metadata requires a client")
+	}
 	client := r.OdpsIns.restClient
 	rb := common.ResourceBuilder{ProjectName: r.ProjectName}
 	resource := rb.Resource(r.Name())
@@ -129,7 +156,7 @@ func (r *Resource) Load() error {
 		queryArgs.Set("curr_schema", r.SchemaName())
 	}
 	queryArgs.Set("meta", "")
-	err := client.GetWithParseFunc(resource, queryArgs, nil, func(res *http.Response) error {
+	err := client.GetWithParseFuncContext(ctx, resource, queryArgs, nil, func(res *http.Response) error {
 		header := res.Header
 		if schema := header.Get(common.HttpHeaderOdpsSchemaName); schema != "" {
 			r.Model.SchemaName = schema
@@ -143,7 +170,12 @@ func (r *Resource) Load() error {
 		r.Model.LastModifiedTime = header.Get(common.HttpHeaderLastModified)
 		r.Model.LastUpdator = header.Get(common.HttpHeaderOdpsUpdator)
 		r.Model.ResourceType = ResourceTypeFromStr(header.Get(common.HttpHeaderOdpsResourceType))
-		r.Model.ResourceSize, _ = strconv.ParseInt(header.Get(common.HttpHeaderOdpsResourceSize), 10, 64)
+		size, err := strconv.ParseInt(header.Get(common.HttpHeaderOdpsResourceSize), 10, 64)
+		r.Model.ResourceSize = size
+		r.Model.reportedSize = nil
+		if err == nil {
+			r.Model.reportedSize = &size
+		}
 		r.Model.ContentMD5 = header.Get(common.HttpHeaderContentMD5)
 		r.Model.SourceTableName = header.Get(common.HttpHeaderOdpsCopyTableSource)
 		r.Model.TableName = r.Model.SourceTableName

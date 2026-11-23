@@ -11,7 +11,9 @@ import (
 	"math"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
@@ -25,24 +27,46 @@ type TableWriteOptions struct {
 
 // WriteSession stages one or more Arrow streams for an atomic table commit.
 type WriteSession struct {
-	client  *Client
-	session Session
-	target  string
-	status  string
-	streams map[string]int64
+	client     *Client
+	descriptor WriteSessionDescriptor
+	status     string
+	streams    map[string]int64
 }
 
-// Session returns the descriptor for reopening the upload.
-func (s *WriteSession) Session() Session { return s.session }
+// Session returns a compatibility identifier. Persist Descriptor instead when
+// restoring a write session in another process.
+func (s *WriteSession) Session() Session { return s.descriptor.session() }
 
-// Status returns the server's status as reported at open time.
+// Descriptor identifies the table, mode and route for ResumeWrite.
+func (s *WriteSession) Descriptor() WriteSessionDescriptor { return s.descriptor }
+
+// Status returns the server's reported status. An empty value means it was not reported.
 func (s *WriteSession) Status() string { return s.status }
+
+// ClosedStreams returns the stream versions reported at open or refresh time,
+// ordered by stream ID. It cannot enumerate streams that are still open.
+func (s *WriteSession) ClosedStreams() []Stream {
+	streams := make([]Stream, 0, len(s.streams))
+	for id, version := range s.streams {
+		streams = append(streams, Stream{ID: id, Version: version})
+	}
+	slices.SortFunc(streams, func(a, b Stream) int { return strings.Compare(a.ID, b.ID) })
+	return streams
+}
+
+// Refresh looks up the current status and closed streams without changing the receiver.
+func (s *WriteSession) Refresh(ctx context.Context) (*WriteSession, error) {
+	return s.client.ResumeWrite(ctx, s.descriptor)
+}
 
 // CreateTableWriteSession opens a batch upload.
 func (c *Client) CreateTableWriteSession(ctx context.Context, table Table, opts TableWriteOptions) (*WriteSession, error) {
+	table, err := c.tableRef(table)
+	if err != nil {
+		return nil, err
+	}
 	partition := ""
 	if opts.Partition != "" {
-		var err error
 		partition, err = normalizePartitionSpec(opts.Partition)
 		if err != nil {
 			return nil, err
@@ -52,55 +76,73 @@ func (c *Client) CreateTableWriteSession(ctx context.Context, table Table, opts 
 		PartialPartitionSpec string
 		Flags                map[string]string
 	}{partition, map[string]string{"overwrite": strconv.FormatBool(opts.Overwrite)}}
-	return c.tableWriteSession(ctx, table, "TableCreateWriteSession", Session{}, input)
+	descriptor := WriteSessionDescriptor{Version: descriptorVersion, Table: table, QuotaName: c.quota, Mode: WriteModeBatch}
+	op := writeOperation(descriptor, "TableCreateWriteSession")
+	op.params.Del("SessionId")
+	return c.requestWriteSession(ctx, descriptor, op, input)
 }
 
-// GetTableWriteSession reopens an upload, for example after a process restart.
+// ResumeWrite reopens an upload using the original table, quota and write mode.
+func (c *Client) ResumeWrite(ctx context.Context, descriptor WriteSessionDescriptor) (*WriteSession, error) {
+	if err := c.validateDescriptor(descriptor.Version, descriptor.ID, descriptor.Table.Project, descriptor.QuotaName); err != nil {
+		return nil, err
+	}
+	if descriptor.Mode != WriteModeBatch || descriptor.Table.Schema == "" {
+		return nil, fmt.Errorf("storage: invalid batch write descriptor")
+	}
+	if _, err := c.tableRef(descriptor.Table); err != nil {
+		return nil, err
+	}
+	return c.requestWriteSession(ctx, descriptor, writeOperation(descriptor, "TableGetWriteSession"), struct{}{})
+}
+
+// GetTableWriteSession is the compatibility form of ResumeWrite.
 func (c *Client) GetTableWriteSession(ctx context.Context, table Table, session Session) (*WriteSession, error) {
 	if session.ID == "" {
 		return nil, fmt.Errorf("storage: session ID is required")
 	}
-	return c.tableWriteSession(ctx, table, "TableGetWriteSession", session, struct{}{})
-}
-
-func (c *Client) tableWriteSession(ctx context.Context, table Table, action string, session Session, input any) (*WriteSession, error) {
-	target, err := c.tableTarget(table)
+	table, err := c.tableRef(table)
 	if err != nil {
 		return nil, err
 	}
-	op := session.operation(action, target)
-	if session.ID == "" {
-		op.params.Del("SessionId")
-	}
-	op.params.Set("WriteMode", "Batch")
-	return c.requestWriteSession(ctx, op, input)
+	return c.ResumeWrite(ctx, WriteSessionDescriptor{
+		Version: descriptorVersion, Table: table, QuotaName: c.quota, Mode: WriteModeBatch,
+		ID: session.ID, RouteToken: session.RouteToken,
+	})
 }
 
-func (c *Client) requestWriteSession(ctx context.Context, op operation, input any) (*WriteSession, error) {
+func (c *Client) requestWriteSession(ctx context.Context, descriptor WriteSessionDescriptor, op operation, input any) (*WriteSession, error) {
 	reply := struct {
-		ID      string `json:"SessionId"`
-		Status  string `json:"SessionStatus"`
-		Streams map[string]int64
+		ID           string `json:"SessionId"`
+		SessionState string `json:"SessionStatus"`
+		Status       string
+		Streams      map[string]int64
 	}{}
 	headers, err := c.jsonRequest(ctx, http.MethodPost, op, input, &reply)
 	if err != nil {
 		return nil, err
 	}
-	// TableGetWriteSession returns stream state and can omit the requested ID.
-	id := op.params.Get("SessionId")
-	if id == "" {
-		id = reply.ID
+	// A lookup can omit the session's ID and status.
+	if reply.ID != "" {
+		if descriptor.ID != "" && descriptor.ID != reply.ID {
+			return nil, fmt.Errorf("storage %s: unexpected session ID", op.action)
+		}
+		descriptor.ID = reply.ID
 	}
-	if id == "" {
+	if descriptor.ID == "" {
 		return nil, fmt.Errorf("storage %s: missing session ID", op.action)
 	}
-	return &WriteSession{
-		client:  c,
-		target:  op.target,
-		status:  reply.Status,
-		session: Session{ID: id, RouteToken: updatedRoute(headers, op.route)},
-		streams: reply.Streams,
-	}, nil
+	for id, version := range reply.Streams {
+		if err := (Stream{ID: id, Version: version}).validate(); err != nil {
+			return nil, fmt.Errorf("storage %s: invalid closed stream: %w", op.action, err)
+		}
+	}
+	descriptor.RouteToken = updatedRoute(headers, descriptor.RouteToken)
+	status := reply.SessionState
+	if status == "" {
+		status = reply.Status
+	}
+	return &WriteSession{client: c, descriptor: descriptor, status: status, streams: reply.Streams}, nil
 }
 
 func updatedRoute(headers http.Header, previous string) string {
@@ -110,18 +152,42 @@ func updatedRoute(headers http.Header, previous string) string {
 	return previous
 }
 
-func (s *WriteSession) operation(action string) operation {
-	op := s.session.operation(action, s.target)
-	op.params.Set("WriteMode", "Batch")
+func writeOperation(descriptor WriteSessionDescriptor, action string) operation {
+	op := descriptor.session().operation(action, tableResource(descriptor.Table))
+	op.params.Set("WriteMode", string(descriptor.Mode))
 	return op
+}
+
+func (s *WriteSession) operation(action string) operation {
+	return writeOperation(s.descriptor, action)
 }
 
 // Commit publishes all closed streams on tables that support implicit stream
 // selection. Use CommitStreams when the table requires explicit stream versions.
 // Repeat the same commit on the same session after an ambiguous transport failure.
 func (s *WriteSession) Commit(ctx context.Context) error {
-	_, err := s.client.jsonRequest(ctx, http.MethodPost, s.operation("TableCommitWriteSession"), struct{}{}, nil)
-	return err
+	return s.commit(ctx, struct{}{})
+}
+
+// CommitError carries the latest write-session descriptor when the server's
+// commit outcome is uncertain or the request fails. Retry with the same streams.
+type CommitError struct {
+	Descriptor WriteSessionDescriptor
+	Err        error
+}
+
+func (e *CommitError) Error() string { return e.Err.Error() }
+
+func (e *CommitError) Unwrap() error { return e.Err }
+
+func (s *WriteSession) commit(ctx context.Context, input any) error {
+	headers, err := s.client.jsonRequest(ctx, http.MethodPost, s.operation("TableCommitWriteSession"), input, nil)
+	if err == nil {
+		return nil
+	}
+	descriptor := s.Descriptor()
+	descriptor.RouteToken = updatedRoute(headers, descriptor.RouteToken)
+	return &CommitError{Descriptor: descriptor, Err: err}
 }
 
 // CommitStreams commits a session with explicit stream versions. Finish creating
@@ -152,15 +218,14 @@ func (s *WriteSession) CommitStreams(ctx context.Context, streams ...Stream) err
 		input.StreamIDs[i] = stream.ID
 		input.StreamVersions[i] = stream.Version
 	}
-	current, err := s.client.requestWriteSession(ctx, s.operation("TableGetWriteSession"), struct{}{})
+	current, err := s.Refresh(ctx)
 	if err != nil {
 		return err
 	}
 	if !maps.Equal(current.streams, versions) {
 		return fmt.Errorf("storage: commit descriptors must match all streams and versions in the write session")
 	}
-	_, err = s.client.jsonRequest(ctx, http.MethodPost, current.operation("TableCommitWriteSession"), input, nil)
-	return err
+	return current.commit(ctx, input)
 }
 
 // Abort discards the staged rows.
@@ -226,15 +291,25 @@ func (s *WriteSession) openStream(ctx context.Context, stream Stream, action str
 	}
 	reply := struct {
 		AccessToken string
-		RowOffset   int64
+		RowOffset   *int64
 	}{}
 	headers, err := s.client.jsonRequest(ctx, http.MethodPost, op, input, &reply)
 	if err != nil {
 		return nil, err
 	}
+	if action == "TableGetWriteStream" && reply.RowOffset == nil {
+		return nil, fmt.Errorf("storage: missing durable row offset on stream recovery")
+	}
+	offset := int64(0)
+	if reply.RowOffset != nil {
+		offset = *reply.RowOffset
+		if offset < 0 {
+			return nil, fmt.Errorf("storage: negative durable row offset")
+		}
+	}
 	return &WriteStream{
-		session: s, stream: stream, route: updatedRoute(headers, s.session.RouteToken),
-		accessToken: reply.AccessToken, offset: reply.RowOffset,
+		session: s, stream: stream, route: updatedRoute(headers, s.descriptor.RouteToken),
+		accessToken: reply.AccessToken, offset: offset,
 	}, nil
 }
 
@@ -296,7 +371,7 @@ func (w *WriteStream) Close(ctx context.Context) error {
 	input := struct {
 		SessionID string `json:"SessionId"`
 		Stream
-	}{w.session.session.ID, w.stream}
+	}{w.session.descriptor.ID, w.stream}
 	_, err := w.session.client.jsonRequest(ctx, http.MethodPost, op, input, nil)
 	return err
 }

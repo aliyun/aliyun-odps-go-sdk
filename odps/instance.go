@@ -153,6 +153,11 @@ func (instance *Instance) load(ctx context.Context) error {
 }
 
 func (instance *Instance) Terminate() error {
+	return instance.TerminateContext(context.Background())
+}
+
+// TerminateContext requests remote termination using ctx.
+func (instance *Instance) TerminateContext(ctx context.Context) error {
 	type BodyModel struct {
 		XMLName xml.Name `xml:"Instance"`
 		Status  InstanceStatus
@@ -170,7 +175,7 @@ func (instance *Instance) Terminate() error {
 		}
 	}
 	client := instance.odpsIns.restClient
-	err := client.DoXmlWithParseFunc("PUT", resource, nil, headers, &bodyModel, nil)
+	err := client.DoXmlWithParseFuncContext(ctx, "PUT", resource, nil, headers, &bodyModel, nil)
 	return errors.WithStack(err)
 }
 
@@ -421,6 +426,9 @@ func (instance *Instance) tasksCompleted(ctx context.Context) (bool, error) {
 	tasks, err := instance.getTasks(ctx)
 	if err != nil {
 		return false, err
+	}
+	if instance.status == InstanceTerminated && len(tasks) == 0 {
+		return false, errors.Errorf("instance %q terminated without task status", instance.Id())
 	}
 	done := len(tasks) != 0
 	for _, task := range tasks {

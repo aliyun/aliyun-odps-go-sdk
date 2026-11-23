@@ -120,8 +120,14 @@ func (f *fakeService) dsn() string {
 	return f.config().FormatDsn()
 }
 
-func (f *fakeService) newConnection() *connection {
-	return newConnection(f.config())
+func (f *fakeService) newConnection(t *testing.T) *connection {
+	t.Helper()
+	conn, err := (OdpsDriver{}).Open(f.dsn())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	return conn.(*connection)
 }
 
 func (f *fakeService) count(field *int) int {
@@ -305,7 +311,7 @@ func TestQueryContextAlreadyCanceledSubmitsNothing(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := f.newConnection().QueryContext(ctx, "select 'x';", nil)
+	_, err := f.newConnection(t).QueryContext(ctx, "select 'x';", nil)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expect context.Canceled, but got %v", err)
 	}
@@ -319,7 +325,7 @@ func TestExecContextAlreadyCanceledSubmitsNothing(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := f.newConnection().ExecContext(ctx, "drop table if exists not_a_real_table;", nil)
+	_, err := f.newConnection(t).ExecContext(ctx, "drop table if exists not_a_real_table;", nil)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expect context.Canceled, but got %v", err)
 	}
@@ -337,7 +343,7 @@ func TestQueryContextDeadlineStopsWaiting(t *testing.T) {
 	defer cancel()
 
 	elapsed, err := callWithin(t, 5*time.Second, func() error {
-		_, err := f.newConnection().QueryContext(ctx, "select 'x';", nil)
+		_, err := f.newConnection(t).QueryContext(ctx, "select 'x';", nil)
 		return err
 	})
 
@@ -362,7 +368,7 @@ func TestQueryContextCancelStopsWaiting(t *testing.T) {
 	returned := make(chan error, 1)
 
 	go func() {
-		_, err := f.newConnection().QueryContext(ctx, "select 'x';", nil)
+		_, err := f.newConnection(t).QueryContext(ctx, "select 'x';", nil)
 		returned <- err
 	}()
 
@@ -396,7 +402,7 @@ func TestExecContextDeadlineStopsWaiting(t *testing.T) {
 	defer cancel()
 
 	elapsed, err := callWithin(t, 5*time.Second, func() error {
-		_, err := f.newConnection().ExecContext(ctx, "create table if not exists t(a string);", nil)
+		_, err := f.newConnection(t).ExecContext(ctx, "create table if not exists t(a string);", nil)
 		return err
 	})
 
@@ -409,36 +415,6 @@ func TestExecContextDeadlineStopsWaiting(t *testing.T) {
 }
 
 // --- Ping 的实际语义 ---
-
-// TestPingContextSemantics 固定一个容易误解的事实：本 driver 没有实现
-// driver.Pinger，所以 db.PingContext 不会访问服务端。它只在 database/sql 层拿
-// 连接：ctx 已取消时返回 ctx.Err()，否则一律返回 nil —— 包括端点不可用的情况。
-// 想真正探活必须显式跑一条 SQL。
-func TestPingContextSemantics(t *testing.T) {
-	f := newFakeService(t)
-
-	db, err := sql.Open("odps", f.dsn())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	if err := db.PingContext(ctx); !errors.Is(err, context.Canceled) {
-		t.Fatalf("expect PingContext to honor a canceled context, but got %v", err)
-	}
-	if _, isPinger := interface{}(f.newConnection()).(driver.Pinger); isPinger {
-		t.Fatal("the expectations below assume the driver does not implement driver.Pinger")
-	}
-	if err := db.PingContext(context.Background()); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got := f.count(&f.submits) + f.count(&f.instanceStatusGets); got != 0 {
-		t.Fatalf("Ping should not touch the service, but %d request(s) arrived", got)
-	}
-}
 
 // --- 结果消费与关闭 ---
 
@@ -803,7 +779,7 @@ func TestCanceledErrorCarriesInstanceIdForCancel(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 
-	_, err := f.newConnection().QueryContext(ctx, "select 'x';", nil)
+	_, err := f.newConnection(t).QueryContext(ctx, "select 'x';", nil)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("errors.Is must still see the context error, got %v", err)
 	}

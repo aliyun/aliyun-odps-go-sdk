@@ -73,6 +73,10 @@ func NewDecimalFromValue(precision, scale int, intValue *big.Int) *Decimal {
 
 // DecimalFromStr parses a fixed-point value using up to 38 digits of precision.
 func DecimalFromStr(value string) (*Decimal, error) {
+	return parseDecimal(value, 38)
+}
+
+func parseDecimal(value string, maxPrecision int) (*Decimal, error) {
 	unsigned := strings.TrimPrefix(value, "+")
 	if unsigned == value {
 		unsigned = strings.TrimPrefix(value, "-")
@@ -83,8 +87,8 @@ func DecimalFromStr(value string) (*Decimal, error) {
 	}
 	scale := len(fraction)
 	precision := max(1, len(strings.TrimLeft(integer, "0"))+scale)
-	if precision > 38 {
-		return nil, fmt.Errorf("%w: precision %d exceeds 38", InvalidDecimalErr, precision)
+	if precision > maxPrecision {
+		return nil, fmt.Errorf("%w: precision %d exceeds %d", InvalidDecimalErr, precision, maxPrecision)
 	}
 	return NewDecimal(precision, scale, value), nil
 }
@@ -122,6 +126,19 @@ func (d Decimal) Sql() string {
 	return fmt.Sprintf("%sBD", d.String())
 }
 
+// Scan accepts SDK Decimal values and exact decimal text from database/sql.
 func (d *Decimal) Scan(value interface{}) error {
+	if value == nil {
+		*d = Decimal{}
+		return nil
+	}
+	if text, ok := value.(string); ok {
+		decimal, err := parseDecimal(text, 76)
+		if err != nil {
+			return err
+		}
+		*d = *decimal
+		return nil
+	}
 	return errors.WithStack(tryConvertType(value, d))
 }
