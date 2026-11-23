@@ -18,7 +18,7 @@ func main() {
 
 func run() error {
 	client, err := odps.NewClient(account.AccountFromEnv(), odps.ClientOptions{
-		Endpoint: os.Getenv("odps_endpoint"),
+		Endpoint: os.Getenv("MAXCOMPUTE_ENDPOINT"),
 		Project:  os.Getenv("MAXCOMPUTE_PROJECT"),
 	})
 	if err != nil {

@@ -25,7 +25,7 @@ go get github.com/aliyun/aliyun-odps-go-sdk/odps@v1.0.0
 下面以华东 1（杭州）地域为例。[MaxCompute 连接地址](https://www.alibabacloud.com/help/zh/maxcompute/endpoints)
 
 ```sh
-export odps_endpoint=https://service.cn-hangzhou.maxcompute.aliyun.com/api
+export MAXCOMPUTE_ENDPOINT=https://service.cn-hangzhou.maxcompute.aliyun.com/api
 export MAXCOMPUTE_PROJECT=your-project
 ```
 
@@ -64,7 +64,7 @@ func main() {
 
 func run() error {
 	client, err := odps.NewClient(account.AccountFromEnv(), odps.ClientOptions{
-		Endpoint: os.Getenv("odps_endpoint"),
+		Endpoint: os.Getenv("MAXCOMPUTE_ENDPOINT"),
 		Project:  os.Getenv("MAXCOMPUTE_PROJECT"),
 	})
 	if err != nil {
