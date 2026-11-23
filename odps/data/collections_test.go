@@ -3,6 +3,7 @@
 package data_test
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -208,4 +209,38 @@ func TestStructTypeCheckingAndConversion(t *testing.T) {
 	require.ErrorContains(t, err, "not a struct")
 	_, err = data.StructFromGoStruct(struct{ Bad uint }{1})
 	require.ErrorContains(t, err, "Cannot convert")
+}
+
+func TestMapDeleteModifiesTheMapAndPreservesSnapshots(t *testing.T) {
+	m := data.NewMap()
+	require.NoError(t, m.Set("one", 1))
+	require.NoError(t, m.Set(nil, 2))
+	snapshot := m.ToGoMap()
+	require.NoError(t, m.Delete("one"))
+	require.NoError(t, m.Delete("missing"))
+	require.NoError(t, m.Delete(nil))
+	require.Empty(t, m.ToGoMap())
+	require.Len(t, snapshot, 2)
+	require.ErrorContains(t, m.Delete([]byte{1}), "not comparable")
+	require.Error(t, m.Delete(make(chan int)))
+}
+
+func TestMapCanReplaceAndDeleteScalarNaNKeys(t *testing.T) {
+	m := data.NewMap()
+	shared := *m
+	keys := []data.Data{
+		data.Double(math.NaN()), data.Double(math.Float64frombits(0x7ff8000000000002)),
+		data.Float(float32(math.NaN())),
+	}
+	require.NoError(t, m.Set("other", 3))
+	for _, k := range keys {
+		require.NoError(t, m.Set(k, 1))
+		require.NoError(t, m.Set(k, 2))
+	}
+	require.Len(t, m.ToGoMap(), 4)
+	for _, k := range keys {
+		require.NoError(t, m.Delete(k))
+		require.NoError(t, m.Delete(k))
+	}
+	require.Equal(t, map[data.Data]data.Data{data.String("other"): data.Int(3)}, shared.ToGoMap())
 }

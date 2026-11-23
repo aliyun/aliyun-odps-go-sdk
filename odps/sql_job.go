@@ -4,6 +4,7 @@ package odps
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"strings"
@@ -17,12 +18,14 @@ type SQLRequest struct {
 	Options   options.SQLTaskOptions
 }
 
-// SQLJobRef identifies a submitted standard SQL job. TaskName can be empty
+// SQLJobRef identifies a submitted SQL job. TaskName can be empty
 // when attaching to an instance created outside this SDK.
 type SQLJobRef struct {
 	Project    string
 	InstanceID string
 	TaskName   string
+	// MaxQA marks a session-bound job. Its live session credentials are not persisted.
+	MaxQA bool `json:",omitempty"`
 }
 
 // SQLJob identifies a submitted SQL job and manages its remote lifecycle.
@@ -76,24 +79,25 @@ func (c *Client) SubmitSQL(ctx context.Context, request SQLRequest) (*SQLJob, er
 // ResumeSQL attaches to a standard SQL instance by identity without making a
 // request. Use Status or Wait to check the instance remotely.
 func (c *Client) ResumeSQL(ref SQLJobRef) (*SQLJob, error) {
-	if ref.Project == "" {
-		ref.Project = c.Scope().Project
+	if ref.MaxQA {
+		return nil, fmt.Errorf("resume MaxQA job without its live session: %w", errors.ErrUnsupported)
 	}
-	if err := validateName("project", ref.Project); err != nil {
+	client, err := c.WithScope(Scope{Project: ref.Project})
+	if err != nil {
 		return nil, err
 	}
 	if err := validateName("instance", ref.InstanceID); err != nil {
 		return nil, err
 	}
-	client := c.withScope(Scope{Project: ref.Project, Schema: c.Scope().Schema})
-	instance := NewInstance(client.service, ref.Project, ref.InstanceID)
+	instance := NewInstance(client.service, client.Scope().Project, ref.InstanceID)
 	instance.taskNameCommitted = ref.TaskName
 	return &SQLJob{instance: *instance}, nil
 }
 
 // Ref returns the job's identity for status, result transfer and recovery.
 func (j *SQLJob) Ref() SQLJobRef {
-	return SQLJobRef{Project: j.instance.ProjectName(), InstanceID: j.instance.Id(), TaskName: j.instance.TaskNameCommitted()}
+	return SQLJobRef{Project: j.instance.ProjectName(), InstanceID: j.instance.Id(),
+		TaskName: j.instance.TaskNameCommitted(), MaxQA: j.instance.MaxQA.IsMaxQA}
 }
 
 // Status fetches the current server-side instance status.

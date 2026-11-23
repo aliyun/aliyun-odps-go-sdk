@@ -55,7 +55,7 @@ func (d OdpsDriver) connectorFromDSN(name string) (*Connector, error) {
 	}
 	client, err := odps.NewClient(config.GenAccount(), odps.ClientOptions{
 		Endpoint: config.Endpoint, Project: config.ProjectName,
-		HTTPTimeout: config.HttpTimeout, TCPConnectionTimeout: config.TcpConnectionTimeout,
+		HTTPTimeout: config.HttpTimeout, TCPConnectionTimeout: &config.TcpConnectionTimeout,
 	})
 	if err != nil {
 		return nil, err
@@ -92,13 +92,8 @@ func NewConnector(client *odps.Client, options ConnectorOptions) (*Connector, er
 	if client == nil {
 		return nil, fmt.Errorf("sqldriver: an ODPS client is required")
 	}
-	if options.TunnelEndpoint != "" {
-		if options.TunnelQuotaName != "" {
-			return nil, fmt.Errorf("sqldriver: tunnelEndpoint and tunnelQuotaName cannot be configured both")
-		}
-		if _, err := configvalue.Endpoint(options.TunnelEndpoint, "Tunnel endpoint"); err != nil {
-			return nil, err
-		}
+	if err := configvalue.SQLTunnelRoute(options.TunnelEndpoint, options.TunnelQuotaName); err != nil {
+		return nil, err
 	}
 	options.Hints = maps.Clone(options.Hints)
 	return &Connector{client: client, options: options}, nil

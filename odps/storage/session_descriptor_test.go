@@ -5,6 +5,7 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -282,4 +283,71 @@ func TestStorageDescriptorRejectsMismatchedTargetsAndResponseIdentity(t *testing
 	write.ID = "wrong-streams"
 	_, err = client.ResumeWrite(ctx, write)
 	require.ErrorContains(t, err, "invalid closed stream")
+}
+
+func TestSQLResultRejectsConflictingTaskAndMaxQA(t *testing.T) {
+	var requests atomic.Int32
+	client := localClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		fmt.Fprint(w, `{"DownloadID":"result"}`)
+	})
+	ctx := t.Context()
+	ref := odps.SQLJobRef{InstanceID: "job", TaskName: "original"}
+	_, err := client.OpenSQLResult(ctx, ref, InstanceReadOptions{TaskName: "other"})
+	require.ErrorContains(t, err, "task name conflicts")
+	sessionBound := ref
+	sessionBound.MaxQA = true
+	_, err = client.OpenSQLResult(ctx, sessionBound, InstanceReadOptions{})
+	require.ErrorIs(t, err, errors.ErrUnsupported)
+	require.Zero(t, requests.Load())
+
+	match, err := client.OpenSQLResult(ctx, ref, InstanceReadOptions{TaskName: "original"})
+	require.NoError(t, err)
+	require.Equal(t, "original", match.Descriptor().Job.TaskName)
+	legacy, err := client.CreateInstanceReadSession(ctx, "job", InstanceReadOptions{TaskName: "other"})
+	require.NoError(t, err)
+	require.Equal(t, "other", legacy.Descriptor().Job.TaskName)
+	desc := match.Descriptor()
+	desc.Job.MaxQA = true
+	_, err = client.ResumeRead(ctx, desc)
+	require.ErrorIs(t, err, errors.ErrUnsupported)
+	require.EqualValues(t, 2, requests.Load())
+}
+
+func TestCommitErrorRetainsRouteFromHTTPFailure(t *testing.T) {
+	var commits atomic.Int32
+	client := localClient(t, func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		switch q.Get("Action") {
+		case "TableCreateWriteSession":
+			w.Header().Set(routeTokenHeader, "first")
+			fmt.Fprint(w, `{"SessionId":"staged"}`)
+		case "TableCommitWriteSession":
+			assert.Equal(t, "staged", q.Get("SessionId"))
+			if commits.Add(1) == 1 {
+				assert.Equal(t, "first", r.Header.Get(routeTokenHeader))
+				w.Header().Set(routeTokenHeader, "second")
+				http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			assert.Equal(t, "second", r.Header.Get(routeTokenHeader))
+		case "TableGetWriteSession":
+			assert.Equal(t, "staged", q.Get("SessionId"))
+			assert.Equal(t, "second", r.Header.Get(routeTokenHeader))
+			fmt.Fprint(w, `{}`)
+		default:
+			t.Errorf("unexpected action %s", q.Get("Action"))
+		}
+	})
+	ctx := t.Context()
+	w, err := client.CreateTableWriteSession(ctx, Table{Name: "table"}, TableWriteOptions{})
+	require.NoError(t, err)
+	var failure *CommitError
+	require.ErrorAs(t, w.Commit(ctx), &failure)
+	require.Equal(t, "second", failure.Descriptor.RouteToken)
+	require.Equal(t, "first", w.Descriptor().RouteToken)
+	resumed, err := client.ResumeWrite(ctx, failure.Descriptor)
+	require.NoError(t, err)
+	require.NoError(t, resumed.Commit(ctx))
+	require.EqualValues(t, 2, commits.Load())
 }

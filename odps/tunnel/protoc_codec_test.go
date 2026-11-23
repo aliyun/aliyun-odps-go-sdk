@@ -375,3 +375,95 @@ func TestProtobufComplexValuesMatchTheColumnSchema(t *testing.T) {
 	require.Equal(t, data.Int(5), value.GetField("a"))
 	require.Equal(t, data.String("text"), value.GetField("b"))
 }
+
+func TestProtobufMapRejectsDuplicateKeysBeforeWriting(t *testing.T) {
+	char1, err := data.MakeChar(1, "x")
+	require.NoError(t, err)
+	char2, err := data.MakeChar(2, "x ")
+	require.NoError(t, err)
+	now := time.Unix(12, 1234).UTC()
+	for _, tc := range []struct {
+		keyType       datatype.DataType
+		first, second data.Data
+	}{
+		{datatype.BigIntType, data.Int(1), data.BigInt(1)},
+		{datatype.IntType, data.SmallInt(1), data.TinyInt(1)},
+		{datatype.StringType, nil, data.NullData{}},
+		{datatype.StringType, data.String("text"), new(data.String("text"))},
+		{datatype.NewCharType(4), char1, char2},
+		{datatype.BinaryType, new(data.Binary{1, 2}), new(data.Binary{1, 2})},
+		{datatype.GeographyType, new(data.Geography{1, 2}), new(data.Geography{1, 2})},
+		{datatype.DoubleType, new(data.Double(math.NaN())), data.Double(math.NaN())},
+		{datatype.NewDecimalType(10, 3), data.NewDecimal(5, 2, "-0.00"), data.NewDecimal(3, 1, "0.0")},
+		{datatype.DateTimeType, data.DateTime(now), data.DateTime(now.Add(time.Microsecond))},
+		{datatype.TimestampType, data.Timestamp(now), data.Timestamp(now.In(time.FixedZone("other", 3600)))},
+	} {
+		t.Run(tc.keyType.Name(), func(t *testing.T) {
+			mapType := datatype.NewMapType(tc.keyType, datatype.StringType)
+			m := data.NewMapWithType(mapType)
+			require.NoError(t, m.Set(tc.first, "first"))
+			require.NoError(t, m.Set(tc.second, "second"))
+			columns := []tableschema.Column{{Name: "id", Type: datatype.BigIntType}, {Name: "attrs", Type: mapType}}
+			var wire bytes.Buffer
+			writer := newRecordProtocWriter(&bufWriter{&wire}, columns, false)
+			row := data.Record{data.BigInt(42), m}
+			err := writer.Write(row)
+			require.ErrorContains(t, err, "duplicate map key")
+			require.ErrorContains(t, err, "attrs")
+			require.Empty(t, wire.Bytes())
+			require.NoError(t, m.Delete(tc.second))
+			require.NoError(t, writer.Write(row))
+			require.NoError(t, writer.Close())
+			reader := newRecordProtocReader(&http.Response{Body: io.NopCloser(&wire)}, columns, false)
+			got, err := reader.Read()
+			require.NoError(t, err)
+			require.Len(t, got[1].(*data.Map).ToGoMap(), 1)
+			_, err = reader.Read()
+			require.ErrorIs(t, err, io.EOF)
+		})
+	}
+}
+
+func TestProtobufReaderRejectsDuplicateMapEntries(t *testing.T) {
+	// Two non-null BIGINT keys with the same zigzag value, then two NULL values.
+	field := []byte{2, 0, 2, 0, 2, 2, 1, 1}
+	wire := characterRecordFixture(field, nil)
+	columns := []tableschema.Column{{Name: "attrs", Type: datatype.NewMapType(datatype.BigIntType, datatype.StringType)}}
+	reader := newRecordProtocReader(&http.Response{Body: io.NopCloser(bytes.NewReader(wire))}, columns, false)
+	_, err := reader.Read()
+	require.ErrorContains(t, err, "duplicate map key")
+}
+
+func TestProtobufMapPreservesDistinctBinaryAndVarcharKeys(t *testing.T) {
+	short, err := data.MakeVarChar(4, "x")
+	require.NoError(t, err)
+	padded, err := data.MakeVarChar(4, "x ")
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		keyType       datatype.DataType
+		first, second data.Data
+	}{
+		{datatype.BinaryType, new(data.Binary{0, 255}), new(data.Binary{0, 254})},
+		{datatype.NewVarcharType(4), short, padded},
+	} {
+		typ := datatype.NewMapType(tc.keyType, datatype.StringType)
+		input := data.NewMapWithType(typ)
+		require.NoError(t, input.Set(tc.first, "first"))
+		require.NoError(t, input.Set(tc.second, "second"))
+		columns := []tableschema.Column{{Name: "attrs", Type: typ}}
+		var wire bytes.Buffer
+		w := newRecordProtocWriter(&bufWriter{&wire}, columns, false)
+		require.NoError(t, w.Write(data.Record{input}))
+		require.NoError(t, w.Close())
+		r := newRecordProtocReader(&http.Response{Body: io.NopCloser(&wire)}, columns, false)
+		row, err := r.Read()
+		require.NoError(t, err)
+		got := make(map[string]string)
+		for key, value := range row[0].(*data.Map).ToGoMap() {
+			got[key.String()] = value.String()
+		}
+		require.Equal(t, map[string]string{tc.first.String(): "first", tc.second.String(): "second"}, got)
+		_, err = r.Read()
+		require.ErrorIs(t, err, io.EOF)
+	}
+}

@@ -95,7 +95,7 @@ func newClient(ctx context.Context, source restclient.RestClient, scope odps.Sco
 	u.Path = strings.TrimSuffix(strings.TrimRight(u.Path, "/"), "/api")
 	u.RawPath = ""
 	schema := scope.Schema
-	if schema == "" {
+	if schema == "" || project != scope.Project {
 		schema = "default"
 	}
 	rest := source.NewForEndpoint(u.String())
@@ -233,7 +233,7 @@ func (c *Client) request(ctx context.Context, method string, op operation, body 
 	}
 	resp, err := c.rest.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, fmt.Errorf("storage %s: %w", op.action, err)
+		return resp, fmt.Errorf("storage %s: %w", op.action, err)
 	}
 	return resp, nil
 }
@@ -249,6 +249,10 @@ func (c *Client) jsonRequest(ctx context.Context, method string, op operation, i
 	}
 	resp, err := c.request(ctx, method, op, body, map[string]string{"Content-Type": "application/json; charset=utf-8"})
 	if err != nil {
+		// RestClient closes the body of non-success responses.
+		if resp != nil {
+			return resp.Header, err
+		}
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()

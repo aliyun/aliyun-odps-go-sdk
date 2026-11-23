@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -144,7 +145,7 @@ func (schema ReadSchema) emptyReader() (*ArrowReader, error) {
 	if err := ipc.NewWriter(&buffer, ipc.WithSchema(arrowSchema)).Close(); err != nil {
 		return nil, err
 	}
-	return newArrowReader(io.NopCloser(bytes.NewReader(buffer.Bytes())), 0)
+	return newArrowReader(io.NopCloser(bytes.NewReader(buffer.Bytes())), rowBounds{})
 }
 
 // ReadSession represents a table or SQL result snapshot. A table snapshot can
@@ -341,6 +342,9 @@ func (c *Client) OpenSQLResult(ctx context.Context, job odps.SQLJobRef, opts Ins
 		return nil, fmt.Errorf("storage: SQL result project does not match the client")
 	}
 	if opts.TaskName != "" {
+		if job.TaskName != "" && job.TaskName != opts.TaskName {
+			return nil, fmt.Errorf("storage: task name conflicts with the SQL job reference")
+		}
 		job.TaskName = opts.TaskName
 	}
 	if job.TaskName == "" {
@@ -371,6 +375,9 @@ func (c *Client) GetInstanceReadSession(ctx context.Context, id string, session 
 }
 
 func (c *Client) instanceReadSession(ctx context.Context, method, action string, desc ReadSessionDescriptor) (*ReadSession, error) {
+	if desc.Job.MaxQA {
+		return nil, fmt.Errorf("storage: open a session-bound MaxQA result by job reference: %w", errors.ErrUnsupported)
+	}
 	if err := validateIdentifier("instance", desc.Job.InstanceID); err != nil {
 		return nil, err
 	}
@@ -431,11 +438,12 @@ func (s *ReadSession) OpenReader(ctx context.Context, rows *RowRange) (*ArrowRea
 	if (rangeToRead.Count == 0 || s.rows == 0 && rangeToRead.Offset == 0) && s.schema != nil {
 		return s.schema.emptyReader()
 	}
-	expected := int64(-1)
+	bounds := rowBounds{max: rangeToRead.Count}
 	if s.rows >= 0 {
-		expected = min(rangeToRead.Count, max(s.rows-rangeToRead.Offset, 0))
+		bounds.max = min(rangeToRead.Count, max(s.rows-rangeToRead.Offset, 0))
+		bounds.min = bounds.max
 	}
-	return s.client.arrowRequest(ctx, op, s.input, expected)
+	return s.client.arrowRequest(ctx, op, s.input, bounds)
 }
 
 // PreviewTable reads the first limit rows without creating a persistent snapshot.
@@ -456,10 +464,14 @@ func (c *Client) PreviewTable(ctx context.Context, table Table, partition string
 		Partition string `json:",omitempty"`
 		Limit     int64
 	}{partition, limit}
-	return c.arrowRequest(ctx, op, input, -1)
+	bounds := rowBounds{max: -1}
+	if limit > 0 {
+		bounds.max = limit
+	}
+	return c.arrowRequest(ctx, op, input, bounds)
 }
 
-func (c *Client) arrowRequest(ctx context.Context, op operation, input any, expected int64) (*ArrowReader, error) {
+func (c *Client) arrowRequest(ctx context.Context, op operation, input any, bounds rowBounds) (*ArrowReader, error) {
 	encoded, err := json.Marshal(input)
 	if err != nil {
 		return nil, err
@@ -470,7 +482,7 @@ func (c *Client) arrowRequest(ctx context.Context, op operation, input any, expe
 	if err != nil {
 		return nil, err
 	}
-	reader, err := newArrowReader(resp.Body, expected)
+	reader, err := newArrowReader(resp.Body, bounds)
 	if err != nil {
 		_ = resp.Body.Close()
 		return nil, fmt.Errorf("storage %s: %w", op.action, err)
@@ -478,25 +490,29 @@ func (c *Client) arrowRequest(ctx context.Context, op operation, input any, expe
 	return reader, nil
 }
 
+// A negative maximum allows an unbounded preview. An unknown snapshot size
+// permits short reads, while a known size sets both bounds to the exact count.
+type rowBounds struct{ min, max int64 }
+
 // ArrowReader is a reference-counted Arrow IPC reader. Release closes the HTTP
 // stream when the last reference is released. Only one goroutine may read it.
 type ArrowReader struct {
-	ipc      *ipc.Reader
-	body     io.ReadCloser
-	refs     atomic.Int64
-	expected int64
-	rows     int64
-	err      error
+	ipc    *ipc.Reader
+	body   io.ReadCloser
+	refs   atomic.Int64
+	bounds rowBounds
+	rows   int64
+	err    error
 }
 
 var _ array.RecordReader = (*ArrowReader)(nil)
 
-func newArrowReader(body io.ReadCloser, expected int64) (*ArrowReader, error) {
+func newArrowReader(body io.ReadCloser, bounds rowBounds) (*ArrowReader, error) {
 	decoded, err := ipc.NewReader(body)
 	if err != nil {
 		return nil, err
 	}
-	r := &ArrowReader{ipc: decoded, body: body, expected: expected}
+	r := &ArrowReader{ipc: decoded, body: body, bounds: bounds}
 	r.refs.Store(1)
 	return r, nil
 }
@@ -523,15 +539,19 @@ func (r *ArrowReader) Next() bool {
 	}
 	if !r.ipc.Next() {
 		r.err = r.ipc.Err()
-		if r.err == nil && r.expected >= 0 && r.rows != r.expected {
-			r.err = fmt.Errorf("storage: read %d of %d rows: %w", r.rows, r.expected, io.ErrUnexpectedEOF)
+		if r.err == nil && r.rows < r.bounds.min {
+			r.err = fmt.Errorf("storage: read %d of %d rows: %w", r.rows, r.bounds.min, io.ErrUnexpectedEOF)
 		}
 		return false
 	}
-	r.rows += r.RecordBatch().NumRows()
-	if r.expected >= 0 && r.rows > r.expected {
-		r.err = fmt.Errorf("storage: received %d rows for a range of %d rows", r.rows, r.expected)
-		return false
+	if r.bounds.max >= 0 {
+		rows := r.RecordBatch().NumRows()
+		remaining := r.bounds.max - r.rows
+		if rows > remaining {
+			r.err = fmt.Errorf("storage: batch of %d rows exceeds the %d rows left in the range", rows, remaining)
+			return false
+		}
+		r.rows += rows
 	}
 	return true
 }

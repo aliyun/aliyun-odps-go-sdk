@@ -185,7 +185,7 @@ func (t *Tunnel) CreateInstanceResultDownloadSessionContext(
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	session, err := createInstanceResultDownloadSession(ctx, projectName, instanceId, t.quotaName, client, opts...)
+	session, err := createInstanceResultDownloadSession(ctx, projectName, instanceId, t.quotaName, client, newInstanceSessionConfig(opts...))
 	return session, errors.WithStack(err)
 }
 

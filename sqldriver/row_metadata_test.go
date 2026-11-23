@@ -158,3 +158,16 @@ func TestCompatibilityScannersKeepWideDecimalAndNumericRanges(t *testing.T) {
 	require.Equal(t, float32(1.25), single.Float32)
 	require.ErrorContains(t, single.Scan(float64(1e100)), "FLOAT")
 }
+
+func TestColumnTypeReportsDeclaredDecimalPrecision(t *testing.T) {
+	var rows driver.RowsColumnTypePrecisionScale = &rowsReader{columns: []tableschema.Column{
+		{Name: "amount", Type: datatype.NewDecimalType(15, 3)},
+		{Name: "id", Type: datatype.BigIntType},
+	}}
+	p, s, ok := rows.ColumnTypePrecisionScale(0)
+	require.True(t, ok)
+	require.EqualValues(t, 15, p)
+	require.EqualValues(t, 3, s)
+	_, _, ok = rows.ColumnTypePrecisionScale(1)
+	require.False(t, ok)
+}

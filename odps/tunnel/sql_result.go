@@ -4,6 +4,7 @@ package tunnel
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -26,13 +27,28 @@ func OpenSQLResult(ctx context.Context, service *odps.Client, job odps.SQLJobRef
 	if service == nil {
 		return nil, fmt.Errorf("tunnel: an ODPS client is required")
 	}
+	if job.MaxQA {
+		return nil, fmt.Errorf("tunnel: open a session-bound MaxQA result by job reference: %w", errors.ErrUnsupported)
+	}
 	if job.InstanceID == "" || job.InstanceID == "." || job.InstanceID == ".." || strings.ContainsAny(job.InstanceID, "/\\?#%") {
 		return nil, fmt.Errorf("tunnel: invalid instance ID")
+	}
+	cfg := newInstanceSessionConfig(sessionOptions...)
+	if cfg.TaskName != "" && job.TaskName != "" && cfg.TaskName != job.TaskName {
+		return nil, fmt.Errorf("tunnel: task name conflicts with the SQL job reference")
+	}
+	// Supplying a task name on a plain download selects the cached-result
+	// protocol. Only fill it from the reference when a query ID selects it.
+	if cfg.QueryId != -1 && cfg.TaskName == "" {
+		if job.TaskName == "" {
+			return nil, fmt.Errorf("tunnel: a query ID requires a task name")
+		}
+		cfg.TaskName = job.TaskName
 	}
 	if job.Project == "" {
 		job.Project = service.Scope().Project
 	}
-	scoped, err := service.WithScope(odps.Scope{Project: job.Project, Schema: service.Scope().Schema})
+	scoped, err := service.WithScope(odps.Scope{Project: job.Project})
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +69,7 @@ func OpenSQLResult(ctx context.Context, service *odps.Client, job odps.SQLJobRef
 	client.SetDefaultProject(job.Project)
 	client.SetUserAgent(source.UserAgent())
 	client.DisableKeepAlives = !opts.KeepAlive
-	session, err := createInstanceResultDownloadSession(ctx, job.Project, job.InstanceID, opts.QuotaName, client, sessionOptions...)
+	session, err := createInstanceResultDownloadSession(ctx, job.Project, job.InstanceID, opts.QuotaName, client, cfg)
 	if err != nil {
 		client.CloseIdleConnections()
 	}

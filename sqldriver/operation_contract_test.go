@@ -39,9 +39,17 @@ func TestUnsupportedDatabaseSQLOperations(t *testing.T) {
 func TestRejectConflictingTunnelOptionsBeforeSubmission(t *testing.T) {
 	f := newFakeService(t)
 	cfg := f.config()
+	dsn, err := cfg.FormatDSN()
+	require.NoError(t, err)
 	cfg.TunnelQuotaName = "test-quota"
-	_, err := sql.Open("odps", cfg.FormatDsn())
-	require.ErrorContains(t, err, "cannot be configured both")
+	_, err = cfg.FormatDSN()
+	require.ErrorContains(t, err, "mutually exclusive")
+	require.Empty(t, cfg.FormatDsn())
+	conflict := dsn + "&tunnelQuotaName=test-quota"
+	_, err = ParseDSN(conflict)
+	require.ErrorContains(t, err, "mutually exclusive")
+	_, err = sql.Open("odps", conflict)
+	require.ErrorContains(t, err, "mutually exclusive")
 	require.Zero(t, f.count(&f.submits))
 }
 
@@ -342,7 +350,9 @@ func TestConnectorValidatesInputAndUsesBorrowedClient(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(client.CloseIdleConnections)
 	_, err = NewConnector(client, ConnectorOptions{TunnelEndpoint: "ftp://example.test"})
-	require.ErrorContains(t, err, "Tunnel endpoint")
+	require.ErrorContains(t, err, "tunnelEndpoint")
+	_, err = NewConnector(client, ConnectorOptions{TunnelEndpoint: f.tunnel.URL, TunnelQuotaName: "named"})
+	require.ErrorContains(t, err, "mutually exclusive")
 	connector, err := NewConnector(client, ConnectorOptions{TunnelEndpoint: f.tunnel.URL})
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())

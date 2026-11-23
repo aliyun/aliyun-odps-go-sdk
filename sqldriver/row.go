@@ -227,6 +227,12 @@ func (rr *rowsReader) ColumnTypeDatabaseTypeName(index int) string {
 	return rr.columns[index].Type.Name()
 }
 
+// ColumnTypePrecisionScale exposes the declared DECIMAL type through sql.ColumnType.DecimalSize.
+func (rr *rowsReader) ColumnTypePrecisionScale(index int) (int64, int64, bool) {
+	typ, ok := rr.columns[index].Type.(datatype.DecimalType)
+	return int64(typ.Precision), int64(typ.Scale), ok
+}
+
 func (rr *rowsReader) ColumnTypeScanType(index int) reflect.Type {
 	column := rr.columns[index]
 	dataType := column.Type

@@ -458,8 +458,20 @@ func (r *RecordProtocReader) readMap(t datatype.MapType) (*data.Map, error) {
 	}
 
 	dm := data.NewMapWithType(t)
+	seen := make(protobufMapKeys, keys.Len())
 	for i, n := 0, keys.Len(); i < n; i++ {
 		key := keys.Index(i)
+		if err := seen.add(key); err != nil {
+			return nil, errors.Wrap(err, "invalid protobuf map entry")
+		}
+		// Slice-backed keys need a pointer to be stored in a Go map. The
+		// duplicate check above uses their byte content.
+		switch v := key.(type) {
+		case data.Binary:
+			key = &v
+		case data.Geography:
+			key = &v
+		}
 		value := values.Index(i)
 		if err := dm.Set(key, value); err != nil {
 			return nil, errors.Wrap(err, "invalid protobuf map entry")

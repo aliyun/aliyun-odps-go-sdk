@@ -79,11 +79,13 @@ func TestClientConfigurationAndDiscovery(t *testing.T) {
 	_, err = client.CreateTableReadSession(ctx, Table{Name: "sample"}, TableReadOptions{})
 	require.NoError(t, err)
 
+	service.SetCurrentSchemaName("analytics")
 	otherProject, err := NewClient(ctx, service, ClientOptions{Project: "another_project", QuotaName: "named"})
 	require.NoError(t, err)
 	t.Cleanup(otherProject.Close)
 	require.Equal(t, server.URL, otherProject.rest.Endpoint())
 	require.Equal(t, "another_project", otherProject.project)
+	require.Equal(t, "default", otherProject.schema)
 	require.Equal(t, "test_project", service.DefaultProjectName())
 
 	for _, endpoint := range []string{"http://%", "http:/path", "ftp://example.test", "http://u@example.test", "http://example.test?q=v", "http://example.test#hash"} {
@@ -323,7 +325,7 @@ func TestArrowReadLengthAndTruncation(t *testing.T) {
 		{"truncated message", 1, payload[:schemaEnd+3], false, io.ErrUnexpectedEOF},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			r, err := newArrowReader(io.NopCloser(bytes.NewReader(tc.input)), tc.count)
+			r, err := newArrowReader(io.NopCloser(bytes.NewReader(tc.input)), rowBounds{min: tc.count, max: tc.count})
 			require.NoError(t, err)
 			defer r.Release()
 			require.Equal(t, tc.first, r.Next())
@@ -474,8 +476,40 @@ func TestRequestEncodingErrors(t *testing.T) {
 	op := operation{action: "TableRead", target: "projects.test_project.schemas.default.tables.table"}
 	_, err := client.jsonRequest(t.Context(), http.MethodPost, op, make(chan string), nil)
 	require.ErrorContains(t, err, "unsupported type")
-	_, err = client.arrowRequest(t.Context(), op, make(chan string), 1)
+	_, err = client.arrowRequest(t.Context(), op, make(chan string), rowBounds{max: 1})
 	require.ErrorContains(t, err, "unsupported type")
 	_, err = client.request(t.Context(), "not a method", op, strings.NewReader(""), nil)
 	require.ErrorContains(t, err, "invalid method")
+}
+
+func TestUnknownSnapshotCountKeepsExplicitRangeUpperBound(t *testing.T) {
+	payload := makeIPC(t, makeArrowBatch(t, 10, 20))
+	client := localClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("Action") {
+		case "InstanceCreateReadSession":
+			fmt.Fprint(w, `{"DownloadID":"result"}`)
+		case "InstanceRead":
+			assert.Equal(t, "5", r.URL.Query().Get("Offset"))
+			_, _ = w.Write(payload)
+		default:
+			t.Errorf("unexpected request %s", r.URL.Path)
+		}
+	})
+	s, err := client.CreateInstanceReadSession(t.Context(), "job", InstanceReadOptions{})
+	require.NoError(t, err)
+	require.False(t, s.Plan().CountKnown)
+	for _, count := range []int64{0, 1, 2, 3} {
+		reader, err := s.OpenReader(t.Context(), &RowRange{Offset: 5, Count: count})
+		require.NoError(t, err)
+		if count < 2 {
+			require.False(t, reader.Next())
+			require.ErrorContains(t, reader.Err(), "range")
+		} else {
+			require.True(t, reader.Next())
+			require.EqualValues(t, 2, reader.RecordBatch().NumRows())
+			require.False(t, reader.Next())
+			require.NoError(t, reader.Err())
+		}
+		reader.Release()
+	}
 }

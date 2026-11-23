@@ -91,9 +91,14 @@ func validateRecordValue(t datatype.DataType, value data.Data) error {
 		if !ok {
 			return fmt.Errorf("expected %s, got MAP", t.ID())
 		}
-		for key, value := range v.ToGoMap() {
+		entries := v.ToGoMap()
+		seen := make(protobufMapKeys, len(entries))
+		for key, value := range entries {
 			if err := validateRecordValue(expected.KeyType, key); err != nil {
 				return fmt.Errorf("map key: %w", err)
+			}
+			if err := seen.add(key); err != nil {
+				return err
 			}
 			if err := validateRecordValue(expected.ValueType, value); err != nil {
 				return fmt.Errorf("map value: %w", err)
@@ -143,6 +148,58 @@ func validateRecordValue(t datatype.DataType, value data.Data) error {
 	default:
 		return fmt.Errorf("unsupported Protobuf value type %T", value)
 	}
+}
+
+// A Go map can contain different SDK values that represent the same key once
+// encoded with the column's key type. Both sides check before inserting a key.
+type protobufMapKeys map[any]struct{}
+
+func (seen protobufMapKeys) add(key data.Data) error {
+	value := wireValue(key)
+	var identity any = value
+	switch v := value.(type) {
+	case data.TinyInt, data.SmallInt, data.Int, data.BigInt:
+		identity = reflect.ValueOf(v).Int()
+	case data.Char:
+		identity = strings.TrimRight(v.Data(), " ")
+	case data.VarChar, data.Json:
+		identity = v.String()
+	case data.Binary:
+		identity = string(v)
+	case data.Geography:
+		identity = string(v)
+	case data.Decimal:
+		// Decimal keys compare at the column's scale, regardless of spelling.
+		text := v.String()
+		whole, fraction, _ := strings.Cut(strings.TrimLeft(text, "+-"), ".")
+		digits := strings.TrimLeft(whole, "0") + "." + strings.TrimRight(fraction, "0")
+		if digits != "." && strings.HasPrefix(text, "-") {
+			digits = "-" + digits
+		}
+		identity = digits
+	case data.Date:
+		identity = v.Time().Unix() / data.SecondsPerDay
+	case data.DateTime:
+		identity = v.Time().UnixMilli()
+	case data.Timestamp:
+		identity = v.Time().UTC()
+	case data.TimestampNtz:
+		identity = v.Time().UTC()
+	case data.Float, data.Double:
+		f := reflect.ValueOf(v).Float()
+		if f == 0 {
+			f = 0 // Both signs of zero denote the same key.
+		}
+		identity = math.Float64bits(f)
+	}
+	if identity != nil && !reflect.ValueOf(identity).Comparable() {
+		return fmt.Errorf("map key of type %s is not comparable", value.Type())
+	}
+	if _, duplicate := seen[identity]; duplicate {
+		return fmt.Errorf("duplicate map key after conversion to the column type")
+	}
+	seen[identity] = struct{}{}
+	return nil
 }
 
 func checkCharacterWidth(s string, width int) error {

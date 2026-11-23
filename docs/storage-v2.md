@@ -36,7 +36,9 @@ for reader.Next() {
 return reader.Err()
 ```
 
-Pass `&storage.RowRange{Offset: start, Count: count}` to read a range. Use the
+Pass `&storage.RowRange{Offset: start, Count: count}` to read a range. For a
+snapshot with unknown row count, a range may end early. An overlong batch
+makes `Next` stop and sets `Err` before the caller consumes that batch. Use the
 serializable `session.Descriptor()` with `ResumeRead` to reopen a result. See the
 [runnable instance reader](../examples/sdk/storage/instance_result/main.go).
 
@@ -47,7 +49,9 @@ serializable `session.Descriptor()` with `ResumeRead` to reopen a result. See th
   context deadline, then use `OpenReader`. If waiting fails, it returns the
   latest handle for `ResumeRead` with a new context. Inspect `Plan` before
   opening the stream for the projected schema and row count when available.
-  Supply an explicit row range when the count is unknown.
+  Keep the returned handle, for example `ready, err := pending.WaitReady(ctx)`,
+  and call `ready.OpenReader` after a successful wait. Supply an explicit
+  row range when the count is unknown.
 - Create a batch upload with `CreateTableWriteSession` and open one or more
   streams with `CreateStream`. Use ASCII letters, digits, and hyphens in stream
   IDs and positive stream versions. Write each batch at the previously
@@ -71,7 +75,8 @@ versions before submitting a commit. If the outcome is uncertain, call
 `ResumeWrite` using the same project and quota and repeat the commit with the
 same versions. `Refresh` and `ClosedStreams` let the coordinator inspect
 acknowledged streams. A `*storage.CommitError` also carries the latest
-descriptor for recovery. For a partitioned upload, supply the partition spec in `TableWriteOptions.Partition`.
+descriptor for recovery, including a route token updated by an HTTP error
+response. Inspect the wrapped cause before choosing to retry. For a partitioned upload, supply the partition spec in `TableWriteOptions.Partition`.
 Set `Overwrite` when the commit should replace the target's rows.
 
 Use `TableReadOptions.PartitionColumns` to include partition keys in Arrow

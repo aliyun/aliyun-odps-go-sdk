@@ -200,10 +200,8 @@ func (c *Config) FormatDSN() (string, error) {
 	if explicit && (strings.TrimSpace(c.AccessId) == "" || strings.TrimSpace(c.AccessKey) == "") {
 		return "", errors.New("incomplete explicit ODPS credentials")
 	}
-	if c.TunnelEndpoint != "" {
-		if _, err := configvalue.Endpoint(c.TunnelEndpoint, "tunnel endpoint"); err != nil {
-			return "", err
-		}
+	if err := configvalue.SQLTunnelRoute(c.TunnelEndpoint, c.TunnelQuotaName); err != nil {
+		return "", err
 	}
 	for name, timeout := range map[string]time.Duration{
 		"http timeout": c.HttpTimeout, "TCP connection timeout": c.TcpConnectionTimeout,

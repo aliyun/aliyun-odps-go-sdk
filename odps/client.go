@@ -27,7 +27,8 @@ type ClientOptions struct {
 	Endpoint string
 	Project  string
 	Schema   string
-	Region   string
+	// Region selects the LogView region. The account controls the signing region.
+	Region string
 
 	// Transport is optional. Its owner manages its connection pool.
 	Transport http.RoundTripper
@@ -36,8 +37,9 @@ type ClientOptions struct {
 	// HTTPTimeout bounds one HTTP exchange, including the response body.
 	// Zero leaves the deadline to the request context.
 	HTTPTimeout time.Duration
-	// TCPConnectionTimeout bounds connection establishment. Zero uses the SDK default.
-	TCPConnectionTimeout time.Duration
+	// TCPConnectionTimeout bounds connection establishment. Nil uses the SDK default.
+	// A pointer to zero disables the dial timeout.
+	TCPConnectionTimeout *time.Duration
 }
 
 // Client provides a fixed default scope and request settings. It can be used
@@ -59,7 +61,7 @@ func NewClient(credentials account.Account, opts ClientOptions) (*Client, error)
 	if err := validateScope(Scope{Project: opts.Project, Schema: opts.Schema}); err != nil {
 		return nil, err
 	}
-	if opts.HTTPTimeout < 0 || opts.TCPConnectionTimeout < 0 {
+	if opts.HTTPTimeout < 0 || (opts.TCPConnectionTimeout != nil && *opts.TCPConnectionTimeout < 0) {
 		return nil, fmt.Errorf("client timeouts must be non-negative")
 	}
 
@@ -67,8 +69,8 @@ func NewClient(credentials account.Account, opts ClientOptions) (*Client, error)
 	service.SetDefaultProjectName(opts.Project)
 	service.SetCurrentSchemaName(opts.Schema)
 	service.SetHttpTimeout(opts.HTTPTimeout)
-	if opts.TCPConnectionTimeout > 0 {
-		service.SetTcpConnectTimeout(opts.TCPConnectionTimeout)
+	if opts.TCPConnectionTimeout != nil {
+		service.SetTcpConnectTimeout(*opts.TCPConnectionTimeout)
 	}
 	service.SetUserAgent(opts.UserAgent)
 	if opts.Region != "" {
@@ -83,15 +85,25 @@ func (c *Client) Scope() Scope {
 }
 
 // WithScope returns a new client borrowing the account, transport and pool.
-// An empty Project inherits c's project. The new Schema is used verbatim.
+// An omitted schema inherits the current schema within the same project.
+// Switching projects without a schema selects the target project's default.
 func (c *Client) WithScope(scope Scope) (*Client, error) {
-	if scope.Project == "" {
-		scope.Project = c.service.DefaultProjectName()
-	}
+	scope = c.resolveScope(scope)
 	if err := validateScope(scope); err != nil {
 		return nil, err
 	}
 	return c.withScope(scope), nil
+}
+
+func (c *Client) resolveScope(scope Scope) Scope {
+	current := c.Scope()
+	if scope.Project == "" {
+		scope.Project = current.Project
+	}
+	if scope.Project == current.Project && scope.Schema == "" {
+		scope.Schema = current.Schema
+	}
+	return scope
 }
 
 func (c *Client) withScope(scope Scope) *Client {
@@ -120,7 +132,8 @@ func (c *Client) RestClient() restclient.RestClient {
 type RequestMetadata = restclient.RequestMetadata
 
 // WithRequestMetadata attaches call context, W3C trace headers and a User-Agent
-// suffix to requests using ctx. Metadata is applied before request signing.
+// suffix to requests using ctx. A later call replaces the metadata as a whole.
+// Metadata is applied before request signing.
 func WithRequestMetadata(ctx context.Context, metadata RequestMetadata) context.Context {
 	return restclient.WithRequestMetadata(ctx, metadata)
 }

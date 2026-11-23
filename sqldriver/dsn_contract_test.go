@@ -15,7 +15,7 @@ func TestParseDSNIncludesExplicitOptions(t *testing.T) {
 	t.Setenv("ALIBABA_CLOUD_SECURITY_TOKEN", "env-token")
 	config, err := ParseDSN("http://dsn-id:dsn-secret@127.0.0.1:8080/api?project=fixture&stsToken=dsn-token" +
 		"&tcpConnectionTimeout=4&httpTimeout=9&tunnelEndpoint=http%3A%2F%2F127.0.0.1%3A8081" +
-		"&tunnelQuotaName=batch&enableLogview=false&odps.sql.type.system.odps2=true")
+		"&enableLogview=false&odps.sql.type.system.odps2=true")
 	require.NoError(t, err)
 	require.Equal(t, "dsn-id", config.AccessId)
 	require.Equal(t, "dsn-secret", config.AccessKey)
@@ -23,14 +23,15 @@ func TestParseDSNIncludesExplicitOptions(t *testing.T) {
 	require.Equal(t, "fixture", config.ProjectName)
 	require.Equal(t, "http://127.0.0.1:8080/api", config.Endpoint)
 	require.Equal(t, "http://127.0.0.1:8081", config.TunnelEndpoint)
-	require.Equal(t, "batch", config.TunnelQuotaName)
+	require.Empty(t, config.TunnelQuotaName)
 	require.Equal(t, 4*time.Second, config.TcpConnectionTimeout)
 	require.Equal(t, 9*time.Second, config.HttpTimeout)
 	require.Equal(t, map[string]string{"enableLogview": "false"}, config.Others)
 	require.Equal(t, map[string]string{"odps.sql.type.system.odps2": "true"}, config.Hints)
 
-	config, err = ParseDSN("http://127.0.0.1:8080/api?project=fixture")
+	config, err = ParseDSN("http://127.0.0.1:8080/api?project=fixture&tunnelQuotaName=batch")
 	require.NoError(t, err)
+	require.Equal(t, "batch", config.TunnelQuotaName)
 	require.Equal(t, "env-id", config.AccessId)
 	require.Equal(t, "env-secret", config.AccessKey)
 	require.Equal(t, "env-token", config.StsToken)
@@ -97,5 +98,23 @@ func TestDSNCredentialWhitespaceAndInvalidRoute(t *testing.T) {
 		config.AccessId, config.AccessKey = idOrKey.id, idOrKey.key
 		_, err := config.FormatDSN()
 		require.ErrorContains(t, err, "incomplete explicit")
+	}
+}
+
+func TestConnectorAppliesDSNDialTimeout(t *testing.T) {
+	const dsn = "https://test-id:test-key@api.example.test/api?project=fixture"
+	for _, tc := range []struct {
+		param string
+		want  time.Duration
+	}{
+		{"", 30 * time.Second},
+		{"&tcpConnectionTimeout=0", 0},
+		{"&tcpConnectionTimeout=4", 4 * time.Second},
+	} {
+		driverConnector, err := (OdpsDriver{}).OpenConnector(dsn + tc.param)
+		require.NoError(t, err)
+		connector := driverConnector.(*Connector)
+		require.Equal(t, tc.want, connector.client.RestClient().TcpConnectionTimeout)
+		require.NoError(t, connector.Close())
 	}
 }

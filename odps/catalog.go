@@ -84,7 +84,7 @@ func listPages[T any](ctx context.Context, token string, fetch func(string) (Pag
 	}
 }
 
-// TableRef identifies a table. Empty Project and Schema use the client's defaults.
+// TableRef identifies a table. Project and Schema follow the rules of Client.WithScope.
 type TableRef struct {
 	Project string
 	Schema  string
@@ -98,14 +98,9 @@ type ResourceRef TableRef
 type FunctionRef TableRef
 
 func (c *Client) resolveRef(ref TableRef, kind string) (TableRef, error) {
-	scope := c.Scope()
-	if ref.Project == "" {
-		ref.Project = scope.Project
-	}
-	if ref.Schema == "" {
-		ref.Schema = scope.Schema
-	}
-	if err := validateScope(Scope{Project: ref.Project, Schema: ref.Schema}); err != nil {
+	scope := c.resolveScope(Scope{Project: ref.Project, Schema: ref.Schema})
+	ref.Project, ref.Schema = scope.Project, scope.Schema
+	if err := validateScope(scope); err != nil {
 		return TableRef{}, err
 	}
 	if err := validateName(kind, ref.Name); err != nil {
@@ -127,6 +122,8 @@ type TableSummary struct {
 type TableMetadata struct {
 	TableSummary
 	Schema tableschema.TableSchema
+	// ExtendedLoaded reports whether GetExtended fetched the extended schema fields.
+	ExtendedLoaded bool
 }
 
 // TableListOptions filters tables in the client's scope.
@@ -170,7 +167,7 @@ func (t TableCatalog) get(ctx context.Context, ref TableRef, extended bool) (Tab
 	}
 	info := tableSummary(client.Scope(), table.model)
 	info.Comment, info.Owner = table.Comment(), table.Owner()
-	return TableMetadata{TableSummary: info, Schema: table.Schema()}, nil
+	return TableMetadata{TableSummary: info, Schema: table.Schema(), ExtendedLoaded: extended}, nil
 }
 
 func tableSummary(scope Scope, m tableModel) TableSummary {
@@ -235,7 +232,8 @@ func (t TableCatalog) List(ctx context.Context, opts TableListOptions) iter.Seq2
 	})
 }
 
-// ProjectMetadata contains the stable attributes of a project.
+// ProjectMetadata contains the attributes reported by the service. Optional
+// strings can be empty, and an omitted status is ProjectStatusUnKnown.
 type ProjectMetadata struct {
 	Name     string
 	Owner    string
@@ -281,6 +279,9 @@ func (p ProjectCatalog) Get(ctx context.Context, name string) (ProjectMetadata, 
 }
 
 func projectMetadata(m projectModel) ProjectMetadata {
+	if m.Status == 0 {
+		m.Status = ProjectStatusUnKnown
+	}
 	return ProjectMetadata{
 		Name: m.Name, Owner: m.Owner, Comment: m.Comment, Type: m.Type,
 		Status: m.Status, Region: m.RegionId, TenantID: m.TenantId,
@@ -330,13 +331,19 @@ func (p ProjectCatalog) List(ctx context.Context, opts ProjectListOptions) iter.
 	})
 }
 
-// SchemaMetadata contains catalog attributes without a lazy-loading handle.
+// SchemaSummary contains the schema attributes available in a catalog listing.
+type SchemaSummary struct {
+	Project string
+	Name    string
+	Owner   string
+	Comment string
+	Type    string
+}
+
+// SchemaMetadata includes the timestamps returned by the schema detail request.
+// A zero timestamp means the service omitted the corresponding header.
 type SchemaMetadata struct {
-	Project    string
-	Name       string
-	Owner      string
-	Comment    string
-	Type       string
+	SchemaSummary
 	CreatedAt  time.Time
 	ModifiedAt time.Time
 }
@@ -367,12 +374,12 @@ func (s SchemaCatalog) Get(ctx context.Context, name string) (SchemaMetadata, er
 	if err := schema.loadContext(ctx); err != nil {
 		return SchemaMetadata{}, err
 	}
-	return schemaMetadata(project, schema.model), nil
+	m := schema.model
+	return SchemaMetadata{SchemaSummary: schemaSummary(project, m), CreatedAt: m.CreateTime, ModifiedAt: m.ModifiedTime}, nil
 }
 
-func schemaMetadata(project string, m schemaModel) SchemaMetadata {
-	return SchemaMetadata{Project: project, Name: m.Name, Owner: m.Owner, Comment: m.Comment,
-		Type: m.Type, CreatedAt: m.CreateTime, ModifiedAt: m.ModifiedTime}
+func schemaSummary(project string, m schemaModel) SchemaSummary {
+	return SchemaSummary{Project: project, Name: m.Name, Owner: m.Owner, Comment: m.Comment, Type: m.Type}
 }
 
 func schemasPage(ctx context.Context, client restclient.RestClient, project string, q url.Values) (Page[schemaModel], error) {
@@ -387,26 +394,26 @@ func schemasPage(ctx context.Context, client restclient.RestClient, project stri
 }
 
 // ListPage returns one page of schemas.
-func (s SchemaCatalog) ListPage(ctx context.Context, opts SchemaListOptions) (Page[SchemaMetadata], error) {
+func (s SchemaCatalog) ListPage(ctx context.Context, opts SchemaListOptions) (Page[SchemaSummary], error) {
 	q, err := pageQuery(opts.PageOptions, opts.NamePrefix, opts.Owner)
 	if err != nil {
-		return Page[SchemaMetadata]{}, err
+		return Page[SchemaSummary]{}, err
 	}
 	project := s.client.Scope().Project
 	raw, err := schemasPage(ctx, s.client.RestClient(), project, q)
 	if err != nil {
-		return Page[SchemaMetadata]{}, err
+		return Page[SchemaSummary]{}, err
 	}
-	items := make([]SchemaMetadata, 0, len(raw.Items))
+	items := make([]SchemaSummary, 0, len(raw.Items))
 	for _, m := range raw.Items {
-		items = append(items, schemaMetadata(project, m))
+		items = append(items, schemaSummary(project, m))
 	}
-	return Page[SchemaMetadata]{Items: items, NextPageToken: raw.NextPageToken}, nil
+	return Page[SchemaSummary]{Items: items, NextPageToken: raw.NextPageToken}, nil
 }
 
 // List iterates schemas lazily.
-func (s SchemaCatalog) List(ctx context.Context, opts SchemaListOptions) iter.Seq2[SchemaMetadata, error] {
-	return listPages(ctx, opts.PageToken, func(token string) (Page[SchemaMetadata], error) {
+func (s SchemaCatalog) List(ctx context.Context, opts SchemaListOptions) iter.Seq2[SchemaSummary, error] {
+	return listPages(ctx, opts.PageToken, func(token string) (Page[SchemaSummary], error) {
 		current := opts
 		current.PageToken = token
 		return s.ListPage(ctx, current)
@@ -415,11 +422,12 @@ func (s SchemaCatalog) List(ctx context.Context, opts SchemaListOptions) iter.Se
 
 // ResourceMetadata describes a resource in its project and schema.
 type ResourceMetadata struct {
-	Ref             ResourceRef
-	Type            ResourceType
-	Owner           string
-	Comment         string
-	SizeBytes       int64
+	Ref     ResourceRef
+	Type    ResourceType
+	Owner   string
+	Comment string
+	// SizeBytes is nil when the resource response omitted its size.
+	SizeBytes       *int64
 	ContentMD5      string
 	SourceTableName string
 }
@@ -456,7 +464,7 @@ func resourceMetadata(scope Scope, m resourceModel) ResourceMetadata {
 		ref.Schema = scope.Schema
 	}
 	return ResourceMetadata{Ref: ref, Type: ResourceTypeFromStr(string(m.ResourceType)), Owner: m.Owner,
-		Comment: m.Comment, SizeBytes: m.ResourceSize, ContentMD5: m.ContentMD5, SourceTableName: m.SourceTableName}
+		Comment: m.Comment, SizeBytes: m.reportedSize, ContentMD5: m.ContentMD5, SourceTableName: m.SourceTableName}
 }
 
 func resourcesPage(ctx context.Context, client restclient.RestClient, project string, q url.Values) (Page[resourceModel], error) {
@@ -505,7 +513,7 @@ type FunctionMetadata struct {
 	Ref           FunctionRef
 	Owner         string
 	ClassPath     string
-	Resources     []FResource
+	Resources     []string
 	SQLDefinition string
 	Language      string
 }
@@ -534,7 +542,7 @@ func (f FunctionCatalog) Get(ctx context.Context, ref FunctionRef) (FunctionMeta
 	m := function.Model
 	return FunctionMetadata{
 		Ref:   FunctionRef{Project: target.Project, Schema: m.SchemaName, Name: m.Name},
-		Owner: m.Owner, ClassPath: m.ClassPath, Resources: m.Resources,
+		Owner: m.Owner, ClassPath: m.ClassPath, Resources: function.Resources(),
 		SQLDefinition: m.SQLDefinitionText, Language: m.ProgramLanguage,
 	}, nil
 }

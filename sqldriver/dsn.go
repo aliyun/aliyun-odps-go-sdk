@@ -90,12 +90,10 @@ func ParseDSN(dsn string) (*Config, error) {
 		return nil, errors.New("AccessKey is not set")
 	}
 	config.TunnelEndpoint = params.Get("tunnelEndpoint")
-	if config.TunnelEndpoint != "" {
-		if _, err := configvalue.Endpoint(config.TunnelEndpoint, "tunnelEndpoint"); err != nil {
-			return nil, err
-		}
-	}
 	config.TunnelQuotaName = params.Get("tunnelQuotaName")
+	if err := configvalue.SQLTunnelRoute(config.TunnelEndpoint, config.TunnelQuotaName); err != nil {
+		return nil, err
+	}
 	config.TcpConnectionTimeout, err = configvalue.TimeoutSeconds(params.Get("tcpConnectionTimeout"), "tcpConnectionTimeout", config.TcpConnectionTimeout)
 	if err != nil {
 		return nil, err

@@ -33,7 +33,6 @@ func TestConfigFromIniAndDSN(t *testing.T) {
 sts_token = fake-token
 tcp_connection_timeout = 3
 http_timeout = 9
-tunnel_endpoint = http://127.0.0.1:8081
 tunnel_quota_name = batch
 enableLogview = false
 hints.odps.sql.type.system.odps2 = true

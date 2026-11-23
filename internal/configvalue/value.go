@@ -24,6 +24,18 @@ func Endpoint(value, name string) (*url.URL, error) {
 	return u, nil
 }
 
+// SQLTunnelRoute validates the mutually exclusive database/sql result routes.
+func SQLTunnelRoute(endpoint, quota string) error {
+	if endpoint == "" {
+		return nil
+	}
+	if quota != "" {
+		return fmt.Errorf("tunnelEndpoint and tunnelQuotaName are mutually exclusive")
+	}
+	_, err := Endpoint(endpoint, "tunnelEndpoint")
+	return err
+}
+
 func TimeoutSeconds(value, name string, fallback time.Duration) (time.Duration, error) {
 	if value == "" {
 		return fallback, nil

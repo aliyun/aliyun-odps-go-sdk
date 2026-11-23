@@ -54,17 +54,15 @@ func CreateInstanceResultDownloadSession(
 	restClient restclient.RestClient,
 	opts ...InstanceOption,
 ) (*InstanceResultDownloadSession, error) {
-	return createInstanceResultDownloadSession(context.Background(), projectName, instanceId, quotaName, restClient, opts...)
+	return createInstanceResultDownloadSession(context.Background(), projectName, instanceId, quotaName, restClient, newInstanceSessionConfig(opts...))
 }
 
 func createInstanceResultDownloadSession(
 	ctx context.Context,
 	projectName, instanceId, quotaName string,
 	restClient restclient.RestClient,
-	opts ...InstanceOption,
+	cfg *instanceSessionConfig,
 ) (*InstanceResultDownloadSession, error) {
-	cfg := newInstanceSessionConfig(opts...)
-
 	session := InstanceResultDownloadSession{
 		InstanceId:   instanceId,
 		ProjectName:  projectName,

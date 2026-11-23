@@ -4,9 +4,12 @@ package odps_test
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,6 +19,7 @@ import (
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	odpsaccount "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/options"
 )
 
@@ -113,6 +117,8 @@ func TestScopedClientCatalogFetchAndPagination(t *testing.T) {
 	require.EqualValues(t, 1, gets.Load())
 	extended, err := scoped.Tables().GetExtended(t.Context(), ref)
 	require.NoError(t, err)
+	require.False(t, table.ExtendedLoaded)
+	require.True(t, extended.ExtendedLoaded)
 	require.Equal(t, 17, extended.Schema.FileNum)
 	require.Equal(t, "id", extended.Schema.Columns[0].Name)
 	require.EqualValues(t, 3, gets.Load())
@@ -131,14 +137,15 @@ func TestClientCatalogUsesScopedMetadataLoaders(t *testing.T) {
 			fmt.Fprint(w, "<Schema><Name>analytics</Name><Owner>alice</Owner></Schema>")
 		case "/api/projects/alpha/resources":
 			assert.Equal(t, "analytics", r.URL.Query().Get("curr_schema"))
-			fmt.Fprint(w, "<Resources><Resource><Name>example.txt</Name><ResourceType>file</ResourceType></Resource></Resources>")
+			fmt.Fprint(w, "<Resources><Resource><Name>example.txt</Name><ResourceType>file</ResourceType></Resource><Resource><Name>empty</Name><ResourceSize>0</ResourceSize></Resource></Resources>")
 		case "/api/projects/alpha/resources/example.txt":
 			assert.Equal(t, "analytics", r.URL.Query().Get("curr_schema"))
 			assert.True(t, r.URL.Query().Has("meta"))
 			w.Header().Set("x-odps-resource-type", "file")
+			w.Header().Set("x-odps-resource-size", "0")
 		case "/api/projects/alpha/registration/functions/example":
 			assert.Equal(t, "analytics", r.URL.Query().Get("curr_schema"))
-			fmt.Fprint(w, "<Function><Alias>example</Alias><Owner>alice</Owner></Function>")
+			fmt.Fprint(w, "<Function><Alias>example</Alias><Owner>alice</Owner><Resources><ResourceName>module.jar</ResourceName></Resources></Function>")
 		default:
 			t.Errorf("unexpected request path %q", r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
@@ -151,6 +158,7 @@ func TestClientCatalogUsesScopedMetadataLoaders(t *testing.T) {
 	for item, err := range client.Projects().List(ctx, odps.ProjectListOptions{Group: "team", User: "alice"}) {
 		require.NoError(t, err)
 		require.Equal(t, "alpha", item.Name)
+		require.EqualValues(t, odps.ProjectStatusUnKnown, item.Status)
 		break
 	}
 	schema, err := client.Schemas().Get(ctx, "")
@@ -163,14 +171,18 @@ func TestClientCatalogUsesScopedMetadataLoaders(t *testing.T) {
 	resource, err := client.Resources().Get(ctx, odps.ResourceRef{Name: "example.txt"})
 	require.NoError(t, err)
 	require.Equal(t, odps.ResourceTypeFile, resource.Type)
-	for item, err := range client.Resources().List(ctx, odps.ResourceListOptions{}) {
-		require.NoError(t, err)
-		require.Equal(t, resource.Ref, item.Ref)
-	}
+	require.Equal(t, new(int64(0)), resource.SizeBytes)
+	page, err := client.Resources().ListPage(ctx, odps.ResourceListOptions{})
+	require.NoError(t, err)
+	require.Len(t, page.Items, 2)
+	require.Equal(t, resource.Ref, page.Items[0].Ref)
+	require.Nil(t, page.Items[0].SizeBytes)
+	require.Equal(t, new(int64(0)), page.Items[1].SizeBytes)
 	function, err := client.Functions().Get(ctx, odps.FunctionRef{Name: "example"})
 	require.NoError(t, err)
 	require.Equal(t, "analytics", function.Ref.Schema)
 	require.Equal(t, "alice", function.Owner)
+	require.Equal(t, []string{"module.jar"}, function.Resources)
 }
 
 func TestClientSQLJobLifecycle(t *testing.T) {
@@ -244,6 +256,7 @@ func TestClientChecksOptionsAndSignsRequestMetadata(t *testing.T) {
 		{Project: "..", Endpoint: "https://example.test"},
 		{Project: "p", Schema: "bad/schema", Endpoint: "https://example.test"},
 		{Project: "p", HTTPTimeout: -1, Endpoint: "https://example.test"},
+		{Project: "p", TCPConnectionTimeout: new(-time.Second), Endpoint: "https://example.test"},
 	} {
 		_, err := odps.NewClient(credentials, opts)
 		require.Error(t, err)
@@ -273,7 +286,7 @@ func TestCatalogPropagatesScopedValidationAndServiceErrors(t *testing.T) {
 		case r.URL.Path == "/api/projects/alpha/tables" && r.URL.Query().Get("marker") == "":
 			assert.Equal(t, "alice", r.URL.Query().Get("owner"))
 			assert.Equal(t, "VIRTUAL_VIEW", r.URL.Query().Get("type"))
-			assert.Empty(t, r.URL.Query().Get("curr_schema"))
+			assert.Equal(t, "analytics", r.URL.Query().Get("curr_schema"))
 			fmt.Fprint(w, "<Tables><Table><Name>first</Name></Table><Table><Name>second</Name></Table><Marker>next</Marker></Tables>")
 		case r.URL.Path == "/api/projects/alpha/tables/view" && !r.URL.Query().Has("extended"):
 			fmt.Fprint(w, "<Table><Schema>{\"columns\":[{\"name\":\"id\",\"type\":\"bigint\"}]}</Schema></Table>")
@@ -285,13 +298,13 @@ func TestCatalogPropagatesScopedValidationAndServiceErrors(t *testing.T) {
 	})
 	_, err := client.WithScope(odps.Scope{Project: "bad/project"})
 	require.ErrorContains(t, err, "project name")
-	rootScope, err := client.WithScope(odps.Scope{})
+	sameScope, err := client.WithScope(odps.Scope{})
 	require.NoError(t, err)
-	require.Equal(t, odps.Scope{Project: "alpha"}, rootScope.Scope())
+	require.Equal(t, client.Scope(), sameScope.Scope())
 
 	ctx := t.Context()
 	badType := odps.TableTypeUnknown
-	_, err = rootScope.Tables().ListPage(ctx, odps.TableListOptions{Type: &badType})
+	_, err = sameScope.Tables().ListPage(ctx, odps.TableListOptions{Type: &badType})
 	require.ErrorContains(t, err, "table type")
 	_, err = client.Tables().Get(ctx, odps.TableRef{Project: "..", Name: "view"})
 	require.ErrorContains(t, err, "project name")
@@ -325,7 +338,7 @@ func TestCatalogPropagatesScopedValidationAndServiceErrors(t *testing.T) {
 			}
 			var got []string
 			var seqErr error
-			for entry, err := range rootScope.Tables().List(ctx, opts) {
+			for entry, err := range sameScope.Tables().List(ctx, opts) {
 				if err != nil {
 					seqErr = err
 					break
@@ -375,7 +388,7 @@ func TestCatalogPropagatesScopedValidationAndServiceErrors(t *testing.T) {
 	require.ErrorContains(t, err, "fixture rejected")
 	_, err = client.Schemas().ListPage(ctx, odps.SchemaListOptions{})
 	require.ErrorContains(t, err, "fixture rejected")
-	_, err = rootScope.Resources().ListPage(ctx, odps.ResourceListOptions{})
+	_, err = sameScope.Resources().ListPage(ctx, odps.ResourceListOptions{})
 	require.ErrorContains(t, err, "fixture rejected")
 }
 
@@ -522,4 +535,95 @@ func TestSQLJobRejectsTerminatedInstanceWithoutTaskStatus(t *testing.T) {
 	var jobErr *odps.SQLJobError
 	require.ErrorAs(t, err, &jobErr)
 	require.Equal(t, job.Ref(), jobErr.Job)
+}
+
+func TestCatalogReferencesAndScopedClientsSelectTheSameObject(t *testing.T) {
+	for _, tc := range []struct {
+		project, schema string
+		want            odps.Scope
+	}{
+		{"", "", odps.Scope{Project: "alpha", Schema: "analytics"}},
+		{"alpha", "", odps.Scope{Project: "alpha", Schema: "analytics"}},
+		{"beta", "", odps.Scope{Project: "beta"}},
+		{"beta", "reports", odps.Scope{Project: "beta", Schema: "reports"}},
+	} {
+		t.Run(tc.project+"-"+tc.schema, func(t *testing.T) {
+			client := newV1Client(t, func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, tc.want.Project, r.URL.Query().Get("curr_project"))
+				assert.Equal(t, tc.want.Schema, r.URL.Query().Get("curr_schema"))
+				switch strings.TrimPrefix(r.URL.Path, "/api/projects/"+tc.want.Project) {
+				case "/tables/item":
+					fmt.Fprint(w, "<Table><Name>item</Name><Schema>{}</Schema></Table>")
+				case "/resources/item":
+					w.Header().Set("x-odps-resource-type", "file")
+				case "/registration/functions/item":
+					fmt.Fprint(w, "<Function><Alias>item</Alias></Function>")
+				default:
+					t.Errorf("unexpected path %s", r.URL.Path)
+				}
+			})
+			scoped, err := client.WithScope(odps.Scope{Project: tc.project, Schema: tc.schema})
+			require.NoError(t, err)
+			direct := odps.TableRef{Project: tc.project, Schema: tc.schema, Name: "item"}
+			want := odps.TableRef{Project: tc.want.Project, Schema: tc.want.Schema, Name: "item"}
+			for _, access := range []struct {
+				client *odps.Client
+				ref    odps.TableRef
+			}{
+				{client, direct}, {scoped, odps.TableRef{Name: "item"}},
+			} {
+				table, err := access.client.Tables().Get(t.Context(), access.ref)
+				require.NoError(t, err)
+				require.Equal(t, want, table.Ref)
+				resource, err := access.client.Resources().Get(t.Context(), odps.ResourceRef(access.ref))
+				require.NoError(t, err)
+				require.Equal(t, odps.ResourceRef(want), resource.Ref)
+				function, err := access.client.Functions().Get(t.Context(), odps.FunctionRef(access.ref))
+				require.NoError(t, err)
+				require.Equal(t, odps.FunctionRef(want), function.Ref)
+			}
+		})
+	}
+}
+
+func TestMaxQAJobRefCannotResumeAsAStandardInstance(t *testing.T) {
+	var requests atomic.Int32
+	client := newV1Client(t, func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		assert.Equal(t, "live-session", r.Header.Get(common.HttpHeaderMaxQASessionID))
+		switch r.Method {
+		case http.MethodPost:
+			assert.Equal(t, "/api/mcqa/projects/alpha/instances", r.URL.Path)
+			w.Header().Set("Location", "/projects/alpha/instances/job-1")
+			w.Header().Set(common.HttpHeaderMaxQAQueryCookie, "live-cookie")
+			w.WriteHeader(http.StatusCreated)
+		case http.MethodGet:
+			assert.Equal(t, "/api/mcqa/projects/alpha/instances/job-1", r.URL.Path)
+			assert.Equal(t, "live-cookie", r.Header.Get(common.HttpHeaderMaxQAQueryCookie))
+			fmt.Fprint(w, "<Instance><Status>Running</Status></Instance>")
+		default:
+			t.Errorf("unexpected request %s", r.Method)
+		}
+	})
+	opts := options.NewSQLTaskOptions(options.WithInstanceOption(options.WithMaxQAOptions(options.WithMaxQASessionID("live-session"))))
+	job, err := client.SubmitSQL(t.Context(), odps.SQLRequest{Statement: "select 1", Options: *opts})
+	require.NoError(t, err)
+	status, err := job.Status(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, odps.InstanceRunning, status)
+	payload, err := json.Marshal(job.Ref())
+	require.NoError(t, err)
+	require.NotContains(t, string(payload), "live-")
+	var restored odps.SQLJobRef
+	require.NoError(t, json.Unmarshal(payload, &restored))
+	require.True(t, restored.MaxQA)
+	_, err = client.ResumeSQL(restored)
+	require.ErrorIs(t, err, errors.ErrUnsupported)
+	require.EqualValues(t, 2, requests.Load())
+
+	var standard odps.SQLJobRef
+	require.NoError(t, json.Unmarshal([]byte(`{"InstanceID":"old-job"}`), &standard))
+	resumed, err := client.ResumeSQL(standard)
+	require.NoError(t, err)
+	require.Equal(t, "old-job", resumed.Ref().InstanceID)
 }

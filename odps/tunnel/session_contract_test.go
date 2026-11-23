@@ -3,6 +3,7 @@
 package tunnel
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -410,4 +411,46 @@ func TestScopedSQLResultPoolLifetime(t *testing.T) {
 			require.Eventually(t, func() bool { return closed.Load() > 0 }, time.Second, time.Millisecond)
 		})
 	}
+}
+
+func TestOpenSQLResultRejectsMaxQAReferenceBeforeDiscovery(t *testing.T) {
+	client, err := odps.NewClient(account.NewAliyunAccount("test-ak", "test-sk"),
+		odps.ClientOptions{Endpoint: "https://api.example.test", Project: "project"})
+	require.NoError(t, err)
+	t.Cleanup(client.CloseIdleConnections)
+	_, err = OpenSQLResult(t.Context(), client, odps.SQLJobRef{InstanceID: "known", MaxQA: true}, ResultOptions{})
+	require.ErrorIs(t, err, errors.ErrUnsupported)
+}
+
+func TestSQLResultKeepsTheReferencedTaskAcrossTunnelProtocols(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if requests.Add(1) == 1 {
+			assert.False(t, q.Has("cached"))
+			assert.False(t, q.Has("taskname"))
+		} else {
+			assert.True(t, q.Has("cached"))
+			assert.Equal(t, "original", q.Get("taskname"))
+			assert.Equal(t, "7", q.Get("queryid"))
+		}
+		fmt.Fprint(w, `{"DownloadID":"session","Status":"NORMAL","RecordCount":0,"Schema":{"columns":[]}}`)
+	}))
+	defer server.Close()
+	client, err := odps.NewClient(account.NewAliyunAccount("test-ak", "test-sk"), odps.ClientOptions{Endpoint: server.URL, Project: "project"})
+	require.NoError(t, err)
+	defer client.CloseIdleConnections()
+	ref := odps.SQLJobRef{InstanceID: "job", TaskName: "original"}
+	route := ResultOptions{Endpoint: server.URL}
+	_, err = OpenSQLResult(t.Context(), client, ref, route, InstanceSessionCfg.WithTaskName("other"))
+	require.ErrorContains(t, err, "task name conflicts")
+	_, err = OpenSQLResult(t.Context(), client, odps.SQLJobRef{InstanceID: "job"}, route, InstanceSessionCfg.WithQueryId(7))
+	require.ErrorContains(t, err, "requires a task name")
+	require.Zero(t, requests.Load())
+	for _, options := range [][]InstanceOption{nil, {InstanceSessionCfg.WithQueryId(7)}} {
+		session, err := OpenSQLResult(t.Context(), client, ref, route, options...)
+		require.NoError(t, err)
+		session.CloseIdleConnections()
+	}
+	require.EqualValues(t, 2, requests.Load())
 }
