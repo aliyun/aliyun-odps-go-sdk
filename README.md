@@ -40,6 +40,11 @@ sources, see the [authentication examples](examples/sdk/aliyun_credential/).
 | `ALIBABA_CLOUD_ACCESS_KEY_SECRET` | AccessKey Secret |
 | `ALIBABA_CLOUD_SECURITY_TOKEN` | Security token for temporary STS credentials |
 
+In a command-line program, create a Go context with `ctx := context.Background()`
+and pass `ctx` as the first argument to submit the query, wait for it, and read the result.
+In an HTTP handler, use `r.Context()` from the incoming request so the SDK can stop
+waiting if that request is canceled.
+
 Save the following program as `main.go` in your Go module. [Example source](examples/sdk/quickstart/main.go)
 
 ```go
@@ -50,7 +55,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
@@ -63,9 +67,6 @@ func main() {
 }
 
 func run() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
 	client, err := odps.NewClient(account.AccountFromEnv(), odps.ClientOptions{
 		Endpoint: os.Getenv("odps_endpoint"),
 		Project:  os.Getenv("MAXCOMPUTE_PROJECT"),
@@ -75,6 +76,7 @@ func run() error {
 	}
 	defer client.CloseIdleConnections()
 
+	ctx := context.Background()
 	job, err := client.SubmitSQL(ctx, odps.SQLRequest{Statement: "SELECT 42 AS answer;"})
 	if err != nil {
 		return err

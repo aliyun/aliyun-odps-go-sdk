@@ -37,6 +37,10 @@ export MAXCOMPUTE_PROJECT=your-project
 | `ALIBABA_CLOUD_ACCESS_KEY_SECRET` | 访问密钥 Secret |
 | `ALIBABA_CLOUD_SECURITY_TOKEN` | 使用临时 STS 凭据时填写的安全令牌 |
 
+写命令行程序时，用 `ctx := context.Background()` 创建一个 Go 上下文。提交查询、
+等待作业和读取结果时，把这个 `ctx` 作为第一个参数传入即可。在 HTTP 处理函数里，
+可以直接传请求的 `r.Context()`，这样请求取消时 SDK 也会停止等待。
+
 将以下程序保存为 Go 模块中的 `main.go`。[示例源码](examples/sdk/quickstart/main.go)
 
 ```go
@@ -47,7 +51,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
@@ -60,9 +63,6 @@ func main() {
 }
 
 func run() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
 	client, err := odps.NewClient(account.AccountFromEnv(), odps.ClientOptions{
 		Endpoint: os.Getenv("odps_endpoint"),
 		Project:  os.Getenv("MAXCOMPUTE_PROJECT"),
@@ -72,6 +72,7 @@ func run() error {
 	}
 	defer client.CloseIdleConnections()
 
+	ctx := context.Background()
 	job, err := client.SubmitSQL(ctx, odps.SQLRequest{Statement: "SELECT 42 AS answer;"})
 	if err != nil {
 		return err

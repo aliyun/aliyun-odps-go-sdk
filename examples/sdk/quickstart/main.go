@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
@@ -18,9 +17,6 @@ func main() {
 }
 
 func run() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
 	client, err := odps.NewClient(account.AccountFromEnv(), odps.ClientOptions{
 		Endpoint: os.Getenv("odps_endpoint"),
 		Project:  os.Getenv("MAXCOMPUTE_PROJECT"),
@@ -30,6 +26,7 @@ func run() error {
 	}
 	defer client.CloseIdleConnections()
 
+	ctx := context.Background()
 	job, err := client.SubmitSQL(ctx, odps.SQLRequest{Statement: "SELECT 42 AS answer;"})
 	if err != nil {
 		return err
