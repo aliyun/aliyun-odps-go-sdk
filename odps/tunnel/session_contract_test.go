@@ -35,6 +35,51 @@ func tunnelContractClient(t *testing.T, handler http.HandlerFunc) restclient.Res
 	return client
 }
 
+type blockUploadTransport func(*http.Request) (*http.Response, error)
+
+func (transport blockUploadTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	return transport(request)
+}
+
+func TestBlockUploadReportsRejectionDuringWriteAndClose(t *testing.T) {
+	transport := blockUploadTransport(func(request *http.Request) (*http.Response, error) {
+		if request.Method == http.MethodPost {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body: io.NopCloser(strings.NewReader(
+					`{"UploadID":"fixture","Status":"NORMAL","Schema":{"columns":[{"name":"value","type":"string"}]}}`)),
+			}, nil
+		}
+		defer request.Body.Close()
+		assert.Equal(t, http.MethodPut, request.Method)
+		if _, err := io.CopyN(io.Discard, request.Body, 1); err != nil {
+			return nil, err
+		}
+		return &http.Response{
+			StatusCode: http.StatusRequestEntityTooLarge,
+			Status:     "413 Request Entity Too Large",
+			Header:     http.Header{"X-Odps-Request-Id": {"fixture-rejection"}},
+			Body:       io.NopCloser(strings.NewReader(`<Error><Code>BlockLimit</Code><Message>block rejected</Message></Error>`)),
+		}, nil
+	})
+	client := restclient.NewOdpsRestClientWithTransport(account.NewAliyunAccount("test-ak", "test-sk"), "http://127.0.0.1", transport)
+	session, err := CreateUploadSession("test_project", "fixture", "", client)
+	require.NoError(t, err)
+	writer, err := session.OpenRecordWriter(0)
+	require.NoError(t, err)
+
+	writeErr := writer.Write(data.Record{data.String("fixture record")})
+	closeErr := writer.Close()
+	for _, err := range []error{writeErr, closeErr} {
+		var response restclient.HttpError
+		require.ErrorAs(t, err, &response)
+		require.Equal(t, http.StatusRequestEntityTooLarge, response.StatusCode)
+		require.Equal(t, "fixture-rejection", response.RequestId)
+		require.Equal(t, "BlockLimit", response.ErrorMessage.ErrorCode)
+		require.ErrorIs(t, err, io.ErrClosedPipe)
+	}
+}
+
 func TestPreviewUsesStorageQuotaAndHonorsExplicitEndpoint(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()

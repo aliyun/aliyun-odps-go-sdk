@@ -17,6 +17,7 @@
 package tunnel
 
 import (
+	stderrors "errors"
 	"io"
 
 	"github.com/pkg/errors"
@@ -75,7 +76,13 @@ func (r *RecordProtocWriter) Write(record data.Record) error {
 	if err := r.validateRecord(record); err != nil {
 		return errors.WithStack(err)
 	}
-	r.writeErr = errors.WithStack(r.writeRecord(record))
+	err := r.writeRecord(record)
+	if r.httpRes != nil && errors.Is(err, io.ErrClosedPipe) {
+		if responseErr := r.httpRes.closeRes(); responseErr != nil {
+			err = stderrors.Join(responseErr, err)
+		}
+	}
+	r.writeErr = errors.WithStack(err)
 	return r.writeErr
 }
 
@@ -419,10 +426,12 @@ func (r *RecordProtocWriter) Close() error {
 	err := r.close()
 
 	if r.httpRes != nil {
-		closeHttpError := errors.WithStack(r.httpRes.closeRes())
-
-		if err == nil && closeHttpError != nil {
-			return errors.WithStack(closeHttpError)
+		if responseErr := r.httpRes.closeRes(); responseErr != nil && !errors.Is(err, responseErr) {
+			if err == nil {
+				err = responseErr
+			} else {
+				err = stderrors.Join(responseErr, err)
+			}
 		}
 	}
 

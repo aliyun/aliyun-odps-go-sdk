@@ -126,16 +126,24 @@ type TaskResult struct {
 	Status TaskStatus
 	Result struct {
 		TransForm string `xml:"Transform,attr"`
-		Format    string `xml:"Format,attr"` // 这个字段没有用到
+		Format    string `xml:"Format,attr"`
 		Content   string `xml:",cdata"`
 	} `xml:"Result"`
 }
 
 func (tr *TaskResult) Content() string {
-	if tr.Result.TransForm == "Base64" {
-		bytes, _ := base64.StdEncoding.DecodeString(tr.Result.Content)
-		return string(bytes)
-	}
+	content, _ := tr.decodeContent()
+	return content
+}
 
-	return tr.Result.Content
+func (tr *TaskResult) decodeContent() (string, error) {
+	switch tr.Result.TransForm {
+	case "":
+		return tr.Result.Content, nil
+	case "Base64":
+		decoded, err := base64.StdEncoding.DecodeString(tr.Result.Content)
+		return string(decoded), errors.Wrap(err, "decode Base64 result")
+	default:
+		return tr.Result.Content, errors.Errorf("unsupported transform %q", tr.Result.TransForm)
+	}
 }

@@ -3,6 +3,8 @@
 package odps_test
 
 import (
+	"encoding/base64"
+	"encoding/csv"
 	"encoding/xml"
 	"io"
 	"net/http"
@@ -148,6 +150,75 @@ func TestSQLTaskCSVMatchesTaskAndReportsInvalidResults(t *testing.T) {
 			require.Equal(t, tc.wantRows, rows)
 		})
 	}
+}
+
+func TestSQLTaskCSVHonorsResultFormatAndEncoding(t *testing.T) {
+	for _, test := range []struct {
+		name, result, wantError string
+		wantRows                [][]string
+	}{
+		{
+			name: "declared CSV",
+			result: `<Result Format="CSV"><![CDATA[value,other
+"has,comma","say ""hello"""
+]]></Result>`,
+			wantRows: [][]string{{"value", "other"}, {"has,comma", `say "hello"`}},
+		},
+		{
+			name:     "wrapped CSV",
+			result:   `<Result Format="csv" Transform="Base64">` + base64.StdEncoding.EncodeToString([]byte("value\nhello\n")) + `</Result>`,
+			wantRows: [][]string{{"value"}, {"hello"}},
+		},
+		{
+			name: "a text result is not treated as malformed CSV",
+			result: `<Result Format="text"><![CDATA[value
+one,two
+]]></Result>`,
+			wantError: "not CSV",
+		},
+		{
+			name:      "bad base64 is not silently truncated",
+			result:    `<Result Format="csv" Transform="Base64">` + base64.StdEncoding.EncodeToString([]byte("value\nhello\n")) + `!</Result>`,
+			wantError: "decode Base64",
+		},
+		{
+			name:      "unknown encoding",
+			result:    `<Result Format="csv" Transform="unknown">value</Result>`,
+			wantError: "unsupported transform",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service := metadataFixture(t, func(writer http.ResponseWriter, request *http.Request) {
+				assert.True(t, request.URL.Query().Has("result"))
+				_, _ = io.WriteString(writer, "<Instance><Tasks><Task><Name>fixture</Name><Status>SUCCESS</Status>"+
+					test.result+"</Task></Tasks></Instance>")
+			})
+			task := odps.NewSqlTask("fixture", "select 1", nil)
+			reader, err := task.GetSelectResultAsCsv(service.Instance("fixture"), true)
+			if test.wantError != "" {
+				require.ErrorContains(t, err, test.wantError)
+				return
+			}
+			require.NoError(t, err)
+			rows, err := reader.ReadAll()
+			require.NoError(t, err)
+			require.Equal(t, test.wantRows, rows)
+		})
+	}
+}
+
+func TestSQLTaskCSVKeepsFieldCountValidation(t *testing.T) {
+	service := metadataFixture(t, func(writer http.ResponseWriter, request *http.Request) {
+		assert.True(t, request.URL.Query().Has("result"))
+		_, _ = io.WriteString(writer, `<Instance><Tasks><Task><Name>fixture</Name><Status>SUCCESS</Status><Result Format="csv"><![CDATA[a,b
+1,2,3
+]]></Result></Task></Tasks></Instance>`)
+	})
+	task := odps.NewSqlTask("fixture", "select 1", nil)
+	reader, err := task.GetSelectResultAsCsv(service.Instance("fixture"), true)
+	require.NoError(t, err)
+	_, err = reader.ReadAll()
+	require.ErrorIs(t, err, csv.ErrFieldCount)
 }
 
 func TestTableDDLKeepsHintsAndAliasesSeparate(t *testing.T) {

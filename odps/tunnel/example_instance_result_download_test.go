@@ -83,7 +83,7 @@ func Example_tunnel_download_instance_result() {
 
 		for i, n := 0, record.Len(); i < n; i++ {
 			f := record.Get(i)
-			if f == nil {
+			if data.IsNull(f) {
 				println("nil")
 			} else {
 				println(f.String())

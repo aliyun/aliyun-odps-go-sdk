@@ -50,6 +50,12 @@ func ParseDSN(dsn string) (*Config, error) {
 	if err != nil {
 		return nil, errors.New("invalid query parameters in ODPS DSN")
 	}
+	for key, values := range params {
+		if canonical := configvalue.CanonicalTunnelDSNKey(key); key != canonical {
+			params[canonical] = append(params[canonical], values...)
+			params.Del(key)
+		}
+	}
 	reserved := []string{"project", "stsToken", "tcpConnectionTimeout", "httpTimeout", "tunnelEndpoint", "tunnelQuotaName", "enableLogview"}
 	for _, key := range reserved {
 		if len(params[key]) > 1 {

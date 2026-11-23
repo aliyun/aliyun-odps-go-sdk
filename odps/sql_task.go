@@ -129,9 +129,15 @@ func (t *SQLTask) GetSelectResultAsCsv(i *Instance, withColumnName bool) (*csv.R
 		}
 		result = &results[index]
 	}
-	content := result.Content()
 	if result.Status != 0 && result.Status != TaskSuccess {
-		return nil, taskStatusError(result.Name, result.Status, content)
+		return nil, taskStatusError(result.Name, result.Status, result.Content())
+	}
+	if format := result.Result.Format; format != "" && !strings.EqualFold(format, "csv") {
+		return nil, errors.Errorf("instance %s task %s returned format %q, not CSV", i.Id(), result.Name, format)
+	}
+	content, err := result.decodeContent()
+	if err != nil {
+		return nil, errors.Wrapf(err, "instance %s task %s", i.Id(), result.Name)
 	}
 	reader := csv.NewReader(strings.NewReader(content))
 	if !withColumnName {
