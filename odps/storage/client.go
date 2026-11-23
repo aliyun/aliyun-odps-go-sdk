@@ -29,7 +29,7 @@ const (
 type ClientOptions struct {
 	Project        string // Defaults to the ODPS client's project.
 	TunnelEndpoint string // If set, use this address directly.
-	QuotaName      string // Used when resolving a Tunnel endpoint.
+	QuotaName      string // Selects the quota for discovery and Storage requests.
 
 	HTTPTimeout          time.Duration // Zero inherits the ODPS client's setting.
 	TCPConnectionTimeout time.Duration // Zero inherits the ODPS client's setting.
@@ -37,11 +37,13 @@ type ClientOptions struct {
 	DisableKeepAlives    bool
 }
 
-// Client shares authentication with an ODPS client and owns a separate HTTP connection pool.
-// It can be used concurrently.
+// Client shares authentication and any custom HTTP transport with an ODPS
+// client. With the default transport it owns a separate connection pool. It
+// can be used concurrently.
 type Client struct {
 	project string
 	schema  string
+	quota   string
 	rest    restclient.RestClient
 }
 
@@ -59,9 +61,10 @@ func NewClient(ctx context.Context, service *odps.Odps, options ClientOptions) (
 	}
 	source := service.RestClient()
 	endpoint := options.TunnelEndpoint
+	quota := strings.TrimSpace(options.QuotaName)
 	if endpoint == "" {
 		var err error
-		endpoint, err = discoverEndpoint(ctx, source, project, options.QuotaName)
+		endpoint, err = discoverEndpoint(ctx, source, project, quota)
 		if err != nil {
 			return nil, fmt.Errorf("storage: resolve Tunnel endpoint for %q: %w", project, err)
 		}
@@ -77,7 +80,7 @@ func NewClient(ctx context.Context, service *odps.Odps, options ClientOptions) (
 	if schema == "" {
 		schema = "default"
 	}
-	rest := restclient.NewOdpsRestClient(service.Account(), u.String())
+	rest := source.NewForEndpoint(u.String())
 	rest.SetDefaultProject(project)
 	rest.SetUserAgent(source.UserAgent())
 	rest.HttpTimeout = source.HttpTimeout
@@ -92,14 +95,14 @@ func NewClient(ctx context.Context, service *odps.Odps, options ClientOptions) (
 	if options.UserAgent != "" {
 		rest.SetUserAgent(options.UserAgent)
 	}
-	return &Client{project: project, schema: schema, rest: rest}, nil
+	return &Client{project: project, schema: schema, quota: quota, rest: rest}, nil
 }
 
 func discoverEndpoint(ctx context.Context, client restclient.RestClient, project, quota string) (string, error) {
 	client.SetDefaultProject(project)
 	resource := common.NewResourceBuilder(project)
 	params := make(url.Values, 1)
-	if strings.TrimSpace(quota) != "" {
+	if quota != "" {
 		params.Set("quota", quota)
 	}
 	req, err := client.NewRequestWithUrlQuery(http.MethodGet, resource.Tunnel(), nil, params)
@@ -118,7 +121,8 @@ func discoverEndpoint(ctx context.Context, client restclient.RestClient, project
 	return req.URL.Scheme + "://" + strings.TrimSpace(string(host)), nil
 }
 
-// Close releases idle HTTP connections. Release active Arrow readers separately.
+// Close releases idle connections in the SDK-managed pool. Release active
+// Arrow readers separately and manage any custom transport yourself.
 func (c *Client) Close() {
 	c.rest.CloseIdleConnections()
 }
@@ -184,6 +188,9 @@ func (c *Client) request(ctx context.Context, method string, op operation, body 
 	}
 	params.Set("Action", op.action)
 	params.Set("Target", op.target)
+	if c.quota != "" {
+		params.Set("quotaName", c.quota)
+	}
 	req, err := c.rest.NewRequestWithParamsAndHeaders(method, resource, body, params, headers)
 	if err != nil {
 		return nil, err

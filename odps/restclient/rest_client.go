@@ -44,8 +44,8 @@ const (
 
 type RestClient struct {
 	account.Account
-	// It is the total time from the tcp connection to http response.
-	// the default value is 0, represents no timeout
+	// HttpTimeout bounds the entire HTTP exchange, including reading the body.
+	// Zero applies no client-wide deadline.
 	HttpTimeout          time.Duration
 	TcpConnectionTimeout time.Duration
 	DnsCacheExpireTime   time.Duration
@@ -61,6 +61,7 @@ type RestClient struct {
 	// connection (plus its goroutines) leaked per request. Sharing the slot makes
 	// a RestClient and all of its copies use one connection pool.
 	_slot          *clientSlot
+	transport      http.RoundTripper
 	defaultProject string
 	currentSchema  string
 	endpoint       string
@@ -91,6 +92,13 @@ type clientSettings struct {
 }
 
 func NewOdpsRestClient(a account.Account, endpoint string) RestClient {
+	return NewOdpsRestClientWithTransport(a, endpoint, nil)
+}
+
+// NewOdpsRestClientWithTransport uses transport for signed requests. A nil
+// transport selects the SDK default. The caller owns a supplied transport and
+// must provide a concurrency-safe RoundTripper.
+func NewOdpsRestClientWithTransport(a account.Account, endpoint string, transport http.RoundTripper) RestClient {
 	client := RestClient{
 		Account:              a,
 		endpoint:             endpoint,
@@ -99,9 +107,17 @@ func NewOdpsRestClient(a account.Account, endpoint string) RestClient {
 		DnsCacheExpireTime:   time.Duration(DefaultDNSCacheExpireTime) * time.Second,
 		DisableCompression:   true,
 		_slot:                &clientSlot{},
+		transport:            transport,
 	}
 
 	return client
+}
+
+// NewForEndpoint uses the same account and supplied transport at another
+// endpoint. All other settings start at their defaults. With the SDK's default
+// transport, the new client gets a separate connection pool.
+func (client RestClient) NewForEndpoint(endpoint string) RestClient {
+	return NewOdpsRestClientWithTransport(client.Account, endpoint, client.transport)
 }
 
 func LoadEndpointFromEnv() string {
@@ -130,12 +146,10 @@ func (client *RestClient) UserAgent() string {
 }
 
 // CloseIdleConnections closes the keep-alive connections that this client
-// pooled but is not using. A RestClient owns its http.Transport, so a caller
-// that is done with it (for example a database/sql connection being discarded)
-// should call this to release the pooled connections and the goroutines that
-// serve them. It is a no-op if no client has been created yet.
+// pooled but is not using. Callers manage the idle connections of any custom
+// transport they supply.
 func (client *RestClient) CloseIdleConnections() {
-	if client._slot == nil {
+	if client._slot == nil || client.transport != nil {
 		return
 	}
 
@@ -170,32 +184,33 @@ func (client *RestClient) client() *http.Client {
 		return slot.client
 	}
 
-	if slot.client != nil {
+	if slot.client != nil && client.transport == nil {
 		// Settings changed on a live client: drop the old connection pool so it
 		// does not linger behind the replacement.
 		slot.client.CloseIdleConnections()
 	}
 
-	resolver := NewResolver(int64(want.dnsCacheExpireTime) / int64(time.Second))
-
-	dialer := Dialer{
-		Resolver: resolver,
-		Dialer: net.Dialer{
-			Timeout:   want.tcpConnectionTimeout,
-			KeepAlive: 30 * time.Second,
-		},
-	}
-
-	transport := http.Transport{
-		Proxy:              http.ProxyFromEnvironment,
-		DialContext:        dialer.DialContext,
-		ForceAttemptHTTP2:  false,
-		DisableCompression: want.disableCompression,
-		DisableKeepAlives:  want.disableKeepAlives,
+	transport := client.transport
+	if transport == nil {
+		resolver := NewResolver(int64(want.dnsCacheExpireTime) / int64(time.Second))
+		dialer := Dialer{
+			Resolver: resolver,
+			Dialer: net.Dialer{
+				Timeout:   want.tcpConnectionTimeout,
+				KeepAlive: 30 * time.Second,
+			},
+		}
+		transport = &http.Transport{
+			Proxy:              http.ProxyFromEnvironment,
+			DialContext:        dialer.DialContext,
+			ForceAttemptHTTP2:  false,
+			DisableCompression: want.disableCompression,
+			DisableKeepAlives:  want.disableKeepAlives,
+		}
 	}
 
 	slot.client = &http.Client{
-		Transport: &transport,
+		Transport: transport,
 		Timeout:   want.httpTimeout,
 	}
 	slot.settings = want
@@ -253,8 +268,29 @@ func (client *RestClient) NewRequestWithParamsAndHeaders(method, resource string
 }
 
 func (client *RestClient) Do(req *http.Request) (*http.Response, error) {
+	if err := client.prepareRequest(req); err != nil {
+		if req.Body != nil {
+			_ = req.Body.Close()
+		}
+		return nil, err
+	}
+	res, err := client.client().Do(req)
+	if err != nil {
+		return res, errors.WithStack(err)
+	}
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		httpErr := NewHttpNotOk(res)
+		if err := req.Context().Err(); err != nil {
+			return res, errors.WithStack(err)
+		}
+		return res, errors.WithStack(httpErr)
+	}
+	return res, nil
+}
+
+func (client *RestClient) prepareRequest(req *http.Request) error {
 	if err := req.Context().Err(); err != nil {
-		return nil, errors.WithStack(err)
+		return errors.WithStack(err)
 	}
 
 	req.Header.Set(common.HttpHeaderUserAgent, common.UserAgentValue)
@@ -268,23 +304,7 @@ func (client *RestClient) Do(req *http.Request) (*http.Response, error) {
 	}
 	req.URL.RawQuery = query.Encode()
 
-	err := client.SignRequest(req, client.endpoint)
-	if err != nil {
-		return nil, err
-	}
-
-	res, err := client.client().Do(req)
-	if err != nil {
-		return res, errors.WithStack(err)
-	}
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		httpErr := NewHttpNotOk(res)
-		if err := req.Context().Err(); err != nil {
-			return res, errors.WithStack(err)
-		}
-		return res, errors.WithStack(httpErr)
-	}
-	return res, nil
+	return client.SignRequest(req, client.endpoint)
 }
 
 func (client *RestClient) DoWithParseFunc(req *http.Request, parseFunc func(res *http.Response) error) error {

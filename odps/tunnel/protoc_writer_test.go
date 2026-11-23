@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
@@ -148,8 +150,10 @@ func TestEncodeProtocSimpleType(t *testing.T) {
 	}
 
 	pw := newRecordProtocWriter(bw, columns, false)
-	varchar, _ := data.NewVarChar(1000, "varchar")
-	char, _ := data.NewVarChar(100, "char")
+	varchar, err := data.NewVarChar(1000, "varchar")
+	require.NoError(t, err)
+	char, err := data.NewChar(100, "char")
+	require.NoError(t, err)
 	s := data.String("alibaba")
 	date, _ := data.NewDate("2022-10-19")
 	instant := time.Date(2022, time.October, 19, 17, 0, 0, 0, protobufFixtureLocation)
@@ -183,7 +187,7 @@ func TestEncodeProtocSimpleType(t *testing.T) {
 		structData,
 	}
 
-	err := pw.Write(record)
+	err = pw.Write(record)
 	if err != nil {
 		t.Fatal(err)
 	}

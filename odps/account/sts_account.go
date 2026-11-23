@@ -17,9 +17,9 @@
 package account
 
 import (
+	"context"
 	"errors"
 	"net/http"
-	"sync"
 
 	"github.com/aliyun/credentials-go/credentials"
 
@@ -115,13 +115,17 @@ func stsTokenHeaderValue(cred *credentials.CredentialModel) (string, bool) {
 }
 
 type stsAliyunCredentialProvider struct {
-	mu               sync.Mutex
+	refresh          chan struct{}
 	aliyunCredential credentials.Credential
 	regionId         string
 }
 
 func (sp *stsAliyunCredentialProvider) _signRequest(req *http.Request, endpoint string) error {
-	cred, err := sp.Credential()
+	ctx := context.Background()
+	if req != nil {
+		ctx = req.Context()
+	}
+	cred, err := sp.credential(ctx)
 	if err != nil {
 		return err
 	}
@@ -130,10 +134,25 @@ func (sp *stsAliyunCredentialProvider) _signRequest(req *http.Request, endpoint 
 }
 
 func (sp *stsAliyunCredentialProvider) Credential() (*credentials.CredentialModel, error) {
+	return sp.credential(context.Background())
+}
+
+func (sp *stsAliyunCredentialProvider) credential(ctx context.Context) (*credentials.CredentialModel, error) {
 	// The credentials-go providers may mutate their cache during refresh.
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
-	return sp.aliyunCredential.GetCredential()
+	select {
+	case sp.refresh <- struct{}{}:
+		defer func() { <-sp.refresh }()
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	credential, err := sp.aliyunCredential.GetCredential()
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	return credential, err
 }
 
 type stsCustomCredentialProvider struct {
@@ -173,16 +192,12 @@ func NewStsAccount(accessId, accessKey, securityToken string, regionId ...string
 }
 
 func NewStsAccountWithCredential(aliyunCredential credentials.Credential, regionId ...string) *StsAccount {
-	var sp *stsAliyunCredentialProvider
+	sp := &stsAliyunCredentialProvider{
+		refresh:          make(chan struct{}, 1),
+		aliyunCredential: aliyunCredential,
+	}
 	if len(regionId) > 0 {
-		sp = &stsAliyunCredentialProvider{
-			aliyunCredential: aliyunCredential,
-			regionId:         regionId[0],
-		}
-	} else {
-		sp = &stsAliyunCredentialProvider{
-			aliyunCredential: aliyunCredential,
-		}
+		sp.regionId = regionId[0]
 	}
 	return &StsAccount{
 		sp: sp,

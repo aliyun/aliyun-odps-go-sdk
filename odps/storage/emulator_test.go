@@ -386,7 +386,7 @@ func TestEmulatorPartitionOverwrite(t *testing.T) {
 			Overwrite: overwrite,
 		})
 		require.NoError(t, err)
-		stream, err := session.CreateStream(ctx, storage.Stream{ID: "writer"})
+		stream, err := session.CreateStream(ctx, storage.Stream{ID: "writer", Version: 1})
 		require.NoError(t, err)
 		_, err = stream.WriteBatch(ctx, 0, testBatch(t, id, partition))
 		require.NoError(t, err)

@@ -210,7 +210,7 @@ func (t *Tunnel) getRestClientContext(ctx context.Context, projectName string) (
 		endpoint = route.endpoint
 	}
 
-	client := restclient.NewOdpsRestClient(t.odpsIns.Account(), endpoint)
+	client := t.odpsIns.RestClient().NewForEndpoint(endpoint)
 	client.HttpTimeout = t.HttpTimeout()
 	client.TcpConnectionTimeout = t.TcpConnectionTimeout()
 	client.SetUserAgent(t.odpsUserAgent)

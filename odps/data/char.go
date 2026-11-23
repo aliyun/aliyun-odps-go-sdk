@@ -18,6 +18,7 @@ package data
 
 import (
 	"fmt"
+	"unicode/utf8"
 
 	"github.com/pkg/errors"
 
@@ -48,24 +49,21 @@ func (c CharOverflowError) Error() string {
 }
 
 func NewChar(length int, data string) (*Char, error) {
-	if length > 255 {
-		return nil, errors.Errorf("max length of char is 255, not %d is given", length)
+	value, err := MakeChar(length, data)
+	if err != nil {
+		return nil, err
 	}
-
-	if len(data) > length {
-		return nil, errors.WithStack(NewCharOverflowError(length, len(data)))
-	}
-
-	return &Char{length: length, data: data}, nil
+	return &value, nil
 }
 
+// MakeChar validates the value against the declared width in Unicode code points.
 func MakeChar(length int, data string) (Char, error) {
 	if length > 255 {
 		return Char{}, errors.Errorf("max length of char is 255, not %d is given", length)
 	}
 
-	if len(data) > length {
-		return Char{}, errors.WithStack(NewCharOverflowError(length, len(data)))
+	if width := utf8.RuneCountInString(data); width > length {
+		return Char{}, errors.WithStack(NewCharOverflowError(length, width))
 	}
 
 	return Char{length: length, data: data}, nil
@@ -92,24 +90,21 @@ func (c *Char) Scan(value interface{}) error {
 }
 
 func NewVarChar(length int, data string) (*VarChar, error) {
-	if length > 65536 {
-		return nil, errors.Errorf("max length of char is 65536, not %d is given", length)
+	value, err := MakeVarChar(length, data)
+	if err != nil {
+		return nil, err
 	}
-
-	if len(data) > length {
-		return nil, errors.WithStack(NewCharOverflowError(length, len(data)))
-	}
-
-	return &VarChar{length: length, data: data}, nil
+	return &value, nil
 }
 
+// MakeVarChar validates the value against the declared width in Unicode code points.
 func MakeVarChar(length int, data string) (VarChar, error) {
 	if length > 65536 {
-		return VarChar{}, errors.Errorf("max length of char is 65536, not %d is given", length)
+		return VarChar{}, errors.Errorf("max length of varchar is 65536, not %d is given", length)
 	}
 
-	if len(data) > length {
-		return VarChar{}, errors.WithStack(NewCharOverflowError(length, len(data)))
+	if width := utf8.RuneCountInString(data); width > length {
+		return VarChar{}, errors.WithStack(NewCharOverflowError(length, width))
 	}
 
 	return VarChar{length: length, data: data}, nil

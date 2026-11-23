@@ -100,13 +100,27 @@ func TestRestClientCanceledContextBeforeSigning(t *testing.T) {
 	client := NewOdpsRestClient(nil, "https://fixture.invalid/api")
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	req, err := client.NewRequest(http.MethodGet, "projects/fixture", nil)
+	body, producer := io.Pipe()
+	defer body.Close()
+	defer producer.Close()
+	req, err := client.NewRequest(http.MethodPost, "projects/fixture", body)
 	if !assert.NoError(t, err) {
 		return
 	}
 	res, err := client.Do(req.WithContext(ctx))
 	assert.Nil(t, res)
 	assert.ErrorIs(t, err, context.Canceled)
+	written := make(chan error, 1)
+	go func() {
+		_, err := io.WriteString(producer, "fixture data")
+		written <- err
+	}()
+	select {
+	case err := <-written:
+		assert.ErrorIs(t, err, io.ErrClosedPipe)
+	case <-time.After(2 * time.Second):
+		t.Error("request body remained open after canceled request")
+	}
 }
 
 func TestRestClientDeadlineReadingErrorBody(t *testing.T) {

@@ -526,7 +526,7 @@ func (su *StreamUploadSession) uploadClient(currentSlot slot, timeout time.Durat
 		}
 		address = endpoint.String()
 	}
-	client := restclient.NewOdpsRestClient(su.RestClient.Account, address)
+	client := su.RestClient.NewForEndpoint(address)
 	client.HttpTimeout = su.RestClient.HttpTimeout
 	if timeout > 0 {
 		client.HttpTimeout = timeout

@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
@@ -44,6 +46,47 @@ func TestRejectConflictingTunnelOptionsBeforeSubmission(t *testing.T) {
 	_, err = db.QueryContext(t.Context(), "select 1")
 	require.ErrorContains(t, err, "cannot be configured both")
 	require.Zero(t, f.count(&f.submits))
+}
+
+func TestDatabaseSQLUsesNamedQuotaForResultTransfer(t *testing.T) {
+	const quota = "test-quota"
+	var route, create, read atomic.Int32
+	var tunnelHost atomic.Value
+	f := newFakeServiceWithHandler(t, func(w http.ResponseWriter, r *http.Request) bool {
+		query := r.URL.Query()
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/tunnel"):
+			route.Add(1)
+			assert.Equal(t, quota, query.Get("quotaName"))
+			_, _ = io.WriteString(w, tunnelHost.Load().(string))
+			return true
+		case query.Has("downloads"):
+			create.Add(1)
+			assert.Equal(t, quota, query.Get("quotaName"))
+		case query.Has("data"):
+			read.Add(1)
+			assert.Equal(t, quota, query.Get("quotaName"))
+		}
+		return false
+	})
+	endpoint, err := url.Parse(f.tunnel.URL)
+	require.NoError(t, err)
+	tunnelHost.Store(endpoint.Host)
+	f.mu.Lock()
+	f.succeedAfterPolls = 1
+	f.mu.Unlock()
+	cfg := f.config()
+	cfg.TunnelEndpoint = ""
+	cfg.TunnelQuotaName = quota
+	db, err := sql.Open("odps", cfg.FormatDsn())
+	require.NoError(t, err)
+	defer db.Close()
+	var value string
+	require.NoError(t, db.QueryRowContext(t.Context(), "select 1").Scan(&value))
+	require.Equal(t, "row-0", value)
+	require.EqualValues(t, 1, route.Load())
+	require.EqualValues(t, 1, create.Load())
+	require.EqualValues(t, 1, read.Load())
 }
 
 func TestDatabaseSQLCancelsOutstandingRequests(t *testing.T) {

@@ -121,6 +121,7 @@ func (c *connection) queryContext(ctx context.Context, query string) (driver.Row
 	// 池化那条 keep-alive 连接没有下一次可用，只会连同喂它的 goroutine 一起留下，
 	// 所以这里显式关掉 keep-alive（见 tunnel.Tunnel.DisableKeepAlives）。
 	tunnelIns := tunnel.NewTunnel(c.odpsIns, tunnelEndpoint)
+	tunnelIns.SetQuotaName(c.config.TunnelQuotaName)
 	tunnelIns.DisableKeepAlives = true
 	projectName := c.odpsIns.DefaultProjectName()
 	session, err := tunnelIns.CreateInstanceResultDownloadSessionContext(ctx, projectName, ins.Id())

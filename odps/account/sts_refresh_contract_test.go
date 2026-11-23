@@ -17,6 +17,7 @@
 package account
 
 import (
+	"context"
 	stderrors "errors"
 	"fmt"
 	"net/http"
@@ -28,9 +29,58 @@ import (
 
 	"github.com/aliyun/credentials-go/credentials"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 )
+
+type blockingSDKCredential struct {
+	credentials.Credential
+	started chan struct{}
+	release chan struct{}
+	calls   atomic.Int32
+}
+
+func (c *blockingSDKCredential) GetCredential() (*credentials.CredentialModel, error) {
+	if c.calls.Add(1) == 1 {
+		close(c.started)
+		<-c.release
+	}
+	return &credentials.CredentialModel{AccessKeyId: strp("fixture-ak"), AccessKeySecret: strp("fixture-secret")}, nil
+}
+
+func TestStsAccountCanceledWhileWaitingForCredential(t *testing.T) {
+	provider := &blockingSDKCredential{started: make(chan struct{}), release: make(chan struct{})}
+	signer := NewStsAccountWithCredential(provider)
+	var release sync.Once
+	stopBlocking := func() { release.Do(func() { close(provider.release) }) }
+	t.Cleanup(stopBlocking)
+	const endpoint = "https://fixture.invalid"
+	first := newSignedRequest(t, http.MethodGet, endpoint+"/projects/p")
+	firstResult := make(chan error, 1)
+	go func() { firstResult <- signer.SignRequest(first, endpoint) }()
+	select {
+	case <-provider.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("credential refresh did not start")
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	second := newSignedRequest(t, http.MethodGet, endpoint+"/projects/p").WithContext(ctx)
+	secondResult := make(chan error, 1)
+	go func() { secondResult <- signer.SignRequest(second, endpoint) }()
+	select {
+	case err := <-secondResult:
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	case <-time.After(2 * time.Second):
+		t.Fatal("canceled signing waited for the first credential refresh")
+	}
+	require.EqualValues(t, 1, provider.calls.Load())
+	stopBlocking()
+	require.NoError(t, <-firstResult)
+	require.NotEmpty(t, first.Header.Get(common.HttpHeaderAuthorization))
+}
 
 // These tests pin how temporary credentials reach a request, and where the
 // boundary of "refresh" actually is. They use local fake providers only - no

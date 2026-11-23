@@ -6,6 +6,12 @@
 - Add Storage API V2 clients for reading SQL instance and table results and for staging, resuming, committing, and aborting batch writes.
 - Validate all Storage API V2 stream versions before explicit commits and use the Storage quota when discovering the Tunnel endpoint.
 - Match the Storage API V2 wire format for table snapshots, Arrow streams, and write-session resumption.
+- Wait for asynchronous Storage API V2 table snapshots to become ready, with context cancellation.
+- Preserve multibyte `CHAR` and `VARCHAR` values and MAP keys in Protobuf Tunnel. Report values that exceed the declared width.
+- Allow callers to supply a custom HTTP transport for signed ODPS, Tunnel, and Storage requests.
+- Send the named quota on Storage operations and SQL driver result transfers.
+- Return an empty Arrow reader with the projected schema for empty table snapshots.
+- Honor context cancellation while waiting for credential refresh and release unused request bodies.
 - Move table preview to Storage API V2. Replace the former Table Tunnel Arrow methods with the Storage API V2 session methods.
 - Decode both boolean and string `Transactional` metadata.
 - Accept successful creation and replacement responses for multipart resource uploads.

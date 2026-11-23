@@ -18,6 +18,7 @@ package odps
 
 import (
 	"context"
+	"net/http"
 	"sync/atomic"
 	"time"
 
@@ -48,9 +49,16 @@ type projectRegion struct {
 }
 
 func NewOdps(account account2.Account, endpoint string) *Odps {
+	return NewOdpsWithHTTPTransport(account, endpoint, nil)
+}
+
+// NewOdpsWithHTTPTransport sends signed ODPS, Tunnel and Storage requests
+// through transport. The caller owns the transport and its connection pool.
+// A nil transport selects the SDK default.
+func NewOdpsWithHTTPTransport(account account2.Account, endpoint string, transport http.RoundTripper) *Odps {
 	ins := Odps{
 		account:    account,
-		restClient: restclient.NewOdpsRestClient(account, endpoint),
+		restClient: restclient.NewOdpsRestClientWithTransport(account, endpoint, transport),
 		Options:    *options.NewOdpsOptions(),
 	}
 	if aliyunAccount, ok := account.(*account2.AliyunAccount); ok {

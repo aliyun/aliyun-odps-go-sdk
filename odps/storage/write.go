@@ -125,9 +125,10 @@ func (s *WriteSession) Commit(ctx context.Context) error {
 }
 
 // CommitStreams commits a session with explicit stream versions. Finish creating
-// and closing streams before calling it. The descriptors must match the entire
-// session because some deployments publish every closed stream. Use a separate
-// session for each independently committed set of rows.
+// and closing streams before calling it. Pass the complete list of intended
+// streams. The SDK compares it with the closed streams reported by the service.
+// Open streams may be absent from that response. Use a separate session for
+// each independently committed set of rows.
 func (s *WriteSession) CommitStreams(ctx context.Context, streams ...Stream) error {
 	if len(streams) == 0 {
 		return fmt.Errorf("storage: at least one stream is required to commit")
@@ -171,15 +172,16 @@ func (s *WriteSession) Abort(ctx context.Context) error {
 // Stream identifies a writer attempt within a session.
 type Stream struct {
 	// ID must contain only ASCII letters, digits, and hyphens.
-	ID      string `json:"StreamId"`
-	Version int64  `json:"StreamVersion"`
+	ID string `json:"StreamId"`
+	// Version must be positive.
+	Version int64 `json:"StreamVersion"`
 }
 
 var streamIDPattern = regexp.MustCompile(`^[A-Za-z0-9-]+$`)
 
 func (s Stream) validate() error {
-	if s.ID == "" || s.Version < 0 {
-		return fmt.Errorf("storage: stream ID is required and version must be nonnegative")
+	if s.ID == "" || s.Version <= 0 {
+		return fmt.Errorf("storage: stream ID is required and version must be positive")
 	}
 	if !streamIDPattern.MatchString(s.ID) {
 		return fmt.Errorf("storage: stream ID must contain only ASCII letters, digits, and hyphens")
@@ -243,6 +245,7 @@ func setStreamParams(op operation, stream Stream) {
 
 // WriteBatch stages one nonempty batch at offset and returns the next durable
 // offset. On an ambiguous failure retry the same batch at the same offset.
+// The service may deduplicate by offset without verifying the payload.
 // The caller retains ownership of batch.
 func (w *WriteStream) WriteBatch(ctx context.Context, offset int64, batch arrow.RecordBatch) (int64, error) {
 	if batch == nil || batch.NumRows() <= 0 {

@@ -10,12 +10,17 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"sync/atomic"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
+
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 )
 
 // Session identifies a read or write session that can be reopened.
@@ -64,7 +69,10 @@ type tableReadStreamRequest struct {
 	DataColumnsUnordered bool
 }
 
-const tableReadBatchRows = 4096
+const (
+	tableReadBatchRows    = 4096
+	tableReadPollInterval = time.Second
+)
 
 // InstanceReadOptions selects the result in a SQL instance.
 type InstanceReadOptions struct {
@@ -94,17 +102,52 @@ type readResponse struct {
 	RecordCount int64
 	Status      string
 	TableStatus string `json:"SessionStatus"`
+	DataSchema  *tableReadSchema
+}
+
+type readColumn struct {
+	Name     string
+	Type     string
+	Nullable bool
+}
+
+type tableReadSchema struct {
+	DataColumns      []readColumn
+	SystemColumns    []readColumn
+	PartitionColumns []readColumn
+}
+
+func (schema tableReadSchema) emptyReader() (*ArrowReader, error) {
+	columns := slices.Concat(schema.DataColumns, schema.SystemColumns, schema.PartitionColumns)
+	table := tableschema.TableSchema{Columns: make([]tableschema.Column, len(columns))}
+	for i, column := range columns {
+		typ, err := datatype.ParseDataType(column.Type)
+		if err != nil {
+			return nil, fmt.Errorf("storage: column %q: %w", column.Name, err)
+		}
+		table.Columns[i] = tableschema.Column{Name: column.Name, Type: typ, NotNull: !column.Nullable}
+	}
+	arrowSchema, err := table.ToArrowSchema()
+	if err != nil {
+		return nil, err
+	}
+	var buffer bytes.Buffer
+	if err := ipc.NewWriter(&buffer, ipc.WithSchema(arrowSchema)).Close(); err != nil {
+		return nil, err
+	}
+	return newArrowReader(io.NopCloser(bytes.NewReader(buffer.Bytes())), 0)
 }
 
 // ReadSession is a snapshot of a table or SQL instance result.
 type ReadSession struct {
-	client  *Client
-	session Session
-	target  string
-	action  string
-	rows    int64
-	status  string
-	input   any
+	client      *Client
+	session     Session
+	target      string
+	action      string
+	rows        int64
+	status      string
+	input       any
+	tableSchema *tableReadSchema
 }
 
 // Session returns the descriptor for reopening the snapshot.
@@ -117,6 +160,7 @@ func (s *ReadSession) RecordCount() int64 { return s.rows }
 func (s *ReadSession) Status() string { return s.status }
 
 // CreateTableReadSession opens a row-offset snapshot of a table.
+// For asynchronous creation, it waits for the snapshot to become ready or ctx to end.
 func (c *Client) CreateTableReadSession(ctx context.Context, table Table, opts TableReadOptions) (*ReadSession, error) {
 	target, err := c.tableTarget(table)
 	if err != nil {
@@ -145,7 +189,7 @@ func (c *Client) CreateTableReadSession(ctx context.Context, table Table, opts T
 	return c.tableReadSession(ctx, operation{action: "TableCreateReadSession", target: target}, input)
 }
 
-// GetTableReadSession reopens a table snapshot.
+// GetTableReadSession reopens a table snapshot, waiting for readiness with ctx.
 func (c *Client) GetTableReadSession(ctx context.Context, table Table, session Session) (*ReadSession, error) {
 	target, err := c.tableTarget(table)
 	if err != nil {
@@ -154,21 +198,55 @@ func (c *Client) GetTableReadSession(ctx context.Context, table Table, session S
 	if session.ID == "" {
 		return nil, fmt.Errorf("storage: session ID is required")
 	}
+	return c.tableReadSession(ctx, tableReadLookup(target, session), struct{}{})
+}
+
+func tableReadLookup(target string, session Session) operation {
 	op := session.operation("TableGetReadSession", target)
 	op.params.Set("session_refresh", "false")
-	return c.tableReadSession(ctx, op, struct{}{})
+	return op
 }
 
 func (c *Client) tableReadSession(ctx context.Context, op operation, input any) (*ReadSession, error) {
-	var reply readResponse
-	headers, err := c.jsonRequest(ctx, http.MethodPost, op, input, &reply)
-	if err != nil {
-		return nil, err
-	}
 	stream := tableReadStreamRequest{MaxBatchRows: tableReadBatchRows, DataColumns: []string{}}
 	stream.DataFormat.Type = "Arrow"
 	stream.DataFormat.Version = "V5"
-	return c.newReadSession(op, "TableRead", reply.SessionID, reply.TableStatus, reply.RecordCount, headers, stream)
+	for {
+		var reply readResponse
+		headers, err := c.jsonRequest(ctx, http.MethodPost, op, input, &reply)
+		if err != nil {
+			return nil, err
+		}
+		requestedID := op.params.Get("SessionId")
+		id := reply.SessionID
+		if id == "" {
+			id = requestedID
+		}
+		switch reply.TableStatus {
+		case "NORMAL", "INIT":
+		default:
+			return nil, fmt.Errorf("storage %s: read session %q has status %s", op.action, id, reply.TableStatus)
+		}
+		if id == "" || (requestedID != "" && requestedID != id) {
+			return nil, fmt.Errorf("storage %s: invalid session descriptor", op.action)
+		}
+		if reply.TableStatus != "INIT" {
+			snapshot, err := c.newReadSession(op, "TableRead", id, reply.TableStatus, reply.RecordCount, headers, stream)
+			if err != nil {
+				return nil, err
+			}
+			snapshot.tableSchema = reply.DataSchema
+			return snapshot, nil
+		}
+		session := Session{ID: id, RouteToken: updatedRoute(headers, op.route)}
+		op = tableReadLookup(op.target, session)
+		input = struct{}{}
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("storage: wait for read session %q: %w", id, ctx.Err())
+		case <-time.After(tableReadPollInterval):
+		}
+	}
 }
 
 // CreateInstanceReadSession opens the result of a completed SQL instance.
@@ -216,7 +294,10 @@ func (c *Client) newReadSession(op operation, action, id, status string, count i
 // OpenReader streams a range of the snapshot. Pass nil for the entire snapshot.
 // The caller owns one reference and must call Release.
 func (s *ReadSession) OpenReader(ctx context.Context, rows *RowRange) (*ArrowReader, error) {
-	// An empty snapshot needs a positive wire count to retrieve the Arrow schema.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	// Use a positive wire count when retrieving a schema from the server.
 	rangeToRead := RowRange{Count: max(s.rows, 1)}
 	if rows != nil {
 		rangeToRead = *rows
@@ -224,6 +305,10 @@ func (s *ReadSession) OpenReader(ctx context.Context, rows *RowRange) (*ArrowRea
 	op := s.session.operation(s.action, s.target)
 	if err := rangeToRead.addTo(op.params); err != nil {
 		return nil, err
+	}
+	// Some deployments reject every offset for an empty table snapshot.
+	if s.rows == 0 && rangeToRead.Offset == 0 && s.tableSchema != nil {
+		return s.tableSchema.emptyReader()
 	}
 	expected := min(rangeToRead.Count, max(s.rows-rangeToRead.Offset, 0))
 	return s.client.arrowRequest(ctx, op, s.input, expected)

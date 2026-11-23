@@ -47,14 +47,21 @@ func TestClientConfigurationAndDiscovery(t *testing.T) {
 	require.ErrorContains(t, err, "credentials")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, http.MethodGet, r.Method)
 		project := r.URL.Query().Get("curr_project")
 		assert.Contains(t, []string{"test_project", "another_project"}, project)
+		assert.Contains(t, r.Header.Get("Authorization"), "test-ak")
+		if r.URL.Path == "/api/storage/v3" {
+			assert.Equal(t, http.MethodPost, r.Method)
+			assert.Equal(t, "named", r.URL.Query().Get("quotaName"))
+			assert.False(t, r.URL.Query().Has("quota"))
+			fmt.Fprint(w, `{"SessionId":"snapshot","SessionStatus":"NORMAL","RecordCount":1}`)
+			return
+		}
+		assert.Equal(t, http.MethodGet, r.Method)
 		assert.Equal(t, "/api/projects/"+project+"/tunnel", r.URL.Path)
 		assert.Equal(t, "named", r.URL.Query().Get("quota"))
 		assert.False(t, r.URL.Query().Has("quotaName"))
 		assert.False(t, r.URL.Query().Has("service"))
-		assert.Contains(t, r.Header.Get("Authorization"), "test-ak")
 		fmt.Fprintln(w, r.Host)
 	}))
 	t.Cleanup(server.Close)
@@ -69,6 +76,8 @@ func TestClientConfigurationAndDiscovery(t *testing.T) {
 	require.Equal(t, "default", client.schema)
 	require.Equal(t, service.RestClient().HttpTimeout, client.rest.HttpTimeout)
 	require.Equal(t, service.RestClient().TcpConnectionTimeout, client.rest.TcpConnectionTimeout)
+	_, err = client.CreateTableReadSession(ctx, Table{Name: "sample"}, TableReadOptions{})
+	require.NoError(t, err)
 
 	otherProject, err := NewClient(ctx, service, ClientOptions{Project: "another_project", QuotaName: "named"})
 	require.NoError(t, err)
@@ -82,7 +91,7 @@ func TestClientConfigurationAndDiscovery(t *testing.T) {
 		require.ErrorContains(t, err, "invalid Tunnel endpoint")
 	}
 	explicit, err := NewClient(ctx, service, ClientOptions{
-		Project: "another_project", TunnelEndpoint: server.URL + "/api/",
+		Project: "another_project", TunnelEndpoint: server.URL + "/api/", QuotaName: "named",
 		HTTPTimeout: time.Minute, TCPConnectionTimeout: 2 * time.Second,
 		UserAgent: "storage-test", DisableKeepAlives: true,
 	})
@@ -94,6 +103,8 @@ func TestClientConfigurationAndDiscovery(t *testing.T) {
 	require.Equal(t, 2*time.Second, explicit.rest.TcpConnectionTimeout)
 	require.Equal(t, "storage-test", explicit.rest.UserAgent())
 	require.True(t, explicit.rest.DisableKeepAlives)
+	_, err = explicit.CreateTableReadSession(ctx, Table{Name: "sample"}, TableReadOptions{})
+	require.NoError(t, err)
 	canceled, cancel := context.WithCancel(ctx)
 	cancel()
 	_, err = NewClient(canceled, service, ClientOptions{})
@@ -132,10 +143,10 @@ func TestSessionDescriptorsAndRejectedRequests(t *testing.T) {
 			fmt.Fprint(w, `{"DownloadID":"i","RecordCount":0}`)
 		case "TableCreateReadSession":
 			w.Header().Set(routeTokenHeader, "route-new")
-			fmt.Fprint(w, `{"SessionId":"s","RecordCount":3}`)
+			fmt.Fprint(w, `{"SessionId":"s","RecordCount":3,"SessionStatus":"NORMAL"}`)
 		case "TableGetReadSession":
 			assert.Equal(t, "false", r.URL.Query().Get("session_refresh"))
-			fmt.Fprint(w, `{"SessionId":"s","RecordCount":-1}`)
+			fmt.Fprint(w, `{"SessionId":"s","RecordCount":-1,"SessionStatus":"NORMAL"}`)
 		case "TableCreateWriteSession":
 			fmt.Fprint(w, `{}`)
 		case "TablePreview":
@@ -336,12 +347,14 @@ func TestWriteValidationAndMalformedAcknowledgements(t *testing.T) {
 	require.ErrorContains(t, err, "stream ID")
 	_, err = session.GetStream(t.Context(), Stream{ID: "s", Version: -1})
 	require.ErrorContains(t, err, "version")
+	_, err = session.CreateStream(t.Context(), Stream{ID: "s"})
+	require.ErrorContains(t, err, "version must be positive")
 	for _, id := range []string{"worker_1", "worker.1", "worker/1", "worker 1", "worker-一"} {
-		_, err = session.CreateStream(t.Context(), Stream{ID: id})
+		_, err = session.CreateStream(t.Context(), Stream{ID: id, Version: 1})
 		require.ErrorContains(t, err, "ASCII letters, digits, and hyphens")
-		_, err = session.GetStream(t.Context(), Stream{ID: id})
+		_, err = session.GetStream(t.Context(), Stream{ID: id, Version: 1})
 		require.ErrorContains(t, err, "ASCII letters, digits, and hyphens")
-		require.ErrorContains(t, session.CommitStreams(t.Context(), Stream{ID: id}), "ASCII letters, digits, and hyphens")
+		require.ErrorContains(t, session.CommitStreams(t.Context(), Stream{ID: id, Version: 1}), "ASCII letters, digits, and hyphens")
 	}
 	writer := &WriteStream{session: session, stream: Stream{ID: "s", Version: 1}}
 	_, err = writer.WriteBatch(t.Context(), 0, nil)
@@ -434,8 +447,8 @@ func TestCommitStreamsRequiresExplicitVersions(t *testing.T) {
 	require.NoError(t, err)
 	require.ErrorContains(t, session.CommitStreams(ctx), "at least one stream")
 	require.ErrorContains(t, session.CommitStreams(ctx, Stream{}), "stream ID is required")
-	require.ErrorContains(t, session.CommitStreams(ctx, Stream{ID: "shard-a", Version: -1}), "nonnegative")
-	require.ErrorContains(t, session.CommitStreams(ctx, Stream{ID: "shard-a"}, Stream{ID: "shard-a", Version: 3}), "only be committed once")
+	require.ErrorContains(t, session.CommitStreams(ctx, Stream{ID: "shard-a", Version: -1}), "positive")
+	require.ErrorContains(t, session.CommitStreams(ctx, Stream{ID: "shard-a", Version: 1}, Stream{ID: "shard-a", Version: 3}), "only be committed once")
 	streamA := Stream{ID: "shard-a", Version: 3}
 	streamB := Stream{ID: "shard-b", Version: 17}
 	require.ErrorContains(t, session.CommitStreams(ctx, streamA), "must match all streams")

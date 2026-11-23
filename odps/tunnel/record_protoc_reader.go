@@ -261,7 +261,10 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 		}
 		r.recordCrc.Update(v)
 		t := dt.(datatype.VarcharType)
-		fieldValue, _ = data.MakeVarChar(t.Length, string(v))
+		fieldValue, err = data.MakeVarChar(t.Length, string(v))
+		if err != nil {
+			return nil, errors.Wrap(err, "decode VARCHAR")
+		}
 	case datatype.CHAR:
 		v, err := r.protocReader.ReadBytes()
 		if err != nil {
@@ -269,7 +272,10 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 		}
 		r.recordCrc.Update(v)
 		t := dt.(datatype.CharType)
-		fieldValue, _ = data.MakeChar(t.Length, string(v))
+		fieldValue, err = data.MakeChar(t.Length, string(v))
+		if err != nil {
+			return nil, errors.Wrap(err, "decode CHAR")
+		}
 	case datatype.BINARY:
 		v, err := r.protocReader.ReadBytes()
 		if err != nil {

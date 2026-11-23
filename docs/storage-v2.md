@@ -2,8 +2,8 @@
 
 Storage API V2 reads and writes Apache Arrow IPC. A client shares credentials
 with an existing `*odps.Odps`. Set `storage.ClientOptions.QuotaName` to select a
-quota during Tunnel endpoint discovery. Set `TunnelEndpoint` to connect directly
-to a specific address.
+quota for Tunnel endpoint discovery and Storage requests. Set `TunnelEndpoint`
+to connect directly to a specific address.
 
 ## Read a SQL result
 
@@ -44,16 +44,22 @@ session descriptor with `GetInstanceReadSession` to reopen a result. See the
 
 - Create a table snapshot with `CreateTableReadSession`. Select columns and
   partitions in `TableReadOptions`, then use `OpenReader` to stream rows.
+  Creation and reopening wait for an initializing snapshot to become ready.
+  Use a context deadline to bound that wait.
 - Create a batch upload with `CreateTableWriteSession` and open one or more
   streams with `CreateStream`. Use ASCII letters, digits, and hyphens in stream
-  IDs. Write each batch at the previously acknowledged offset. `InitialOffset`
+  IDs and positive stream versions. Write each batch at the previously
+  acknowledged offset. `InitialOffset`
   on a resumed stream is the server's durable offset.
 - After an ambiguous transport error, resend the same batch at the same offset.
-  A different batch at that offset is rejected.
+  Keep the original payload until the write is acknowledged. The service may
+  deduplicate by offset without verifying the payload.
 - Finish creating, writing, and closing every stream in the session. Call
   `CommitStreams(ctx, streams...)` with all original `storage.Stream`
-  descriptors. The SDK checks the complete set against the server before
-  sending the IDs and versions required by some transactional tables. Use a
+  descriptors. The SDK checks these against the closed streams reported by
+  the server before sending the IDs and versions required by some transactional
+  tables. Track every intended stream and close them all before committing, since
+  the server may omit open streams from that check. Use a
   separate session for each group of rows you want to commit independently.
   `Commit(ctx)` commits all closed streams on tables that support implicit
   selection. Call `Abort` to discard an open upload.

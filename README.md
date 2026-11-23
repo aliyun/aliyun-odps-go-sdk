@@ -10,6 +10,22 @@ Go 1.26.11 or later is required.
 go get github.com/aliyun/aliyun-odps-go-sdk
 ```
 
+## Custom HTTP transport
+
+Pass a concurrency-safe `http.RoundTripper` to
+`odps.NewOdpsWithHTTPTransport(account, endpoint, transport)` to customize
+network behavior. The SDK signs requests before passing them to that transport.
+The ODPS client, its copies, and the Tunnel and Storage clients it creates
+share the supplied transport and its connection pool. The caller manages the
+transport's lifetime, including closing idle connections. Dial, DNS, compression,
+and keep-alive settings come from the supplied transport.
+
+Client HTTP timeouts and request contexts still apply. An HTTP timeout bounds
+the whole request, including response streaming. For a timeout that resets on
+progress, implement the inactivity policy in the transport and use context-aware
+operations such as `CreateInstanceResultDownloadSessionContext` and
+`OpenRecordReaderContext`.
+
 ## Tests
 
 Run `bash scripts/test-emulator.sh` with Go 1.26.11 or later, Docker, and Python 3.9 or later.

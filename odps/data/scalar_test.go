@@ -84,6 +84,14 @@ func TestCharacterLengthsAndScan(t *testing.T) {
 		var overflow data.CharOverflowError
 		require.ErrorAs(t, err, &overflow)
 		require.ErrorContains(t, err, "bigger than the max length 2")
+		value, err = construct.make(3, "😀中文")
+		require.NoError(t, err)
+		require.Equal(t, "😀中文", value.String())
+		value, err = construct.make(2, "e\u0301")
+		require.NoError(t, err)
+		require.Equal(t, "e\u0301", value.String())
+		_, err = construct.make(1, "e\u0301")
+		require.ErrorAs(t, err, &overflow)
 		_, err = construct.make(construct.max+1, "")
 		require.ErrorContains(t, err, "max length")
 	}
