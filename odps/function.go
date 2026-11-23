@@ -1,6 +1,7 @@
 package odps
 
 import (
+	"context"
 	"encoding/xml"
 	"net/url"
 	"time"
@@ -41,6 +42,10 @@ type FResource struct {
 
 // Load function meta from MaxCompute
 func (f *Function) Load() error {
+	return f.loadContext(context.Background())
+}
+
+func (f *Function) loadContext(ctx context.Context) error {
 	rb := common.NewResourceBuilder(f.ProjectName)
 	resource := rb.Function(f.Name())
 
@@ -51,7 +56,7 @@ func (f *Function) Load() error {
 
 	client := f.OdpsIns.restClient
 	var model functionModel
-	err := client.GetWithModel(resource, queryArgs, nil, &model)
+	err := client.GetWithModelContext(ctx, resource, queryArgs, nil, &model)
 	if err != nil {
 		return errors.WithStack(err)
 	}

@@ -10,11 +10,36 @@ Go 1.26.11 or later is required.
 go get github.com/aliyun/aliyun-odps-go-sdk
 ```
 
+## Start with the 1.0 client
+
+```go
+client, err := odps.NewClient(account.AccountFromEnv(), odps.ClientOptions{
+    Endpoint: endpoint,
+    Project:  project,
+})
+if err != nil {
+    return err
+}
+defer client.CloseIdleConnections()
+
+job, err := client.SubmitSQL(ctx, odps.SQLRequest{Statement: "select 1;"})
+if err != nil {
+    return err
+}
+result, err := job.Wait(ctx)
+if err != nil {
+    return err
+}
+```
+
+Use the result reference to open a Protobuf or Arrow stream. See the
+[1.0 migration guide](docs/v1-migration.md) for catalog pagination, the SQL
+driver, and session recovery.
+
 ## Custom HTTP transport
 
-Pass a concurrency-safe `http.RoundTripper` to
-`odps.NewOdpsWithHTTPTransport(account, endpoint, transport)` to customize
-network behavior. The SDK signs requests before passing them to that transport.
+Set `odps.ClientOptions.Transport` to a concurrency-safe `http.RoundTripper`
+to customize network behavior. The SDK signs requests before passing them to that transport.
 The ODPS client, its copies, and the Tunnel and Storage clients it creates
 share the supplied transport and its connection pool. The caller manages the
 transport's lifetime, including closing idle connections. Dial, DNS, compression,
@@ -146,9 +171,8 @@ odpsIns.SetDefaultProjectName(projectName)
 [示例代码](./examples/sdk/create_table_use_table_schema/main.go)
 
 ### go sql示例
-1. 创建dsn(data source name，形如"http://user:pass@host:port?param=x")，可以直接使用字符串或通过sqldriver.Config构建
-2. 调用sql.Open获取db
-3. 使用db执行sql
+已有 SDK 客户端可以通过 `sqldriver.NewConnector(client, opts)` 和 `sql.OpenDB` 建立连接。
+DSN 入口使用 `sql.Open("odps", dsn)`，可通过 `Config.FormatDSN()` 校验并生成连接字符串。
 
 [示例代码](./examples/sql/create_table/main.go)
 
@@ -159,25 +183,23 @@ odpsIns.SetDefaultProjectName(projectName)
 1. **提交前** context 已取消或已过期时，直接返回 context 错误。
 2. **请求或重试期间**取消会中断客户端操作。查询或执行返回错误时，驱动通过 `*sqldriver.CanceledError` 携带已收到的实例 ID，
    并保留 `errors.Is(err, context.Canceled)` 和 `errors.Is(err, context.DeadlineExceeded)` 的判断方式。
-   如果在收到实例 ID 前取消提交，服务端仍可能已经接收任务。要主动终止已知实例，请调用 `Instance.Terminate`。
+   如果在收到实例 ID 前取消提交，服务端仍可能已经接收任务。要主动终止已知实例，使用 `ResumeSQL` 取得作业句柄，再通过独立的 context 调用 `Cancel`。
 
    ```go
    var canceled *sqldriver.CanceledError
    if errors.As(err, &canceled) {
-       // errors.Is(err, context.DeadlineExceeded) 同时成立，判断写法不用改
-       _ = odpsIns.Instance(canceled.InstanceID).Terminate() // 只有你自己叫停
+       job, err := client.ResumeSQL(odps.SQLJobRef{InstanceID: canceled.InstanceID})
+       if err != nil {
+           return err
+       }
+       return job.Cancel(cancelCtx)
    }
    ```
 3. **读取结果时**取消会关闭结果流，调用方通过 `Rows.Err()` 获取取消错误。`Rows.Close` 可重复调用。
-4. **`db.PingContext` 不会访问服务端**：本 driver 没有实现 `driver.Pinger`，ping 只在
-   database/sql 层取连接（context 已取消时返回 `ctx.Err()`）。要确认连通性请显式执行一条 SQL。
-5. **`ExecContext` 返回的 `sql.Result` 不再可能是 nil**：MaxCompute 不报告受影响行数，
-   所以 `RowsAffected` / `LastInsertId` 明确返回"不支持"的错误（`sqldriver.ErrNoRowsAffectedInfo` /
-   `sqldriver.ErrNoLastInsertIdInfo`）。以前这里返回 nil，调用方 `res.RowsAffected()` 会 panic。
+4. `db.PingContext` 实际请求目标项目的元数据，用于验证访问权限和连接。
+5. `ExecContext` 返回的 `sql.Result` 对 `RowsAffected` 和 `LastInsertId` 返回明确错误
+   （`sqldriver.ErrNoRowsAffectedInfo` 和 `sqldriver.ErrNoLastInsertIdInfo`）。
 6. `Begin` 和 `BeginTx` 返回 `sqldriver.ErrTransactionsUnsupported`。`Prepare` 和 `PrepareContext` 返回 `sqldriver.ErrPreparedStatementsUnsupported`。
-
-不用 context 的等待入口是 `Instance.WaitForSuccess`，需要给它加期限时用
-`Instance.WaitForSuccessContext(ctx)`。
 
 回归测试见 `sqldriver/context_contract_test.go`（离线，用假的 MaxCompute 服务）与
 `sqldriver/context_real_service_test.go`（真服务 smoke，缺凭据时自动 skip）。

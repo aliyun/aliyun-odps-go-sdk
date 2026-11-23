@@ -2,9 +2,9 @@ package odps
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/hex"
-	"encoding/xml"
 	"fmt"
 	"io"
 	"net/url"
@@ -47,25 +47,15 @@ func (r *Resources) List(f func(*Resource, error), filters ...RFileFunc) {
 		}
 	}
 
-	rb := common.ResourceBuilder{ProjectName: r.ProjectName}
-	resource := rb.Resources()
 	client := r.OdpsIns.restClient
 
-	type ResModel struct {
-		XMLName   xml.Name        `xml:"Resources"`
-		Resources []resourceModel `xml:"Resource"`
-		Marker    string
-		MaxItems  int
-	}
-	var resModel ResModel
-
 	for {
-		err := client.GetWithModel(resource, queryArgs, nil, &resModel)
+		page, err := resourcesPage(context.Background(), client, r.ProjectName, queryArgs)
 		if err != nil {
 			f(nil, err)
 			break
 		}
-		for _, resourceModel := range resModel.Resources {
+		for _, resourceModel := range page.Items {
 			if resourceModel.SchemaName == "" {
 				resourceModel.SchemaName = r.schemaName
 			}
@@ -74,9 +64,8 @@ func (r *Resources) List(f func(*Resource, error), filters ...RFileFunc) {
 			f(resource, nil)
 		}
 
-		if resModel.Marker != "" {
-			queryArgs.Set("marker", resModel.Marker)
-			resModel = ResModel{}
+		if page.NextPageToken != "" {
+			queryArgs.Set("marker", page.NextPageToken)
 		} else {
 			break
 		}

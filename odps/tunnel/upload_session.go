@@ -312,7 +312,7 @@ func (u *UploadSession) loadInformation(req *http.Request) error {
 	u.Id = resModel.UploadID
 	u.fieldMaxSize = resModel.MaxFieldSize
 
-	if resModel.QuotaName != "" {
+	if u.QuotaName == "" {
 		u.QuotaName = resModel.QuotaName
 	}
 

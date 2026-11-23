@@ -17,7 +17,7 @@
 package odps
 
 import (
-	"encoding/xml"
+	"context"
 	"net/url"
 
 	"github.com/pkg/errors"
@@ -44,35 +44,24 @@ func (p *Projects) List(filters ...PFilterFunc) ([]*Project, error) {
 	}
 
 	client := p.odpsIns.restClient
-	rb := p.odpsIns.rb
-	resource := rb.Projects()
 
-	type ResModel struct {
-		XMLName  xml.Name `xml:"Projects"`
-		Marker   string
-		MaxItems int
-		Projects []projectModel `xml:"Project"`
-	}
-
-	var resModel ResModel
 	var projects []*Project
 
 	for {
-		err := client.GetWithModel(resource, queryArgs, nil, &resModel)
+		page, err := projectsPage(context.Background(), client, queryArgs)
 		if err != nil {
 			return projects, errors.WithStack(err)
 		}
 
-		for _, projectModel := range resModel.Projects {
+		for _, projectModel := range page.Items {
 			project := NewProject(projectModel.Name, p.odpsIns)
 			project.model = projectModel
 
 			projects = append(projects, project)
 		}
 
-		if resModel.Marker != "" {
-			queryArgs.Set("marker", resModel.Marker)
-			resModel = ResModel{}
+		if page.NextPageToken != "" {
+			queryArgs.Set("marker", page.NextPageToken)
 		} else {
 			break
 		}
@@ -95,20 +84,6 @@ func (p *Projects) Exists(projectName string) (bool, error) {
 		return false, nil
 	}
 	return err == nil, err
-}
-
-// CreateExternalProject  unimplemented!
-func (p *Projects) CreateExternalProject(projectName string) error {
-	return errors.New("unimplemented")
-}
-
-// DeleteExternalProject unimplemented!
-func (p *Projects) DeleteExternalProject(projectName string) error {
-	return errors.New("unimplemented")
-}
-
-func (p *Projects) UpdateProject(projectName string) error {
-	return errors.New("unimplemented")
 }
 
 var ProjectFilter = struct {

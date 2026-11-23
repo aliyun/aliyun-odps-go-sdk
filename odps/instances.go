@@ -237,8 +237,13 @@ func (instances *Instances) createTask(ctx context.Context, projectName string, 
 			return errors.WithStack(decoder.Decode(&resModel))
 		})
 		if err != nil {
-			if ctxErr := ctx.Err(); instanceId != "" && ctxErr != nil && errors.Is(err, ctxErr) {
-				return NewInstance(instances.odpsIns, projectName, instanceId), err
+			if instanceId != "" {
+				instance := NewInstance(instances.odpsIns, projectName, instanceId)
+				instance.taskNameCommitted = task.GetName()
+				instance.MaxQA.IsMaxQA = maxqaOptions.UseMaxQA
+				instance.MaxQA.SessionID = maxqaOptions.SessionID
+				instance.MaxQA.QueryCookie = maxqaQueryCookie
+				return instance, err
 			}
 
 			// Only a 409 is retried here. Every other failure - transport

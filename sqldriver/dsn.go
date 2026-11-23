@@ -79,10 +79,10 @@ func ParseDSN(dsn string) (*Config, error) {
 		config.AccessKey = os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
 		config.StsToken = os.Getenv("ALIBABA_CLOUD_SECURITY_TOKEN")
 	}
-	if config.AccessId == "" {
+	if strings.TrimSpace(config.AccessId) == "" {
 		return nil, errors.New("AccessId is not set")
 	}
-	if config.AccessKey == "" {
+	if strings.TrimSpace(config.AccessKey) == "" {
 		return nil, errors.New("AccessKey is not set")
 	}
 	config.TunnelEndpoint = params.Get("tunnelEndpoint")

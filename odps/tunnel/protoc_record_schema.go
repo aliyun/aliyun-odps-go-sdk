@@ -153,7 +153,10 @@ func checkCharacterWidth(s string, width int) error {
 }
 
 func checkDecimalWidth(value string, t datatype.DecimalType) error {
-	unsigned := strings.TrimPrefix(strings.TrimPrefix(value, "-"), "+")
+	unsigned := value
+	if len(unsigned) > 0 && (unsigned[0] == '+' || unsigned[0] == '-') {
+		unsigned = unsigned[1:]
+	}
 	whole, fraction, hasPoint := strings.Cut(unsigned, ".")
 	for _, digit := range whole + fraction {
 		if digit < '0' || digit > '9' {

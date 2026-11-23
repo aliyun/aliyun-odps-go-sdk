@@ -1,25 +1,25 @@
 # Storage API V2
 
 Storage API V2 reads and writes Apache Arrow IPC. A client shares credentials
-with an existing `*odps.Odps`. Set `storage.ClientOptions.QuotaName` to select a
+with an existing `*odps.Client`. Set `storage.ClientOptions.QuotaName` to select a
 quota for Tunnel endpoint discovery and Storage requests. Set `TunnelEndpoint`
 to connect directly to a specific address.
 
 ## Read a SQL result
 
-Submit SQL with the ODPS client, wait for the instance to finish, then open a
-Storage read session. A reader owns an HTTP stream and one Arrow reference.
+Submit SQL with the core client and wait for its result with `job.Wait(ctx)`.
+Open a Storage read session using the resulting job reference. A reader owns an HTTP stream and one Arrow reference.
 Call `Release` when done and check `Err` after the read loop. Retain a batch to
 keep it after advancing the reader and release that reference when done.
 
 ```go
-client, err := storage.NewClient(ctx, service, storage.ClientOptions{})
+client, err := storage.Open(ctx, core, storage.ClientOptions{})
 if err != nil {
     return err
 }
 defer client.Close()
 
-session, err := client.CreateInstanceReadSession(ctx, instance.Id(), storage.InstanceReadOptions{})
+session, err := client.OpenSQLResult(ctx, result.Ref(), storage.InstanceReadOptions{})
 if err != nil {
     return err
 }
@@ -37,15 +37,17 @@ return reader.Err()
 ```
 
 Pass `&storage.RowRange{Offset: start, Count: count}` to read a range. Use the
-session descriptor with `GetInstanceReadSession` to reopen a result. See the
+serializable `session.Descriptor()` with `ResumeRead` to reopen a result. See the
 [runnable instance reader](../examples/sdk/storage/instance_result/main.go).
 
 ## Read and write tables
 
-- Create a table snapshot with `CreateTableReadSession`. Select columns and
-  partitions in `TableReadOptions`, then use `OpenReader` to stream rows.
-  Creation and reopening wait for an initializing snapshot to become ready.
-  Use a context deadline to bound that wait.
+- Create a table snapshot with `StartTableRead` and save its descriptor.
+  Select columns and partitions in `TableReadOptions`. Call `WaitReady` with a
+  context deadline, then use `OpenReader`. If waiting fails, it returns the
+  latest handle for `ResumeRead` with a new context. Inspect `Plan` before
+  opening the stream for the projected schema and row count when available.
+  Supply an explicit row range when the count is unknown.
 - Create a batch upload with `CreateTableWriteSession` and open one or more
   streams with `CreateStream`. Use ASCII letters, digits, and hyphens in stream
   IDs and positive stream versions. Write each batch at the previously
@@ -64,9 +66,11 @@ session descriptor with `GetInstanceReadSession` to reopen a result. See the
   `Commit(ctx)` commits all closed streams on tables that support implicit
   selection. Call `Abort` to discard an open upload.
 
-Save the session descriptor, including its routing token, and all
-stream descriptors before submitting a commit. If the outcome is uncertain,
-reopen the same session and repeat the commit with the same descriptors. For a
+Save the JSON-serializable write-session descriptor and all intended stream
+versions before submitting a commit. If the outcome is uncertain, call
+`ResumeWrite` using the same project and quota and repeat the commit with the
+same versions. `Refresh` and `ClosedStreams` let the coordinator inspect
+acknowledged streams. For a
 partitioned upload, supply the partition spec in `TableWriteOptions.Partition`.
 Set `Overwrite` when the commit should replace the target's rows.
 
@@ -78,7 +82,7 @@ columns.
 
 | Earlier API | Go SDK 1.0 API |
 | --- | --- |
-| `DownloadSession.OpenRecordArrowReader` | `storage.Client.CreateTableReadSession`, then `ReadSession.OpenReader` |
+| `DownloadSession.OpenRecordArrowReader` | `storage.Client.StartTableRead`, then `WaitReady` and `OpenReader` |
 | `UploadSession.OpenRecordArrowWriter` | `storage.Client.CreateTableWriteSession`, then `CreateStream` and `WriteBatch` |
 | `TableSchema.ToArrowSchema` | Returns `(*arrow.Schema, error)` with Go types from `github.com/apache/arrow-go/v18/arrow` |
 | `Tunnel.Preview` | Returns MaxCompute records through Storage API V2 |

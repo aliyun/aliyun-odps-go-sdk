@@ -20,25 +20,18 @@ import (
 	"context"
 	"database/sql/driver"
 	"log"
-	"strings"
 
 	"github.com/pkg/errors"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/options"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 )
 
 type connection struct {
-	odpsIns *odps.Odps
-	config  *odps.Config
-}
-
-func newConnection(config *odps.Config) *connection {
-	return &connection{
-		odpsIns: config.GenOdps(),
-		config:  config,
-	}
+	connector      *Connector
+	closeConnector bool
 }
 
 // Begin reports that MaxCompute does not support database/sql transactions.
@@ -51,13 +44,12 @@ func (c *connection) Prepare(string) (driver.Stmt, error) {
 	return nil, ErrPreparedStatementsUnsupported
 }
 
-// Close sql/driver.Conn接口实现。odps 的 REST 调用本身没有服务端会话状态要清理，
-// 但 RestClient 的 transport 会留着 keep-alive 连接和喂它们的 goroutine：
-// database/sql 丢掉这条连接时把它们关掉。
+// Close releases connections owned by a direct Driver.Open call.
+// Pooled connections share the connector's client until DB.Close.
 func (c *connection) Close() error {
-	restClient := c.odpsIns.RestClient()
-	restClient.CloseIdleConnections()
-
+	if c.closeConnector {
+		return c.connector.Close()
+	}
 	return nil
 }
 
@@ -87,47 +79,29 @@ func (c *connection) queryContext(ctx context.Context, query string) (driver.Row
 		return nil, errors.WithStack(err)
 	}
 
-	tunnelEndpoint := c.config.TunnelEndpoint
-	if tunnelEndpoint != "" && c.config.TunnelQuotaName != "" {
-		return nil, errors.New(`"tunnelEndpoint" and "tunnelQuotaName" cannot be configured both`)
-	}
-
-	ins, err := c.odpsIns.ExecSQLContext(ctx, query, c.config.Hints)
+	opts := c.connector.options
+	job, err := c.submit(ctx, query)
 	if err != nil {
-		return nil, instanceError(ins, err)
+		return nil, instanceError(job, err)
 	}
-	if err = ins.WaitForSuccessContext(ctx); err != nil {
-		return nil, instanceError(ins, err)
-	}
-
-	// 如果dsn中配置了enableLogview=true，将打印相应logView
-	if value, ok := c.config.Others["enableLogview"]; ok && strings.ToLower(value) == "true" {
-		lvUrl, err := c.odpsIns.GenerateLogViewContext(ctx, ins, 10)
-		if err != nil {
-			return nil, instanceError(ins, errors.Wrap(err, "generate LogView"))
-		}
-
-		log.Printf("%s\n", lvUrl)
-	}
-
-	if tunnelEndpoint == "" {
-		project := c.odpsIns.DefaultProject()
-		tunnelEndpoint, err = project.GetTunnelEndpointContext(ctx, c.config.TunnelQuotaName)
-		if err != nil {
-			return nil, instanceError(ins, err)
-		}
-	}
-
-	// 结果下载的连接是一次性的：每建一个 session 都会新起一个 http.Transport，
-	// 池化那条 keep-alive 连接没有下一次可用，只会连同喂它的 goroutine 一起留下，
-	// 所以这里显式关掉 keep-alive（见 tunnel.Tunnel.DisableKeepAlives）。
-	tunnelIns := tunnel.NewTunnel(c.odpsIns, tunnelEndpoint)
-	tunnelIns.SetQuotaName(c.config.TunnelQuotaName)
-	tunnelIns.DisableKeepAlives = true
-	projectName := c.odpsIns.DefaultProjectName()
-	session, err := tunnelIns.CreateInstanceResultDownloadSessionContext(ctx, projectName, ins.Id())
+	result, err := job.Wait(ctx)
 	if err != nil {
-		return nil, instanceError(ins, err)
+		return nil, instanceError(job, err)
+	}
+
+	if opts.EnableLogView {
+		link, err := job.LogView(ctx, 10)
+		if err != nil {
+			return nil, instanceError(job, errors.Wrap(err, "generate LogView"))
+		}
+		log.Printf("%s\n", link)
+	}
+
+	session, err := tunnel.OpenSQLResult(ctx, c.connector.client, result.Ref(), tunnel.ResultOptions{
+		Endpoint: opts.TunnelEndpoint, QuotaName: opts.TunnelQuotaName, DisableKeepAlives: true,
+	})
+	if err != nil {
+		return nil, instanceError(job, err)
 	}
 
 	recordCount := session.RecordCount()
@@ -137,7 +111,8 @@ func (c *connection) queryContext(ctx context.Context, query string) (driver.Row
 
 	reader, err := session.OpenRecordReaderContext(ctx, 0, recordCount, 0, nil)
 	if err != nil {
-		return nil, instanceError(ins, err)
+		session.RestClient.CloseIdleConnections()
+		return nil, instanceError(job, err)
 	}
 
 	schema := session.Schema()
@@ -155,16 +130,16 @@ func (c *connection) queryContext(ctx context.Context, query string) (driver.Row
 	// Rows 还没有交给调用方，没有人会再 Close 它。
 	if err := ctx.Err(); err != nil {
 		_ = rows.Close()
-		return nil, instanceError(ins, err)
+		return nil, instanceError(job, err)
 	}
 
 	return rows, nil
 }
 
-func instanceError(ins *odps.Instance, err error) error {
-	if ins != nil {
+func instanceError(job *odps.SQLJob, err error) error {
+	if job != nil {
 		if ctxErr := contextCancellation(err); ctxErr != nil {
-			return &CanceledError{InstanceID: ins.Id(), Err: ctxErr}
+			return &CanceledError{InstanceID: job.Ref().InstanceID, Err: ctxErr}
 		}
 	}
 
@@ -209,19 +184,24 @@ func (c *connection) execContext(ctx context.Context, query string) (driver.Resu
 		return nil, errors.WithStack(err)
 	}
 
-	ins, err := c.odpsIns.ExecSQLContext(ctx, query, c.config.Hints)
+	job, err := c.submit(ctx, query)
 	if err != nil {
-		return nil, instanceError(ins, err)
+		return nil, instanceError(job, err)
 	}
-
-	// 等待instance结束
-	if err = ins.WaitForSuccessContext(ctx); err != nil {
-		return nil, instanceError(ins, err)
+	if _, err := job.Wait(ctx); err != nil {
+		return nil, instanceError(job, err)
 	}
 
 	// odps 不报告受影响行数，但也不能返回 nil：database/sql 会把它原样交给调用方，
 	// res.RowsAffected() 就 panic 在 nil interface 上。
 	return NoResult{}, nil
+}
+
+func (c *connection) submit(ctx context.Context, query string) (*odps.SQLJob, error) {
+	return c.connector.client.SubmitSQL(ctx, odps.SQLRequest{
+		Statement: query,
+		Options:   options.SQLTaskOptions{Hints: c.connector.options.Hints},
+	})
 }
 
 func positionArgQueryToSql(query string, args []driver.Value) (string, error) {
@@ -244,7 +224,7 @@ func (c *connection) CheckNamedValue(value *driver.NamedValue) error {
 
 // Ping verifies that the current credentials can read the configured project.
 func (c *connection) Ping(ctx context.Context) error {
-	return c.odpsIns.DefaultProject().LoadContext(ctx)
+	return c.connector.client.Ping(ctx)
 }
 
 var (

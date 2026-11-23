@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/configvalue"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
@@ -52,14 +53,32 @@ func NewClient(ctx context.Context, service *odps.Odps, options ClientOptions) (
 	if service == nil || service.Account() == nil {
 		return nil, fmt.Errorf("storage: an ODPS client with credentials is required")
 	}
+	return newClient(ctx, service.RestClient(), odps.Scope{Project: service.DefaultProjectName(), Schema: service.CurrentSchemaName()}, options)
+}
+
+// Open creates a Storage client in the core client's scope, using the supplied
+// endpoint or performing quota-aware endpoint discovery with ctx.
+func Open(ctx context.Context, service *odps.Client, options ClientOptions) (*Client, error) {
+	if service == nil {
+		return nil, fmt.Errorf("storage: an ODPS client is required")
+	}
+	return newClient(ctx, service.RestClient(), service.Scope(), options)
+}
+
+func newClient(ctx context.Context, source restclient.RestClient, scope odps.Scope, options ClientOptions) (*Client, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if options.HTTPTimeout < 0 || options.TCPConnectionTimeout < 0 {
+		return nil, fmt.Errorf("storage: timeouts must be non-negative")
+	}
 	project := options.Project
 	if project == "" {
-		project = service.DefaultProjectName()
+		project = scope.Project
 	}
 	if err := validateIdentifier("project", project); err != nil {
 		return nil, err
 	}
-	source := service.RestClient()
 	endpoint := options.TunnelEndpoint
 	quota := strings.TrimSpace(options.QuotaName)
 	if endpoint == "" {
@@ -69,14 +88,13 @@ func NewClient(ctx context.Context, service *odps.Odps, options ClientOptions) (
 			return nil, fmt.Errorf("storage: resolve Tunnel endpoint for %q: %w", project, err)
 		}
 	}
-	u, err := url.Parse(strings.TrimSpace(endpoint))
-	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") ||
-		u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return nil, fmt.Errorf("storage: invalid Tunnel endpoint")
+	u, err := configvalue.Endpoint(strings.TrimSpace(endpoint), "Tunnel endpoint")
+	if err != nil {
+		return nil, fmt.Errorf("storage: %w", err)
 	}
 	u.Path = strings.TrimSuffix(strings.TrimRight(u.Path, "/"), "/api")
 	u.RawPath = ""
-	schema := service.CurrentSchemaName()
+	schema := scope.Schema
 	if schema == "" {
 		schema = "default"
 	}
@@ -127,23 +145,38 @@ func (c *Client) Close() {
 	c.rest.CloseIdleConnections()
 }
 
-// Table identifies a table in the Client's project.
-type Table struct {
-	Schema string // Defaults to the ODPS client's current schema or "default".
-	Name   string
+// Table is the compatibility name for a table reference in the client's project.
+type Table = odps.TableRef
+
+func (c *Client) tableRef(table odps.TableRef) (odps.TableRef, error) {
+	if table.Project == "" {
+		table.Project = c.project
+	}
+	if table.Project != c.project {
+		return odps.TableRef{}, fmt.Errorf("storage: table project does not match the client")
+	}
+	if table.Schema == "" {
+		table.Schema = c.schema
+	}
+	if err := validateIdentifier("schema", table.Schema); err != nil {
+		return odps.TableRef{}, err
+	}
+	if err := validateIdentifier("table", table.Name); err != nil {
+		return odps.TableRef{}, err
+	}
+	return table, nil
 }
 
-func (c *Client) tableTarget(table Table) (string, error) {
-	schema := table.Schema
-	if schema == "" {
-		schema = c.schema
+func tableResource(table odps.TableRef) string {
+	return fmt.Sprintf("projects.%s.schemas.%s.tables.%s", table.Project, table.Schema, table.Name)
+}
+
+func (c *Client) tableTarget(table odps.TableRef) (string, error) {
+	table, err := c.tableRef(table)
+	if err != nil {
+		return "", err
 	}
-	for _, field := range []struct{ kind, value string }{{"schema", schema}, {"table", table.Name}} {
-		if err := validateIdentifier(field.kind, field.value); err != nil {
-			return "", err
-		}
-	}
-	return fmt.Sprintf("projects.%s.schemas.%s.tables.%s", c.project, schema, table.Name), nil
+	return tableResource(table), nil
 }
 
 func validateIdentifier(kind, name string) error {

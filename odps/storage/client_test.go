@@ -167,8 +167,11 @@ func TestSessionDescriptorsAndRejectedRequests(t *testing.T) {
 	require.ErrorContains(t, err, "nonnegative")
 	_, err = tableSession.OpenReader(ctx, &RowRange{Count: -1})
 	require.ErrorContains(t, err, "nonnegative")
-	_, err = client.GetTableReadSession(ctx, valid, Session{ID: "s"})
-	require.ErrorContains(t, err, "invalid session descriptor")
+	unknown, err := client.GetTableReadSession(ctx, valid, Session{ID: "s"})
+	require.NoError(t, err)
+	require.False(t, unknown.Plan().CountKnown)
+	_, err = unknown.OpenReader(ctx, nil)
+	require.ErrorContains(t, err, "row count is unknown")
 	_, err = client.GetTableReadSession(ctx, valid, Session{})
 	require.ErrorContains(t, err, "session ID")
 	_, err = client.CreateTableReadSession(ctx, bad, TableReadOptions{})
@@ -342,7 +345,9 @@ func TestWriteValidationAndMalformedAcknowledgements(t *testing.T) {
 			fmt.Fprint(w, "malformed response")
 		}
 	})
-	session := &WriteSession{client: client, session: Session{ID: "s"}, target: "projects.test_project.schemas.default.tables.table"}
+	session := &WriteSession{client: client, descriptor: WriteSessionDescriptor{
+		ID: "s", Mode: WriteModeBatch, Table: Table{Project: "test_project", Schema: "default", Name: "table"},
+	}}
 	_, err := session.CreateStream(t.Context(), Stream{Version: 1})
 	require.ErrorContains(t, err, "stream ID")
 	_, err = session.GetStream(t.Context(), Stream{ID: "s", Version: -1})

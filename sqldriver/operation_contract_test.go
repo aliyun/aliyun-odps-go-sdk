@@ -40,11 +40,7 @@ func TestRejectConflictingTunnelOptionsBeforeSubmission(t *testing.T) {
 	f := newFakeService(t)
 	cfg := f.config()
 	cfg.TunnelQuotaName = "test-quota"
-	db, err := sql.Open("odps", cfg.FormatDsn())
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-
-	_, err = db.QueryContext(t.Context(), "select 1")
+	_, err := sql.Open("odps", cfg.FormatDsn())
 	require.ErrorContains(t, err, "cannot be configured both")
 	require.Zero(t, f.count(&f.submits))
 }

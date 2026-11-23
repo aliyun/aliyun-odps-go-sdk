@@ -19,7 +19,6 @@ package tunnel
 import (
 	"context"
 	"slices"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -291,7 +290,6 @@ func openPreviewReader(ctx context.Context, client *storage.Client, table *odps.
 		options.PartitionColumns[i] = column.Name
 	}
 	if partition != "" {
-		partition = strings.NewReplacer("'", "", "\"", "", "/", ",").Replace(partition)
 		options.Partitions = []string{partition}
 	}
 	snapshot, err := client.CreateTableReadSession(ctx, target, options)
@@ -299,8 +297,14 @@ func openPreviewReader(ctx context.Context, client *storage.Client, table *odps.
 		return nil, err
 	}
 	const maxPreviewRows = 10000
-	if limit < 0 || limit > maxPreviewRows {
+	if limit <= 0 || limit > maxPreviewRows {
 		limit = maxPreviewRows
 	}
-	return snapshot.OpenReader(ctx, &storage.RowRange{Count: min(limit, snapshot.RecordCount())})
+	if count := snapshot.RecordCount(); count >= 0 {
+		if count == 0 {
+			return snapshot.OpenReader(ctx, nil)
+		}
+		limit = min(limit, count)
+	}
+	return snapshot.OpenReader(ctx, &storage.RowRange{Count: limit})
 }

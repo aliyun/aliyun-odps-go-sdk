@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"google.golang.org/protobuf/encoding/protowire"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
@@ -78,16 +77,13 @@ func (r *RecordProtocReader) Read() (_ data.Record, err error) {
 
 LOOP:
 	for {
-		tag, wireType, err := r.protocReader.ReadTag()
+		tag, _, err := r.protocReader.ReadTag()
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
 
 		switch tag {
 		case EndRecord:
-			if wireType != protowire.VarintType {
-				return nil, errors.New("invalid end-of-record wire type")
-			}
 			crc := r.recordCrc.Value()
 			uint32V, err := r.protocReader.ReadUInt32()
 			if err != nil {
@@ -101,9 +97,6 @@ LOOP:
 			r.crcOfCrc.Update(crc)
 			break LOOP
 		case MetaCount:
-			if wireType != protowire.VarintType {
-				return nil, errors.New("invalid record-count wire type")
-			}
 			sInt64, err := r.protocReader.ReadSInt64()
 			if err != nil {
 				return nil, errors.WithStack(err)
@@ -113,12 +106,12 @@ LOOP:
 				return nil, errors.New("record count does not match")
 			}
 
-			tag, wireType, err := r.protocReader.ReadTag()
+			tag, _, err := r.protocReader.ReadTag()
 			if err != nil {
 				return nil, errors.WithStack(err)
 			}
 
-			if tag != MetaChecksum || wireType != protowire.VarintType {
+			if tag != MetaChecksum {
 				return nil, errors.New("invalid stream")
 			}
 
@@ -148,12 +141,10 @@ LOOP:
 				return nil, errors.New("invalid protobuf tag")
 			}
 			c := r.columns[columnIndex-1]
-			expected, err := recordFieldWireType(c.Type)
-			if err != nil {
-				return nil, errors.Wrapf(err, "column %q", c.Name)
-			}
-			if wireType != expected || record[columnIndex-1] != nil {
-				return nil, fmt.Errorf("invalid wire type or duplicate tag for column %q", c.Name)
+			// Tunnel uses the schema to decode the payload. Some services
+			// label CHAR result fields differently in the Protobuf tag.
+			if c.Type == nil || record[columnIndex-1] != nil {
+				return nil, fmt.Errorf("missing schema type or duplicate tag for column %q", c.Name)
 			}
 			r.recordCrc.Update(columnIndex)
 			fv, err := r.readField(c.Type)

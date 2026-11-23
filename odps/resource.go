@@ -1,6 +1,7 @@
 package odps
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/url"
@@ -119,6 +120,10 @@ func NewResource(model resourceModel, projectName string, odpsIns *Odps) *Resour
 
 // Load load resource meta
 func (r *Resource) Load() error {
+	return r.loadContext(context.Background())
+}
+
+func (r *Resource) loadContext(ctx context.Context) error {
 	client := r.OdpsIns.restClient
 	rb := common.ResourceBuilder{ProjectName: r.ProjectName}
 	resource := rb.Resource(r.Name())
@@ -129,7 +134,7 @@ func (r *Resource) Load() error {
 		queryArgs.Set("curr_schema", r.SchemaName())
 	}
 	queryArgs.Set("meta", "")
-	err := client.GetWithParseFunc(resource, queryArgs, nil, func(res *http.Response) error {
+	err := client.GetWithParseFuncContext(ctx, resource, queryArgs, nil, func(res *http.Response) error {
 		header := res.Header
 		if schema := header.Get(common.HttpHeaderOdpsSchemaName); schema != "" {
 			r.Model.SchemaName = schema

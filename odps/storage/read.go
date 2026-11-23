@@ -19,6 +19,8 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/odps"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/common"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 )
@@ -99,25 +101,28 @@ func (r RowRange) addTo(params url.Values) error {
 type readResponse struct {
 	SessionID   string `json:"SessionId"`
 	DownloadID  string `json:"DownloadID"`
-	RecordCount int64
+	RecordCount *int64
 	Status      string
 	TableStatus string `json:"SessionStatus"`
-	DataSchema  *tableReadSchema
+	DataSchema  *ReadSchema
 }
 
-type readColumn struct {
+// ReadColumn describes a column reported by a Storage session.
+type ReadColumn struct {
 	Name     string
 	Type     string
 	Nullable bool
 }
 
-type tableReadSchema struct {
-	DataColumns      []readColumn
-	SystemColumns    []readColumn
-	PartitionColumns []readColumn
+// ReadSchema contains the projected columns, in their Storage data groups.
+type ReadSchema struct {
+	DataColumns      []ReadColumn
+	SystemColumns    []ReadColumn
+	PartitionColumns []ReadColumn
 }
 
-func (schema tableReadSchema) emptyReader() (*ArrowReader, error) {
+// ArrowSchema converts the reported column metadata to the default Arrow schema.
+func (schema ReadSchema) ArrowSchema() (*arrow.Schema, error) {
 	columns := slices.Concat(schema.DataColumns, schema.SystemColumns, schema.PartitionColumns)
 	table := tableschema.TableSchema{Columns: make([]tableschema.Column, len(columns))}
 	for i, column := range columns {
@@ -127,7 +132,11 @@ func (schema tableReadSchema) emptyReader() (*ArrowReader, error) {
 		}
 		table.Columns[i] = tableschema.Column{Name: column.Name, Type: typ, NotNull: !column.Nullable}
 	}
-	arrowSchema, err := table.ToArrowSchema()
+	return table.ToArrowSchema()
+}
+
+func (schema ReadSchema) emptyReader() (*ArrowReader, error) {
+	arrowSchema, err := schema.ArrowSchema()
 	if err != nil {
 		return nil, err
 	}
@@ -138,31 +147,64 @@ func (schema tableReadSchema) emptyReader() (*ArrowReader, error) {
 	return newArrowReader(io.NopCloser(bytes.NewReader(buffer.Bytes())), 0)
 }
 
-// ReadSession is a snapshot of a table or SQL instance result.
+// ReadSession represents a table or SQL result snapshot. A table snapshot can
+// be pending. WaitReady returns a refreshed snapshot without changing its receiver.
 type ReadSession struct {
-	client      *Client
-	session     Session
-	target      string
-	action      string
-	rows        int64
-	status      string
-	input       any
-	tableSchema *tableReadSchema
+	client     *Client
+	descriptor ReadSessionDescriptor
+	target     string
+	action     string
+	rows       int64
+	status     string
+	input      any
+	schema     *ReadSchema
 }
 
-// Session returns the descriptor for reopening the snapshot.
-func (s *ReadSession) Session() Session { return s.session }
+// Session returns a compatibility identifier. Persist Descriptor instead to
+// retain the target and quota when resuming a snapshot.
+func (s *ReadSession) Session() Session { return s.descriptor.session() }
 
-// RecordCount returns the number of rows reported by the server.
+// Descriptor identifies the exact target and route for ResumeRead.
+func (s *ReadSession) Descriptor() ReadSessionDescriptor { return s.descriptor.clone() }
+
+// RecordCount returns the number of rows reported by the server, or -1 when unknown.
 func (s *ReadSession) RecordCount() int64 { return s.rows }
 
 // Status returns the server's session status as reported at open time.
 func (s *ReadSession) Status() string { return s.status }
 
-// CreateTableReadSession opens a row-offset snapshot of a table.
-// For asynchronous creation, it waits for the snapshot to become ready or ctx to end.
-func (c *Client) CreateTableReadSession(ctx context.Context, table Table, opts TableReadOptions) (*ReadSession, error) {
-	target, err := c.tableTarget(table)
+// ReadPlan describes the negotiated row-offset read. Schema may be nil if the
+// service only returns it when opening an Arrow stream.
+type ReadPlan struct {
+	SplitMode   ReadSplitMode
+	RecordCount int64
+	CountKnown  bool
+	Schema      *ReadSchema
+}
+
+// ReadSplitMode identifies how the session addresses ranges.
+type ReadSplitMode string
+
+// ReadSplitRowOffset addresses each range by its start row and count.
+const ReadSplitRowOffset ReadSplitMode = "RowOffset"
+
+// Plan returns the row count and an owned copy of the metadata reported by the service.
+func (s *ReadSession) Plan() ReadPlan {
+	plan := ReadPlan{SplitMode: ReadSplitRowOffset, RecordCount: s.rows, CountKnown: s.rows >= 0 && s.status != "INIT"}
+	if s.schema != nil {
+		plan.Schema = &ReadSchema{
+			DataColumns:      slices.Clone(s.schema.DataColumns),
+			PartitionColumns: slices.Clone(s.schema.PartitionColumns),
+			SystemColumns:    slices.Clone(s.schema.SystemColumns),
+		}
+	}
+	return plan
+}
+
+// StartTableRead creates a snapshot and returns as soon as the service
+// acknowledges it. Save Descriptor before waiting for the snapshot to be ready.
+func (c *Client) StartTableRead(ctx context.Context, table odps.TableRef, opts TableReadOptions) (*ReadSession, error) {
+	table, err := c.tableRef(table)
 	if err != nil {
 		return nil, err
 	}
@@ -180,99 +222,154 @@ func (c *Client) CreateTableReadSession(ctx context.Context, table Table, opts T
 		}
 		input.RequiredPartitions = append(input.RequiredPartitions, partition)
 	}
-	input.SplitOptions.SplitMode = "RowOffset"
+	input.SplitOptions.SplitMode = string(ReadSplitRowOffset)
 	input.SplitOptions.SplitUnit = "ByteSize"
 	input.SplitOptions.SplitNumber = tableReadBatchRows
 	input.SplitOptions.CrossPartition = true
 	input.ArrowOptions.TimestampUnit = "nano"
 	input.ArrowOptions.DatetimeUnit = "milli"
-	return c.tableReadSession(ctx, operation{action: "TableCreateReadSession", target: target}, input)
+
+	desc := ReadSessionDescriptor{Version: descriptorVersion, Kind: TableSnapshot, Table: table, QuotaName: c.quota}
+	op := operation{action: "TableCreateReadSession", target: tableResource(table)}
+	return c.tableReadSession(ctx, desc, op, input)
+}
+
+// CreateTableReadSession starts a row-offset snapshot and waits for readiness.
+// An error after creation is accompanied by the latest recoverable handle.
+func (c *Client) CreateTableReadSession(ctx context.Context, table Table, opts TableReadOptions) (*ReadSession, error) {
+	snapshot, err := c.StartTableRead(ctx, table, opts)
+	if err != nil {
+		return snapshot, err
+	}
+	return snapshot.WaitReady(ctx)
 }
 
 // GetTableReadSession reopens a table snapshot, waiting for readiness with ctx.
+// Use ResumeRead with a saved descriptor to preserve the original scope.
 func (c *Client) GetTableReadSession(ctx context.Context, table Table, session Session) (*ReadSession, error) {
-	target, err := c.tableTarget(table)
+	table, err := c.tableRef(table)
 	if err != nil {
 		return nil, err
 	}
-	if session.ID == "" {
-		return nil, fmt.Errorf("storage: session ID is required")
+	snapshot, err := c.ResumeRead(ctx, ReadSessionDescriptor{
+		Version: descriptorVersion, ID: session.ID, RouteToken: session.RouteToken,
+		Kind: TableSnapshot, Table: table, QuotaName: c.quota,
+	})
+	if err != nil {
+		return snapshot, err
 	}
-	return c.tableReadSession(ctx, tableReadLookup(target, session), struct{}{})
+	return snapshot.WaitReady(ctx)
 }
 
-func tableReadLookup(target string, session Session) operation {
-	op := session.operation("TableGetReadSession", target)
-	op.params.Set("session_refresh", "false")
-	return op
-}
-
-func (c *Client) tableReadSession(ctx context.Context, op operation, input any) (*ReadSession, error) {
-	stream := tableReadStreamRequest{MaxBatchRows: tableReadBatchRows, DataColumns: []string{}}
-	stream.DataFormat.Type = "Arrow"
-	stream.DataFormat.Version = "V5"
-	for {
-		var reply readResponse
-		headers, err := c.jsonRequest(ctx, http.MethodPost, op, input, &reply)
+// ResumeRead opens a saved snapshot in one request. A table snapshot may still
+// be initializing. Call WaitReady for a snapshot that can open Arrow readers.
+func (c *Client) ResumeRead(ctx context.Context, desc ReadSessionDescriptor) (*ReadSession, error) {
+	switch desc.Kind {
+	case TableSnapshot:
+		if desc.Job != (odps.SQLJobRef{}) || desc.QueryID != nil || desc.EnableLimit || desc.Table.Schema == "" {
+			return nil, fmt.Errorf("storage: invalid table read descriptor")
+		}
+		if err := c.validateDescriptor(desc.Version, desc.ID, desc.Table.Project, desc.QuotaName); err != nil {
+			return nil, err
+		}
+		table, err := c.tableRef(desc.Table)
 		if err != nil {
 			return nil, err
 		}
-		requestedID := op.params.Get("SessionId")
-		id := reply.SessionID
-		if id == "" {
-			id = requestedID
+		op := desc.session().operation("TableGetReadSession", tableResource(table))
+		op.params.Set("session_refresh", "false")
+		return c.tableReadSession(ctx, desc, op, struct{}{})
+	case InstanceSnapshot:
+		if desc.Table != (odps.TableRef{}) || desc.Job.TaskName == "" {
+			return nil, fmt.Errorf("storage: invalid instance read descriptor")
 		}
-		switch reply.TableStatus {
-		case "NORMAL", "INIT":
-		default:
-			return nil, fmt.Errorf("storage %s: read session %q has status %s", op.action, id, reply.TableStatus)
+		if err := c.validateDescriptor(desc.Version, desc.ID, desc.Job.Project, desc.QuotaName); err != nil {
+			return nil, err
 		}
-		if id == "" || (requestedID != "" && requestedID != id) {
-			return nil, fmt.Errorf("storage %s: invalid session descriptor", op.action)
-		}
-		if reply.TableStatus != "INIT" {
-			snapshot, err := c.newReadSession(op, "TableRead", id, reply.TableStatus, reply.RecordCount, headers, stream)
-			if err != nil {
-				return nil, err
-			}
-			snapshot.tableSchema = reply.DataSchema
-			return snapshot, nil
-		}
-		session := Session{ID: id, RouteToken: updatedRoute(headers, op.route)}
-		op = tableReadLookup(op.target, session)
-		input = struct{}{}
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("storage: wait for read session %q: %w", id, ctx.Err())
-		case <-time.After(tableReadPollInterval):
-		}
+		return c.instanceReadSession(ctx, http.MethodGet, "InstanceGetReadSession", desc)
+	default:
+		return nil, fmt.Errorf("storage: unsupported read session kind %q", desc.Kind)
 	}
+}
+
+// WaitReady waits for a table snapshot to become readable. On failure it
+// returns the latest handle so the caller can retain or resume the snapshot.
+func (s *ReadSession) WaitReady(ctx context.Context) (*ReadSession, error) {
+	current := s
+	for current.status == "INIT" {
+		if err := common.SleepContext(ctx, tableReadPollInterval); err != nil {
+			return current, fmt.Errorf("storage: wait for read session %q: %w", current.descriptor.ID, err)
+		}
+		next, err := current.client.ResumeRead(ctx, current.descriptor)
+		if err != nil {
+			return current, err
+		}
+		current = next
+	}
+	return current, ctx.Err()
+}
+
+func (c *Client) tableReadSession(ctx context.Context, desc ReadSessionDescriptor, op operation, input any) (*ReadSession, error) {
+	var reply readResponse
+	headers, err := c.jsonRequest(ctx, http.MethodPost, op, input, &reply)
+	if err != nil {
+		return nil, err
+	}
+	if reply.TableStatus != "NORMAL" && reply.TableStatus != "INIT" {
+		return nil, fmt.Errorf("storage %s: read session %q has status %q", op.action, reply.SessionID, reply.TableStatus)
+	}
+	stream := tableReadStreamRequest{MaxBatchRows: tableReadBatchRows, DataColumns: []string{}}
+	stream.DataFormat.Type, stream.DataFormat.Version = "Arrow", "V5"
+	return c.newReadSession(desc, op, "TableRead", reply.SessionID, reply.TableStatus, reply.RecordCount, headers, stream, reply.DataSchema)
+}
+
+// OpenSQLResult opens an Arrow snapshot of a completed SQL job in the client's project.
+func (c *Client) OpenSQLResult(ctx context.Context, job odps.SQLJobRef, opts InstanceReadOptions) (*ReadSession, error) {
+	if job.Project == "" {
+		job.Project = c.project
+	}
+	if job.Project != c.project {
+		return nil, fmt.Errorf("storage: SQL result project does not match the client")
+	}
+	if opts.TaskName != "" {
+		job.TaskName = opts.TaskName
+	}
+	if job.TaskName == "" {
+		job.TaskName = "AnonymousSQLTask"
+	}
+	desc := ReadSessionDescriptor{
+		Version: descriptorVersion, Kind: InstanceSnapshot, Job: job,
+		QuotaName: c.quota, QueryID: opts.QueryID, EnableLimit: opts.EnableLimit,
+	}
+	return c.instanceReadSession(ctx, http.MethodPost, "InstanceCreateReadSession", desc)
 }
 
 // CreateInstanceReadSession opens the result of a completed SQL instance.
 func (c *Client) CreateInstanceReadSession(ctx context.Context, id string, opts InstanceReadOptions) (*ReadSession, error) {
-	return c.instanceReadSession(ctx, http.MethodPost, "InstanceCreateReadSession", id, Session{}, opts)
+	return c.OpenSQLResult(ctx, odps.SQLJobRef{InstanceID: id}, opts)
 }
 
 // GetInstanceReadSession reopens an existing instance result snapshot.
 func (c *Client) GetInstanceReadSession(ctx context.Context, id string, session Session, opts InstanceReadOptions) (*ReadSession, error) {
-	if session.ID == "" {
-		return nil, fmt.Errorf("storage: session ID is required")
-	}
-	return c.instanceReadSession(ctx, http.MethodGet, "InstanceGetReadSession", id, session, opts)
-}
-
-func (c *Client) instanceReadSession(ctx context.Context, method, action, id string, session Session, opts InstanceReadOptions) (*ReadSession, error) {
-	if err := validateIdentifier("instance", id); err != nil {
-		return nil, err
-	}
 	if opts.TaskName == "" {
 		opts.TaskName = "AnonymousSQLTask"
 	}
-	op := session.operation(action, fmt.Sprintf("projects.%s.instances.%s", c.project, id))
+	return c.ResumeRead(ctx, ReadSessionDescriptor{
+		Version: descriptorVersion, Kind: InstanceSnapshot, QuotaName: c.quota,
+		ID: session.ID, RouteToken: session.RouteToken, QueryID: opts.QueryID, EnableLimit: opts.EnableLimit,
+		Job: odps.SQLJobRef{Project: c.project, InstanceID: id, TaskName: opts.TaskName},
+	})
+}
+
+func (c *Client) instanceReadSession(ctx context.Context, method, action string, desc ReadSessionDescriptor) (*ReadSession, error) {
+	if err := validateIdentifier("instance", desc.Job.InstanceID); err != nil {
+		return nil, err
+	}
+	desc = desc.clone()
+	op := desc.session().operation(action, fmt.Sprintf("projects.%s.instances.%s", c.project, desc.Job.InstanceID))
 	var input any
 	if method == http.MethodPost {
-		input = struct{ EnableLimit bool }{opts.EnableLimit}
+		input = struct{ EnableLimit bool }{desc.EnableLimit}
 		op.params.Del("SessionId")
 	}
 	var reply readResponse
@@ -280,37 +377,52 @@ func (c *Client) instanceReadSession(ctx context.Context, method, action, id str
 	if err != nil {
 		return nil, err
 	}
-	return c.newReadSession(op, "InstanceRead", reply.DownloadID, reply.Status, reply.RecordCount, headers, opts)
+	return c.newReadSession(desc, op, "InstanceRead", reply.DownloadID, reply.Status, reply.RecordCount, headers,
+		InstanceReadOptions{TaskName: desc.Job.TaskName, QueryID: desc.QueryID, EnableLimit: desc.EnableLimit}, reply.DataSchema)
 }
 
-func (c *Client) newReadSession(op operation, action, id, status string, count int64, headers http.Header, input any) (*ReadSession, error) {
-	if id == "" || count < 0 {
+func (c *Client) newReadSession(desc ReadSessionDescriptor, op operation, action, id, status string, count *int64, headers http.Header, input any, schema *ReadSchema) (*ReadSession, error) {
+	if id == "" {
+		id = desc.ID
+	}
+	if id == "" || (desc.ID != "" && desc.ID != id) || (count != nil && *count < -1) {
 		return nil, fmt.Errorf("storage %s: invalid session descriptor", op.action)
 	}
-	session := Session{ID: id, RouteToken: updatedRoute(headers, op.route)}
-	return &ReadSession{client: c, session: session, target: op.target, action: action, rows: count, status: status, input: input}, nil
+	rows := int64(-1)
+	if count != nil && status != "INIT" {
+		rows = *count
+	}
+	desc.ID, desc.RouteToken = id, updatedRoute(headers, op.route)
+	return &ReadSession{client: c, descriptor: desc, target: op.target, action: action, rows: rows, status: status, input: input, schema: schema}, nil
 }
 
-// OpenReader streams a range of the snapshot. Pass nil for the entire snapshot.
-// The caller owns one reference and must call Release.
+// OpenReader streams a range of a ready snapshot. Pass nil for the entire
+// snapshot when a row count is available. The caller must Release the reader.
 func (s *ReadSession) OpenReader(ctx context.Context, rows *RowRange) (*ArrowReader, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	// Use a positive wire count when retrieving a schema from the server.
+	if s.status == "INIT" {
+		return nil, fmt.Errorf("storage: read session is not ready; call WaitReady")
+	}
+	if rows == nil && s.rows < 0 {
+		return nil, fmt.Errorf("storage: row count is unknown; supply an explicit range")
+	}
 	rangeToRead := RowRange{Count: max(s.rows, 1)}
 	if rows != nil {
 		rangeToRead = *rows
 	}
-	op := s.session.operation(s.action, s.target)
+	op := s.descriptor.session().operation(s.action, s.target)
 	if err := rangeToRead.addTo(op.params); err != nil {
 		return nil, err
 	}
-	// Some deployments reject every offset for an empty table snapshot.
-	if s.rows == 0 && rangeToRead.Offset == 0 && s.tableSchema != nil {
-		return s.tableSchema.emptyReader()
+	if (rangeToRead.Count == 0 || s.rows == 0 && rangeToRead.Offset == 0) && s.schema != nil {
+		return s.schema.emptyReader()
 	}
-	expected := min(rangeToRead.Count, max(s.rows-rangeToRead.Offset, 0))
+	expected := int64(-1)
+	if s.rows >= 0 {
+		expected = min(rangeToRead.Count, max(s.rows-rangeToRead.Offset, 0))
+	}
 	return s.client.arrowRequest(ctx, op, s.input, expected)
 }
 

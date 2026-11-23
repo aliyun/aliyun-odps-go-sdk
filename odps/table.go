@@ -73,7 +73,7 @@ type tableModel struct {
 	CryptoAlgo      string
 	TableMaskInfo   string
 	ColumnMaskInfos []ColumnMaskInfo // Data policy names bind with columns
-	Type            TableType
+	Type            *TableType
 }
 
 // ColumnMaskInfo is used for the return value of Table.ColumnMaskInfos
@@ -231,7 +231,10 @@ func (t *Table) SchemaName() string {
 }
 
 func (t *Table) Type() TableType {
-	return t.model.Type
+	if t.model.Type == nil {
+		return ManagedTable
+	}
+	return *t.model.Type
 }
 
 // Transactional Returns whether the table is Transaction Table or Delta Table
