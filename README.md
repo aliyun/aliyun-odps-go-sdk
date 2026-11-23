@@ -27,7 +27,7 @@ the project name and its service endpoint. The example endpoint is for the
 China (Hangzhou) region. [MaxCompute endpoints](https://www.alibabacloud.com/help/en/maxcompute/endpoints)
 
 ```sh
-export odps_endpoint=https://service.cn-hangzhou.maxcompute.aliyun.com/api
+export MAXCOMPUTE_ENDPOINT=https://service.cn-hangzhou.maxcompute.aliyun.com/api
 export MAXCOMPUTE_PROJECT=your-project
 ```
 
@@ -68,7 +68,7 @@ func main() {
 
 func run() error {
 	client, err := odps.NewClient(account.AccountFromEnv(), odps.ClientOptions{
-		Endpoint: os.Getenv("odps_endpoint"),
+		Endpoint: os.Getenv("MAXCOMPUTE_ENDPOINT"),
 		Project:  os.Getenv("MAXCOMPUTE_PROJECT"),
 	})
 	if err != nil {
