@@ -2,19 +2,18 @@
 
 [English](README.md)
 
-使用 Go 在阿里云 MaxCompute 上运行 SQL 作业、查询元数据和传输数据。SDK 支持
-`database/sql`、通过 Storage API V2 读写 Arrow IPC，以及通过 Tunnel 按行传输
-Protobuf 记录。
+使用 `odps.Client` 在阿里云 MaxCompute 上运行 SQL 作业、查询元数据。传输数据时，
+可通过 Storage API V2 读写 Arrow IPC，也可通过 Tunnel 按行传输 Protobuf 记录。
 
 [Go 接口参考](https://pkg.go.dev/github.com/aliyun/aliyun-odps-go-sdk/odps) · [示例](examples/) · [版本说明](CHANGELOG.md)
 
 ## 安装
 
 1.x 版本要求 **Go 1.26.11 或更高版本**。新项目可先运行
-`go mod init example.com/maxcompute-quickstart` 初始化模块。快速开始示例使用 SQL 驱动。
+`go mod init example.com/maxcompute-quickstart` 初始化模块，再安装原生客户端。
 
 ```sh
-go get github.com/aliyun/aliyun-odps-go-sdk/sqldriver@v1.0.0
+go get github.com/aliyun/aliyun-odps-go-sdk/odps@v1.0.0
 ```
 
 试用尚未发布的提交时，将 `v1.0.0` 替换为对应的完整提交哈希。仍需使用 Go 1.15
@@ -38,14 +37,13 @@ export MAXCOMPUTE_PROJECT=your-project
 | `ALIBABA_CLOUD_ACCESS_KEY_SECRET` | 访问密钥 Secret |
 | `ALIBABA_CLOUD_SECURITY_TOKEN` | 使用临时 STS 凭据时填写的安全令牌 |
 
-将以下程序保存为 Go 模块中的 `main.go`。
+将以下程序保存为 Go 模块中的 `main.go`。[示例源码](examples/sdk/quickstart/main.go)
 
 ```go
 package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -53,7 +51,6 @@ import (
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
-	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 )
 
 func main() {
@@ -75,33 +72,38 @@ func run() error {
 	}
 	defer client.CloseIdleConnections()
 
-	connector, err := sqldriver.NewConnector(client, sqldriver.ConnectorOptions{})
+	job, err := client.SubmitSQL(ctx, odps.SQLRequest{Statement: "SELECT 42 AS answer;"})
 	if err != nil {
 		return err
 	}
-	db := sql.OpenDB(connector)
-	defer db.Close()
-
-	var answer int64
-	err = db.QueryRowContext(ctx, "SELECT CAST(? AS BIGINT) AS answer;", 42).Scan(&answer)
+	result, err := job.Wait(ctx)
 	if err != nil {
 		return err
 	}
-	fmt.Println(answer)
+	tasks, err := result.Inline(ctx)
+	if err != nil {
+		return err
+	}
+	for _, task := range tasks {
+		fmt.Print(task.Content())
+	}
 	return nil
 }
 ```
 
-运行 `go run .`，程序会提交查询并输出 `42`。驱动提供
-`QueryContext` 和 `ExecContext`，调用事务或预编译接口时会返回对应的错误。
-[SQL 驱动接口](https://pkg.go.dev/github.com/aliyun/aliyun-odps-go-sdk/sqldriver)
+运行 `go run .`，程序会等待 SQL 作业完成，然后打印查询的内联结果。
+
+```text
+answer
+42
+```
 
 ## 按任务选择接口
 
 | 任务 | 入口 | 参考资料 |
 | --- | --- | --- |
-| 执行带参数的 SQL 并读取行 | `sqldriver.NewConnector` 和 `database/sql` | [SQL 驱动示例](examples/sql/) |
 | 提交、恢复或取消 SQL 作业 | `odps.Client.SubmitSQL`、`ResumeSQL` 和 `SQLJob.Cancel` | [作业生命周期](docs/v1-migration.md#sql-jobs-and-results) |
+| 执行带参数的 SQL 并读取行 | `sqldriver.NewConnector` 和 `database/sql` | [SQL 驱动示例](examples/sql/) |
 | 查询或分页列举元数据 | 例如 `client.Tables().Get` 和 `ListPage` | [客户端作用域与元数据](docs/v1-migration.md#client-and-metadata) |
 | 读写 Arrow 数据批次并恢复会话 | `odps/storage` | [Storage API V2 指南](docs/storage-v2.md) |
 | 上传或下载 Protobuf 记录 | `odps/tunnel` | [Tunnel 示例](examples/sdk/tunnel/) |

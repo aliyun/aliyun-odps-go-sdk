@@ -2,19 +2,19 @@
 
 [简体中文](README.zh-CN.md)
 
-Run SQL jobs, inspect catalog metadata, and transfer data in Alibaba Cloud
-MaxCompute from Go. The SDK supports `database/sql`, Arrow IPC through Storage
-API V2, and row-oriented transfers through Protobuf Tunnel.
+Use `odps.Client` to run SQL jobs and inspect catalog metadata in Alibaba Cloud
+MaxCompute. For data transfers, the SDK supports Arrow IPC through Storage API V2
+and Protobuf records through Tunnel.
 
 [Go API reference](https://pkg.go.dev/github.com/aliyun/aliyun-odps-go-sdk/odps) · [Examples](examples/) · [Release notes](CHANGELOG.md)
 
 ## Install
 
 The 1.x SDK requires **Go 1.26.11 or later**. In a new project, first run
-`go mod init example.com/maxcompute-quickstart`. The quickstart uses the SQL driver.
+`go mod init example.com/maxcompute-quickstart`, then install the native client.
 
 ```sh
-go get github.com/aliyun/aliyun-odps-go-sdk/sqldriver@v1.0.0
+go get github.com/aliyun/aliyun-odps-go-sdk/odps@v1.0.0
 ```
 
 To try an unreleased revision, replace `v1.0.0` with the commit SHA of that
@@ -40,14 +40,13 @@ sources, see the [authentication examples](examples/sdk/aliyun_credential/).
 | `ALIBABA_CLOUD_ACCESS_KEY_SECRET` | AccessKey Secret |
 | `ALIBABA_CLOUD_SECURITY_TOKEN` | Security token for temporary STS credentials |
 
-Save the following as `main.go` in your Go module.
+Save the following program as `main.go` in your Go module. [Example source](examples/sdk/quickstart/main.go)
 
 ```go
 package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -55,7 +54,6 @@ import (
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
-	"github.com/aliyun/aliyun-odps-go-sdk/sqldriver"
 )
 
 func main() {
@@ -77,33 +75,38 @@ func run() error {
 	}
 	defer client.CloseIdleConnections()
 
-	connector, err := sqldriver.NewConnector(client, sqldriver.ConnectorOptions{})
+	job, err := client.SubmitSQL(ctx, odps.SQLRequest{Statement: "SELECT 42 AS answer;"})
 	if err != nil {
 		return err
 	}
-	db := sql.OpenDB(connector)
-	defer db.Close()
-
-	var answer int64
-	err = db.QueryRowContext(ctx, "SELECT CAST(? AS BIGINT) AS answer;", 42).Scan(&answer)
+	result, err := job.Wait(ctx)
 	if err != nil {
 		return err
 	}
-	fmt.Println(answer)
+	tasks, err := result.Inline(ctx)
+	if err != nil {
+		return err
+	}
+	for _, task := range tasks {
+		fmt.Print(task.Content())
+	}
 	return nil
 }
 ```
 
-Run `go run .` to submit the query and print `42`. The driver implements
-`QueryContext` and `ExecContext`. Transaction and prepare calls return driver
-errors. [SQL driver API](https://pkg.go.dev/github.com/aliyun/aliyun-odps-go-sdk/sqldriver)
+Run `go run .`. The program waits for the SQL job to finish and prints the inline result.
+
+```text
+answer
+42
+```
 
 ## Find the right API
 
 | Task | Entry point | Guide |
 | --- | --- | --- |
-| Run parameterized SQL and scan rows | `sqldriver.NewConnector` and `database/sql` | [SQL driver examples](examples/sql/) |
 | Submit, resume, or cancel a SQL job | `odps.Client.SubmitSQL`, `ResumeSQL`, and `SQLJob.Cancel` | [Job lifecycle](docs/v1-migration.md#sql-jobs-and-results) |
+| Run parameterized SQL and scan rows | `sqldriver.NewConnector` and `database/sql` | [SQL driver examples](examples/sql/) |
 | Look up and list catalog metadata | For example, `client.Tables().Get` and `ListPage` | [Client scope and metadata](docs/v1-migration.md#client-and-metadata) |
 | Read or write Arrow batches and resume sessions | `odps/storage` | [Storage API V2](docs/storage-v2.md) |
 | Upload or download Protobuf records | `odps/tunnel` | [Tunnel examples](examples/sdk/tunnel/) |
