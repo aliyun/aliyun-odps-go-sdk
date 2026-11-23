@@ -240,3 +240,46 @@ func TestProtobufRecordAndTrailerValidation(t *testing.T) {
 	_, err = reader.Read()
 	require.ErrorContains(t, err, "more than 0 rows for the requested range")
 }
+
+func TestProtobufValidatesEntireRecordBeforeWriting(t *testing.T) {
+	columns := []tableschema.Column{
+		{Name: "label", Type: datatype.StringType, NotNull: true},
+		{Name: "quantity", Type: datatype.TinyIntType},
+		{Name: "nested", Type: datatype.NewArrayType(datatype.SmallIntType)},
+	}
+	var buffer bytes.Buffer
+	writer := newRecordProtocWriter(&bufWriter{&buffer}, columns, false)
+	tooWide := data.NewArrayWithType(datatype.NewArrayType(datatype.SmallIntType))
+	tooWide.UnSafeAppend(data.Int(1 << 16))
+	var nullString *data.String
+	for _, tt := range []struct {
+		values data.Record
+		want   string
+	}{
+		{data.Record{data.String("ok"), data.BigInt(256)}, "quantity"},
+		{data.Record{data.String("ok"), data.Float(1)}, "expected TINYINT"},
+		{data.Record{data.String("ok"), data.TinyInt(1), tooWide}, "array element 0"},
+		{data.Record{nullString}, "requires a value"},
+	} {
+		require.ErrorContains(t, writer.Write(tt.values), tt.want)
+		require.Zero(t, buffer.Len())
+		require.Zero(t, writer.RecordCount())
+	}
+	require.NoError(t, writer.Write(data.Record{data.String("ok"), data.Int(-128), data.Null}))
+	require.NoError(t, writer.Close())
+	reader := newRecordProtocReader(&http.Response{Body: io.NopCloser(&buffer)}, columns, false)
+	got, err := reader.Read()
+	require.NoError(t, err)
+	require.Equal(t, data.Record{data.String("ok"), data.TinyInt(-128), nil}, got)
+	_, err = reader.Read()
+	require.ErrorIs(t, err, io.EOF)
+}
+
+func TestProtobufRejectsWireIntegerOutsideColumnRange(t *testing.T) {
+	columns := []tableschema.Column{{Name: "quantity", Type: datatype.TinyIntType}}
+	wire := protowire.AppendTag(nil, 1, protowire.VarintType)
+	wire = protowire.AppendVarint(wire, protowire.EncodeZigZag(256))
+	reader := newRecordProtocReader(&http.Response{Body: io.NopCloser(bytes.NewReader(wire))}, columns, false)
+	_, err := reader.Read()
+	require.ErrorContains(t, err, "column \"quantity\": integer out of range for TINYINT")
+}

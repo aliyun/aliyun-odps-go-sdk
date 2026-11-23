@@ -17,6 +17,7 @@
 package data
 
 import (
+	"maps"
 	"reflect"
 	"strings"
 
@@ -179,6 +180,7 @@ func MapFromGoMap(m interface{}) (*Map, error) {
 	return ret, nil
 }
 
+// ToGoMap returns a shallow copy of the entries.
 func (m *Map) ToGoMap() map[Data]Data {
-	return m.data
+	return maps.Clone(m.data)
 }

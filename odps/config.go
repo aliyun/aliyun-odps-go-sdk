@@ -25,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 	"gopkg.in/ini.v1"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/configvalue"
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 )
@@ -81,9 +82,11 @@ func NewConfigFromIni(iniPath string) (*Config, error) {
 		section.DeleteKey(p)
 	}
 
-	_, err = url.Parse(conf.Endpoint)
-	if err != nil {
-		return nil, errors.Wrapf(err, "invalid endpoint: \"%s\"", conf.Endpoint)
+	if strings.TrimSpace(conf.ProjectName) == "" || conf.AccessId == "" || conf.AccessKey == "" {
+		return nil, errors.New("project and complete access credentials are required")
+	}
+	if _, err := configvalue.Endpoint(conf.Endpoint, "endpoint"); err != nil {
+		return nil, err
 	}
 
 	var connTimeout, httpTimeout string
@@ -108,17 +111,17 @@ func NewConfigFromIni(iniPath string) (*Config, error) {
 		}
 	}
 
-	if connTimeout != "" {
-		n, err := strconv.ParseInt(connTimeout, 10, 32)
-		if err == nil {
-			conf.TcpConnectionTimeout = time.Duration(n) * time.Second
-		}
+	conf.TcpConnectionTimeout, err = configvalue.TimeoutSeconds(connTimeout, "tcp_connection_timeout", conf.TcpConnectionTimeout)
+	if err != nil {
+		return nil, err
 	}
-
-	if httpTimeout != "" {
-		n, err := strconv.ParseInt(httpTimeout, 10, 32)
-		if err == nil {
-			conf.HttpTimeout = time.Duration(n) * time.Second
+	conf.HttpTimeout, err = configvalue.TimeoutSeconds(httpTimeout, "http_timeout", conf.HttpTimeout)
+	if err != nil {
+		return nil, err
+	}
+	if conf.TunnelEndpoint != "" {
+		if _, err := configvalue.Endpoint(conf.TunnelEndpoint, "tunnel_endpoint"); err != nil {
+			return nil, err
 		}
 	}
 
@@ -172,53 +175,72 @@ func (c *Config) GenOdps() *Odps {
 	return odpsIns
 }
 
+// FormatDsn formats c as a DSN, returning an empty string if c is invalid.
+//
+// Deprecated: use FormatDSN to receive validation errors.
 func (c *Config) FormatDsn() string {
-	u, _ := url.Parse(c.Endpoint)
+	dsn, _ := c.FormatDSN()
+	return dsn
+}
 
-	dsn := url.URL{
-		Scheme: u.Scheme,
-		Host:   u.Host,
-		Path:   u.Path,
+// FormatDSN validates and formats c as a DSN. The result contains credentials
+// when they are set in c and must be handled as a secret.
+func (c *Config) FormatDSN() (string, error) {
+	if c == nil {
+		return "", errors.New("ODPS config is required")
+	}
+	dsn, err := configvalue.Endpoint(c.Endpoint, "endpoint")
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(c.ProjectName) == "" {
+		return "", errors.New("project name is not set")
+	}
+	if (c.AccessId == "") != (c.AccessKey == "") || (c.AccessId == "" && c.StsToken != "") {
+		return "", errors.New("incomplete explicit ODPS credentials")
+	}
+	if c.TunnelEndpoint != "" {
+		if _, err := configvalue.Endpoint(c.TunnelEndpoint, "tunnel endpoint"); err != nil {
+			return "", err
+		}
+	}
+	for name, timeout := range map[string]time.Duration{
+		"http timeout": c.HttpTimeout, "TCP connection timeout": c.TcpConnectionTimeout,
+	} {
+		if timeout < 0 || timeout%time.Second != 0 || timeout/time.Second > 1<<31-1 {
+			return "", errors.Errorf("invalid %s: expected a whole number of seconds in [0, 2147483647]", name)
+		}
 	}
 	values := make(url.Values)
+	for k, v := range c.Hints {
+		values.Set(k, v)
+	}
+	for k, v := range c.Others {
+		values.Set(k, v)
+	}
+	// The typed fields always determine the config, even when empty.
+	for _, key := range []string{"project", "stsToken", "httpTimeout", "tcpConnectionTimeout", "tunnelQuotaName", "tunnelEndpoint"} {
+		values.Del(key)
+	}
 	values.Set("project", c.ProjectName)
-
 	if c.StsToken != "" {
 		values.Set("stsToken", c.StsToken)
 	}
-
 	if c.HttpTimeout > 0 {
-		httpTimeout := int64(c.HttpTimeout) / int64(time.Second)
-		values.Set("httpTimeout", strconv.FormatInt(httpTimeout, 10))
+		values.Set("httpTimeout", strconv.FormatInt(int64(c.HttpTimeout/time.Second), 10))
 	}
-
-	if c.TcpConnectionTimeout > 0 {
-		connTimeOut := int64(c.TcpConnectionTimeout) / int64(time.Second)
-		values.Set("tcpConnectionTimeout", strconv.FormatInt(connTimeOut, 10))
+	if c.TcpConnectionTimeout != NewConfig().TcpConnectionTimeout {
+		values.Set("tcpConnectionTimeout", strconv.FormatInt(int64(c.TcpConnectionTimeout/time.Second), 10))
 	}
-
 	if c.TunnelQuotaName != "" {
 		values.Set("tunnelQuotaName", c.TunnelQuotaName)
 	}
-
 	if c.TunnelEndpoint != "" {
 		values.Set("tunnelEndpoint", c.TunnelEndpoint)
 	}
-
-	if c.Hints != nil {
-		for k, v := range c.Hints {
-			values.Set(k, v)
-		}
-	}
-
-	if c.Others != nil {
-		for k, v := range c.Others {
-			values.Set(k, v)
-		}
-	}
-
 	dsn.RawQuery = values.Encode()
-	dsn.User = url.UserPassword(c.AccessId, c.AccessKey)
-
-	return dsn.String()
+	if c.AccessId != "" {
+		dsn.User = url.UserPassword(c.AccessId, c.AccessKey)
+	}
+	return dsn.String(), nil
 }

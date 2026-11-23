@@ -17,6 +17,7 @@
 package odps
 
 import (
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -112,13 +113,23 @@ func (t *Table) IsLoadedExtended() bool {
 }
 
 func (t *Table) Load() error {
-	if err := t.loadBasic(); err != nil {
+	ctx := context.Background()
+	loaded := *t
+	if err := loaded.loadBasicContext(ctx); err != nil {
 		return err
 	}
-	return t.LoadExtendedInfo()
+	if err := loaded.loadExtendedContext(ctx); err != nil {
+		return err
+	}
+	*t = loaded
+	return nil
 }
 
 func (t *Table) loadBasic() error {
+	return t.loadBasicContext(context.Background())
+}
+
+func (t *Table) loadBasicContext(ctx context.Context) error {
 	client := t.odpsIns.restClient
 	resource := t.ResourceUrl()
 	queryArgs := make(url.Values, 4)
@@ -127,7 +138,7 @@ func (t *Table) loadBasic() error {
 	}
 
 	model := tableModel{Name: t.Name(), ProjectName: t.ProjectName(), SchemaName: t.SchemaName()}
-	err := client.GetWithModel(resource, queryArgs, nil, &model)
+	err := client.GetWithModelContext(ctx, resource, queryArgs, nil, &model)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -145,6 +156,10 @@ func (t *Table) loadBasic() error {
 }
 
 func (t *Table) LoadExtendedInfo() error {
+	return t.loadExtendedContext(context.Background())
+}
+
+func (t *Table) loadExtendedContext(ctx context.Context) error {
 	client := t.odpsIns.restClient
 	resource := t.ResourceUrl()
 
@@ -155,16 +170,21 @@ func (t *Table) LoadExtendedInfo() error {
 	}
 
 	var model tableModel
-	err := client.GetWithModel(resource, queryArgs, nil, &model)
+	err := client.GetWithModelContext(ctx, resource, queryArgs, nil, &model)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	// 填充剩余的schema信息
-	err = json.Unmarshal([]byte(model.Schema), &t.tableSchema)
-	if err != nil {
+	var schema tableschema.TableSchema
+	if t.model.Schema != "" {
+		if err := json.Unmarshal([]byte(t.model.Schema), &schema); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+	if err := json.Unmarshal([]byte(model.Schema), &schema); err != nil {
 		return errors.WithStack(err)
 	}
+	t.tableSchema = schema
 	t.beLoadedExtended = true
 	return nil
 }

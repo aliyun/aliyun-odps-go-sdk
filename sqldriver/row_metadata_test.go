@@ -35,10 +35,10 @@ func TestRowValuesAndColumnMetadata(t *testing.T) {
 		null  any
 	}{
 		{data.BigInt(-42), int64(-42), int64(0), NullInt64{}},
-		{data.Int(-12), int(-12), int(0), NullInt32{}},
-		{data.SmallInt(-2), int16(-2), int16(0), NullInt16{}},
-		{data.TinyInt(7), int8(7), int8(0), NullInt8{}},
-		{data.Float(3.25), float32(3.25), float32(0), NullFloat32{}},
+		{data.Int(-12), int64(-12), int64(0), NullInt32{}},
+		{data.SmallInt(-2), int64(-2), int64(0), NullInt16{}},
+		{data.TinyInt(7), int64(7), int64(0), NullInt8{}},
+		{data.Float(3.25), float64(3.25), float64(0), NullFloat32{}},
 		{data.Double(3.5), float64(3.5), float64(0), NullFloat64{}},
 		{data.String("text"), "text", "", NullString{}},
 		{char, char.Data(), "", NullString{}},
@@ -49,7 +49,7 @@ func TestRowValuesAndColumnMetadata(t *testing.T) {
 		{data.DateTime(dt), dt, NullDateTime{}, NullDateTime{}},
 		{data.Timestamp(dt), dt, NullTimeStamp{}, NullTimeStamp{}},
 		{data.TimestampNtz(dt), dt, NullTimeStampNtz{}, NullTimeStampNtz{}},
-		{decimal, decimal, Decimal{}, Decimal{}},
+		{decimal, "-1.020", Decimal{}, Decimal{}},
 		{list, list, Array{}, Array{}},
 		{mapping, mapping, Map{}, Map{}},
 		{structure, structure, Struct{}, Struct{}},
@@ -90,14 +90,14 @@ func TestRowReaderRejectsMismatchedColumnCount(t *testing.T) {
 
 func TestNullNumericScanners(t *testing.T) {
 	var i8 NullInt8
-	require.NoError(t, i8.Scan(int8(-4)))
+	require.NoError(t, i8.Scan(int64(-4)))
 	require.Equal(t, NullInt8{Int8: -4, Valid: true}, i8)
 	require.Error(t, i8.Scan("not a number"))
 	require.NoError(t, i8.Scan(nil))
 	require.Equal(t, NullInt8{}, i8)
 
 	var i16 NullInt16
-	require.NoError(t, i16.Scan(int16(-256)))
+	require.NoError(t, i16.Scan(int64(-256)))
 	require.Equal(t, NullInt16{Int16: -256, Valid: true}, i16)
 	require.Error(t, i16.Scan("not a number"))
 	require.NoError(t, i16.Scan(nil))
@@ -116,4 +116,11 @@ func TestNullNumericScanners(t *testing.T) {
 	require.Error(t, binary.Scan("not bytes"))
 	require.NoError(t, binary.Scan(nil))
 	require.Nil(t, binary)
+}
+
+func TestDecimalScannerPreservesScale(t *testing.T) {
+	var d Decimal
+	require.NoError(t, d.Scan("-1.020"))
+	require.Equal(t, "-1.020", (*data.Decimal)(&d).String())
+	require.Equal(t, 3, (*data.Decimal)(&d).Scale())
 }

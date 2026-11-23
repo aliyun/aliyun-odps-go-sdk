@@ -25,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 )
 
@@ -63,7 +64,7 @@ func (c *connection) Close() error {
 // QueryContext uses ctx for submission, waiting, and reading results. An
 // interrupted operation with a known instance ID returns CanceledError.
 func (c *connection) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
-	sqlStr, err := namedArgQueryToSql(query, args)
+	sqlStr, err := bindSQL(query, args)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -186,7 +187,7 @@ func contextCancellation(err error) error {
 
 // ExecContext uses ctx for SQL submission and waiting for the instance.
 func (c *connection) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
-	sqlStr, err := namedArgQueryToSql(query, args)
+	sqlStr, err := bindSQL(query, args)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -223,46 +224,30 @@ func (c *connection) execContext(ctx context.Context, query string) (driver.Resu
 	return NoResult{}, nil
 }
 
-func namedArgQueryToSql(query string, args []driver.NamedValue) (string, error) {
-	if len(args) == 0 {
-		return query, nil
-	}
-
-	if args[0].Name == "" {
-		values := make([]driver.Value, len(args))
-		for i, arg := range args {
-			values[i] = arg.Value
-		}
-		return positionArgQueryToSql(query, values)
-	}
-
-	namedArgQuery := NewNamedArgQuery(query)
-	for _, arg := range args {
-		namedArgQuery.SetArg(arg.Name, arg.Value)
-	}
-
-	return namedArgQuery.toSql()
-}
-
 func positionArgQueryToSql(query string, args []driver.Value) (string, error) {
-	values := make([]any, len(args))
+	values := make([]driver.NamedValue, len(args))
 	for i, arg := range args {
-		values[i] = arg
+		values[i] = driver.NamedValue{Ordinal: i + 1, Value: arg}
 	}
-	positionArgQuery := NewPositionArgQuery(query)
-	positionArgQuery.SetArgs(values...)
-	return positionArgQuery.toSql()
+	return bindSQL(query, values)
 }
 
-// Ping Pinger is an optional interface that may be implemented by a Conn.
-// If a Conn does not implement Pinger, the sql package's DB.Ping and DB.PingContext will check if there is at least one Conn available.
-// If Conn.Ping returns ErrBadConn, DB.Ping and DB.PingContext will remove the Conn from pool.
-//func (c *connection) Ping(ctx context.Context) error {
-//	return driver.ErrBadConn
-//}
+// CheckNamedValue preserves exact MaxCompute decimal values for the binder.
+func (c *connection) CheckNamedValue(value *driver.NamedValue) error {
+	switch value.Value.(type) {
+	case data.Decimal, *data.Decimal:
+		return nil
+	default:
+		return driver.ErrSkip
+	}
+}
 
-// IsValid Validator may be implemented by Conn to allow drivers to signal if a connection is valid or if it should be discarded.
-// If implemented, drivers may return the underlying error from queries, even if the connection should be discarded by the connection pool.
-//func (c *connection) IsValid() bool {
-//	return false
-//}
+// Ping verifies that the current credentials can read the configured project.
+func (c *connection) Ping(ctx context.Context) error {
+	return c.odpsIns.DefaultProject().LoadContext(ctx)
+}
+
+var (
+	_ driver.Pinger            = (*connection)(nil)
+	_ driver.NamedValueChecker = (*connection)(nil)
+)

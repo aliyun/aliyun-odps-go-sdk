@@ -66,6 +66,9 @@ func (r *Resources) List(f func(*Resource, error), filters ...RFileFunc) {
 			break
 		}
 		for _, resourceModel := range resModel.Resources {
+			if resourceModel.SchemaName == "" {
+				resourceModel.SchemaName = r.schemaName
+			}
 			resource := NewResource(resourceModel, r.ProjectName, r.OdpsIns)
 			resource.beLoaded = true
 			f(resource, nil)

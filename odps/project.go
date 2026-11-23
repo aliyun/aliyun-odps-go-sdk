@@ -180,6 +180,11 @@ func (p *Project) Load() error {
 	return p.load(context.Background())
 }
 
+// LoadContext fetches project metadata with ctx.
+func (p *Project) LoadContext(ctx context.Context) error {
+	return p.load(ctx)
+}
+
 func (p *Project) load(ctx context.Context) error {
 	model, err := p.loadFromOdps(ctx, optionalParams{})
 	p.beLoaded = true

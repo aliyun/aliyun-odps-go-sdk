@@ -29,7 +29,7 @@ func TestParseDSNIncludesExplicitOptions(t *testing.T) {
 	require.Equal(t, map[string]string{"enableLogview": "false"}, config.Others)
 	require.Equal(t, map[string]string{"odps.sql.type.system.odps2": "true"}, config.Hints)
 
-	config, err = ParseDSN("http://127.0.0.1:8080/api?project=fixture&tcpConnectionTimeout=invalid&httpTimeout=invalid")
+	config, err = ParseDSN("http://127.0.0.1:8080/api?project=fixture")
 	require.NoError(t, err)
 	require.Equal(t, "env-id", config.AccessId)
 	require.Equal(t, "env-secret", config.AccessKey)
@@ -51,5 +51,28 @@ func TestParseDSNRejectsIncompleteCredentials(t *testing.T) {
 	} {
 		_, err := ParseDSN(tc.dsn)
 		require.ErrorContains(t, err, tc.message)
+	}
+}
+
+func TestParseDSNUsesCredentialsFromOneSource(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "fixture-env-id")
+	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "fixture-env-secret")
+	t.Setenv("ALIBABA_CLOUD_SECURITY_TOKEN", "fixture-env-token")
+	config, err := ParseDSN("https://explicit:explicit-secret@api.example.test/api?project=fixture")
+	require.NoError(t, err)
+	require.Equal(t, "explicit", config.AccessId)
+	require.Empty(t, config.StsToken)
+
+	for _, tt := range []struct{ dsn, message string }{
+		{"https://explicit@api.example.test/api?project=fixture", "AccessKey"},
+		{"https://api.example.test/api?project=fixture&stsToken=explicit", "explicit AccessId"},
+		{"https://explicit:explicit-secret@api.example.test/api?project=fixture&httpTimeout=-5", "httpTimeout"},
+		{"https://explicit:explicit-secret@api.example.test/api?project=a&project=b", "duplicate project"},
+		{"https://explicit:explicit-secret@api.example.test/api?project=%", "query parameters"},
+		{"https://explicit:explicit-secret@%/api?project=fixture", "invalid URL"},
+	} {
+		_, err := ParseDSN(tt.dsn)
+		require.ErrorContains(t, err, tt.message)
+		require.NotContains(t, err.Error(), "explicit-secret")
 	}
 }

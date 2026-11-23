@@ -69,16 +69,30 @@ func TestInvalidConfigFromIni(t *testing.T) {
 	_, err = odps.NewConfigFromIni(writeConfig(t, minimalConfig+"endpoint = http://%\n"))
 	require.ErrorContains(t, err, "invalid endpoint")
 
-	config, err := odps.NewConfigFromIni(writeConfig(t, minimalConfig+`endpoint = http://127.0.0.1:8080/api
-tcp_connection_timeout = invalid
-http_timeout = invalid
-`))
+	for _, key := range []string{"tcp_connection_timeout", "http_timeout"} {
+		_, err := odps.NewConfigFromIni(writeConfig(t, minimalConfig+"endpoint = http://127.0.0.1:8080/api\n"+key+" = invalid\n"))
+		require.ErrorContains(t, err, key)
+	}
+}
+
+func TestFormatDSNValidatesAndReservesConfigurationFields(t *testing.T) {
+	config := odps.NewConfig()
+	config.ProjectName = "fixture"
+	config.Endpoint = "https://fixture-secret@%"
+	_, err := config.FormatDSN()
+	require.ErrorContains(t, err, "endpoint")
+	require.NotContains(t, err.Error(), "fixture-secret")
+	require.Empty(t, config.FormatDsn())
+
+	config.Endpoint = "http://127.0.0.1:8080/api"
+	config.Hints = map[string]string{"project": "other", "stsToken": "other"}
+	config.TcpConnectionTimeout = 0
+	s, err := config.FormatDSN()
 	require.NoError(t, err)
-	require.Equal(t, odps.NewConfig().TcpConnectionTimeout, config.TcpConnectionTimeout)
-	require.Equal(t, odps.NewConfig().HttpTimeout, config.HttpTimeout)
-	require.Equal(t, account2.Aliyun, config.GenAccount().GetType())
-	dsn, err := url.Parse(config.FormatDsn())
+	u, err := url.Parse(s)
 	require.NoError(t, err)
-	require.False(t, dsn.Query().Has("stsToken"))
-	require.False(t, dsn.Query().Has("httpTimeout"))
+	require.Nil(t, u.User)
+	require.Equal(t, "fixture", u.Query().Get("project"))
+	require.Equal(t, "0", u.Query().Get("tcpConnectionTimeout"))
+	require.False(t, u.Query().Has("stsToken"))
 }

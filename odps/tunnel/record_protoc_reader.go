@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/encoding/protowire"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
@@ -77,13 +78,16 @@ func (r *RecordProtocReader) Read() (_ data.Record, err error) {
 
 LOOP:
 	for {
-		tag, _, err := r.protocReader.ReadTag()
+		tag, wireType, err := r.protocReader.ReadTag()
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
 
 		switch tag {
 		case EndRecord:
+			if wireType != protowire.VarintType {
+				return nil, errors.New("invalid end-of-record wire type")
+			}
 			crc := r.recordCrc.Value()
 			uint32V, err := r.protocReader.ReadUInt32()
 			if err != nil {
@@ -97,6 +101,9 @@ LOOP:
 			r.crcOfCrc.Update(crc)
 			break LOOP
 		case MetaCount:
+			if wireType != protowire.VarintType {
+				return nil, errors.New("invalid record-count wire type")
+			}
 			sInt64, err := r.protocReader.ReadSInt64()
 			if err != nil {
 				return nil, errors.WithStack(err)
@@ -106,12 +113,12 @@ LOOP:
 				return nil, errors.New("record count does not match")
 			}
 
-			tag, _, err := r.protocReader.ReadTag()
+			tag, wireType, err := r.protocReader.ReadTag()
 			if err != nil {
 				return nil, errors.WithStack(err)
 			}
 
-			if tag != MetaChecksum {
+			if tag != MetaChecksum || wireType != protowire.VarintType {
 				return nil, errors.New("invalid stream")
 			}
 
@@ -137,14 +144,21 @@ LOOP:
 			return nil, io.EOF
 		default:
 			columnIndex := int32(tag)
-			if int(columnIndex) > len(r.columns) {
+			if columnIndex < 1 || int(columnIndex) > len(r.columns) {
 				return nil, errors.New("invalid protobuf tag")
 			}
-			r.recordCrc.Update(columnIndex)
 			c := r.columns[columnIndex-1]
+			expected, err := recordFieldWireType(c.Type)
+			if err != nil {
+				return nil, errors.Wrapf(err, "column %q", c.Name)
+			}
+			if wireType != expected || record[columnIndex-1] != nil {
+				return nil, fmt.Errorf("invalid wire type or duplicate tag for column %q", c.Name)
+			}
+			r.recordCrc.Update(columnIndex)
 			fv, err := r.readField(c.Type)
 			if err != nil {
-				return nil, errors.WithStack(err)
+				return nil, errors.Wrapf(err, "column %q", c.Name)
 			}
 
 			record[columnIndex-1] = fv
@@ -221,6 +235,10 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 			return nil, errors.WithStack(err)
 		}
 
+		lo, hi, _ := integerRange(dt.ID())
+		if v < lo || v > hi {
+			return nil, fmt.Errorf("integer out of range for %s", dt.ID())
+		}
 		r.recordCrc.Update(v)
 		fieldValue = data.IntervalYearMonth(v)
 	case datatype.INT:
@@ -229,6 +247,10 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 			return nil, errors.WithStack(err)
 		}
 
+		lo, hi, _ := integerRange(dt.ID())
+		if v < lo || v > hi {
+			return nil, fmt.Errorf("integer out of range for %s", dt.ID())
+		}
 		r.recordCrc.Update(v)
 		fieldValue = data.Int(v)
 	case datatype.SMALLINT:
@@ -237,6 +259,10 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 			return nil, errors.WithStack(err)
 		}
 
+		lo, hi, _ := integerRange(dt.ID())
+		if v < lo || v > hi {
+			return nil, fmt.Errorf("integer out of range for %s", dt.ID())
+		}
 		r.recordCrc.Update(v)
 		fieldValue = data.SmallInt(v)
 	case datatype.TINYINT:
@@ -245,6 +271,10 @@ func (r *RecordProtocReader) readField(dt datatype.DataType) (data.Data, error) 
 			return nil, errors.WithStack(err)
 		}
 
+		lo, hi, _ := integerRange(dt.ID())
+		if v < lo || v > hi {
+			return nil, fmt.Errorf("integer out of range for %s", dt.ID())
+		}
 		r.recordCrc.Update(v)
 		fieldValue = data.TinyInt(v)
 	case datatype.STRING:

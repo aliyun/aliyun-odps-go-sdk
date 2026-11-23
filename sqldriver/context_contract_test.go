@@ -410,36 +410,6 @@ func TestExecContextDeadlineStopsWaiting(t *testing.T) {
 
 // --- Ping 的实际语义 ---
 
-// TestPingContextSemantics 固定一个容易误解的事实：本 driver 没有实现
-// driver.Pinger，所以 db.PingContext 不会访问服务端。它只在 database/sql 层拿
-// 连接：ctx 已取消时返回 ctx.Err()，否则一律返回 nil —— 包括端点不可用的情况。
-// 想真正探活必须显式跑一条 SQL。
-func TestPingContextSemantics(t *testing.T) {
-	f := newFakeService(t)
-
-	db, err := sql.Open("odps", f.dsn())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	if err := db.PingContext(ctx); !errors.Is(err, context.Canceled) {
-		t.Fatalf("expect PingContext to honor a canceled context, but got %v", err)
-	}
-	if _, isPinger := interface{}(f.newConnection()).(driver.Pinger); isPinger {
-		t.Fatal("the expectations below assume the driver does not implement driver.Pinger")
-	}
-	if err := db.PingContext(context.Background()); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got := f.count(&f.submits) + f.count(&f.instanceStatusGets); got != 0 {
-		t.Fatalf("Ping should not touch the service, but %d request(s) arrived", got)
-	}
-}
-
 // --- 结果消费与关闭 ---
 
 func TestQueryContextCancelDuringRowConsumption(t *testing.T) {

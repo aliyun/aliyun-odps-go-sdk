@@ -340,3 +340,37 @@ func TestTunnelSessionStatusRoundTrip(t *testing.T) {
 	require.Equal(t, DownloadStatusUnknown, DownloadStatusFromStr("future status"))
 	require.Equal(t, DownloadStatusUnknown.String(), DownLoadStatus(-1).String())
 }
+
+func TestAttachedSessionsKeepNamedQuota(t *testing.T) {
+	const quota = "dedicated"
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		assert.Equal(t, quota, q.Get("quotaName"))
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/tunnel"):
+			_, _ = fmt.Fprint(w, r.Host+"/routed")
+		case q.Has("uploadid"):
+			fmt.Fprint(w, "{\"UploadID\":\"u\",\"Status\":\"NORMAL\",\"Schema\":{\"columns\":[{\"name\":\"id\",\"type\":\"bigint\"}]}}")
+		case q.Has("downloadid") && q.Has("data"):
+			w.WriteHeader(http.StatusForbidden)
+		case q.Has("downloadid"):
+			fmt.Fprint(w, "{\"DownloadID\":\"d\",\"Status\":\"NORMAL\",\"RecordCount\":1,\"Schema\":{\"columns\":[{\"name\":\"id\",\"type\":\"bigint\"}]}}")
+		default:
+			t.Errorf("unexpected request %s", r.URL)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	service := odps.NewOdps(account.NewAliyunAccount("test-ak", "test-sk"), server.URL+"/api")
+	client := NewTunnel(service)
+	client.SetQuotaName(quota)
+	upload, err := client.AttachToExistedUploadSession("project", "table", "u")
+	require.NoError(t, err)
+	require.Equal(t, quota, upload.QuotaName)
+	download, err := client.AttachToExistedDownloadSession("project", "table", "d")
+	require.NoError(t, err)
+	require.Equal(t, quota, download.QuotaName)
+	_, err = download.OpenRecordReader(0, 1, nil)
+	require.Error(t, err)
+}

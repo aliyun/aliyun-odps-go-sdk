@@ -59,6 +59,10 @@ func (sm *Manager) GetSecurityConfig(withoutExceptionPolicy bool) (Config, error
 }
 
 func (sm *Manager) SetSecurityConfig(config Config, supervisionToken string) error {
+	if config.projectName != sm.projectName || config.restClient.Endpoint() != sm.restClient.Endpoint() {
+		return errors.New("security configuration belongs to a different project or endpoint")
+	}
+	config.restClient = sm.restClient
 	if err := config.Update(supervisionToken); err != nil {
 		return errors.WithStack(err)
 	}

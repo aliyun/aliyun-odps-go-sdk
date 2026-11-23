@@ -147,7 +147,7 @@ func (t *Tunnel) AttachToExistedUploadSession(
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	session, err := AttachToExistedUploadSession(sessionId, projectName, tableName, client, opts...)
+	session, err := attachUploadSession(sessionId, projectName, tableName, t.quotaName, client, opts...)
 	return session, errors.WithStack(err)
 }
 
@@ -168,7 +168,7 @@ func (t *Tunnel) AttachToExistedDownloadSession(
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	session, err := AttachToExistedDownloadSession(sessionId, projectName, tableName, client, opts...)
+	session, err := attachDownloadSession(sessionId, projectName, tableName, t.quotaName, client, opts...)
 	return session, errors.WithStack(err)
 }
 

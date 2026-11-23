@@ -157,3 +157,35 @@ func TestProjectTunnelDiscoveryValidatesResponse(t *testing.T) {
 		}
 	}
 }
+
+func TestTableListKeepsTypeAndLoadCommitsAtomically(t *testing.T) {
+	service := metadataFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/projects/fixture/tables":
+			require.Equal(t, "analytics", r.URL.Query().Get("curr_schema"))
+			fmt.Fprint(w, "<Tables><Table><Name>visible</Name><Owner>alice</Owner><Type>VIRTUAL_VIEW</Type></Table></Tables>")
+		case "/api/projects/fixture/tables/visible":
+			if r.URL.Query().Has("extended") {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			fmt.Fprint(w, "<Table><Schema>{\"columns\":[{\"name\":\"i\",\"type\":\"bigint\"}]}</Schema></Table>")
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	tables := odps.NewTables(service, "fixture", "analytics")
+	var view *odps.Table
+	tables.List(func(table *odps.Table, err error) {
+		require.NoError(t, err)
+		view = table
+	})
+	require.NotNil(t, view)
+	require.Equal(t, odps.VirtualView, view.Type())
+	require.Equal(t, "alice", view.Owner())
+	require.Equal(t, "analytics", view.SchemaName())
+	require.Error(t, view.Load())
+	require.False(t, view.IsLoaded())
+	require.Equal(t, odps.VirtualView, view.Type())
+	require.Empty(t, view.Schema().Columns)
+}
