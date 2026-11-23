@@ -17,6 +17,8 @@
 package data
 
 import (
+	"reflect"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 )
 
@@ -36,7 +38,7 @@ const NULLDiagnostic = "NULL"
 // `struct<x:11,y:hello,...>`, is unchanged. SQL text goes through Sql(), which quotes
 // consistently and is the right thing to compare against when a value must round-trip.
 func diagnosticValue(d Data) string {
-	if isNullValue(d) {
+	if IsNull(d) {
 		return NULLDiagnostic
 	}
 
@@ -48,17 +50,15 @@ func diagnosticValue(d Data) string {
 	return rendered
 }
 
-// isNullValue reports the two ways a value can carry "no data": the nil Data
-// interface, and an explicit data.Null - a non-nil NullData{} whose Type() is the
-// NULL type and whose String() is already the marker text. Both keep the bare
-// marker. Without the second case the quoting rule below turns data.Null into
-// 'NULL', which is exactly how a string whose text is "NULL" renders, so an
-// explicit null would become indistinguishable from that string - the opposite of
-// what the rule exists for.
-func isNullValue(d Data) bool {
-	if d == nil {
+// IsNull reports whether value is nil, a nil pointer, or of the NULL type.
+func IsNull(value Data) bool {
+	if value == nil {
 		return true
 	}
-
-	return datatype.IsNullType(d.Type())
+	ref := reflect.ValueOf(value)
+	if ref.Kind() == reflect.Pointer && ref.IsNil() {
+		return true
+	}
+	valueType := value.Type()
+	return valueType != nil && datatype.IsNullType(valueType)
 }

@@ -205,7 +205,7 @@ func TestProtobufRecordAndTrailerValidation(t *testing.T) {
 	rowReader := newReader(frame)
 	row, err := rowReader.Read()
 	require.NoError(t, err)
-	require.Equal(t, data.Record{nil}, row)
+	require.Equal(t, data.Record{data.Null}, row)
 	_, err = rowReader.Read()
 	require.ErrorIs(t, err, io.EOF)
 
@@ -270,7 +270,7 @@ func TestProtobufValidatesEntireRecordBeforeWriting(t *testing.T) {
 	reader := newRecordProtocReader(&http.Response{Body: io.NopCloser(&buffer)}, columns, false)
 	got, err := reader.Read()
 	require.NoError(t, err)
-	require.Equal(t, data.Record{data.String("ok"), data.TinyInt(-128), nil}, got)
+	require.Equal(t, data.Record{data.String("ok"), data.TinyInt(-128), data.Null}, got)
 	_, err = reader.Read()
 	require.ErrorIs(t, err, io.EOF)
 }

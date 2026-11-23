@@ -99,6 +99,12 @@ download. Use `InstanceSessionCfg.WithQueryId` for an incremental result. If you
 SDK connection pooling on a Protobuf result session, call
 `CloseIdleConnections` after closing its readers.
 
+`SQLTask.GetSelectResultAsCsv` reads inline CSV, not arbitrary task output.
+It rejects a response that explicitly declares another format or has a bad
+encoding. Older responses that omit the format are still accepted. Rows
+with an inconsistent field count remain errors. Use `database/sql` or a
+Protobuf result transfer when you need typed rows.
+
 ## Database/sql changes
 
 Placeholders take values. Pass ordinary strings and put `?` or `@name`
@@ -125,12 +131,22 @@ call `rows.ColumnTypes()` and then `column.DecimalSize()`.
 Use `Config.FormatDSN` to validate and
 format DSNs. DSN credentials are read as a group, either entirely from the DSN
 or entirely from the environment. Choose one SQL result route, either
-`tunnelEndpoint` or `tunnelQuotaName`. Timeout parameters specify whole
+`tunnelEndpoint` or `tunnelQuotaName`. The two option names are case-insensitive;
+do not supply the same option twice using different spellings. Neither
+option changes the REST endpoint that submits SQL jobs. Timeout parameters specify whole
 seconds. An omitted TCP dial timeout uses 30 seconds and an explicit
 `tcpConnectionTimeout=0` disables the dial timeout. With `odps.ClientOptions`,
 leave `TCPConnectionTimeout` nil for the default or pass a pointer to the duration.
 
-## Map mutations and Protobuf uploads
+## Protobuf records
+
+Protobuf Tunnel readers return `data.Null` for a top-level SQL NULL, so
+`row.Get(i).String()` is safe. Replace `value == nil` with
+`data.IsNull(value)` to recognize both markers, including nil values in
+records built by your application. An empty string and the text `"NULL"`
+are ordinary, non-null strings. Nested values in ARRAY, MAP and STRUCT
+keep their existing representation. With `database/sql`, use
+`sql.NullString` or the appropriate nullable scan target.
 
 `data.Map.ToGoMap()` returns a shallow copy. Replace
 `delete(m.ToGoMap(), key)` with `m.Delete(key)` and check the returned error.
@@ -142,3 +158,11 @@ The Protobuf codec compares their bytes and returns pointers when decoding.
 Scalar floating-point NaN keys can be replaced or deleted using the same type
 and IEEE bit pattern. A rejected row writes no bytes and can be corrected on
 the same writer.
+
+A row validation error differs from an interrupted block upload. Always
+close the writer to finish the request and check its acknowledgement. When
+the server rejects a streaming block early, the error retains any HTTP
+status, ODPS error code and request ID reported by the service. Do not
+commit an unacknowledged block; reload the session to check which blocks
+the service received. For block size and session limits, see the
+[MaxCompute Tunnel documentation](https://www.alibabacloud.com/help/en/maxcompute/tabletunnel).

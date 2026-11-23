@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -34,6 +35,17 @@ func SQLTunnelRoute(endpoint, quota string) error {
 	}
 	_, err := Endpoint(endpoint, "tunnelEndpoint")
 	return err
+}
+
+func CanonicalTunnelDSNKey(key string) string {
+	switch {
+	case strings.EqualFold(key, "tunnelEndpoint"):
+		return "tunnelEndpoint"
+	case strings.EqualFold(key, "tunnelQuotaName"):
+		return "tunnelQuotaName"
+	default:
+		return key
+	}
 }
 
 func TimeoutSeconds(value, name string, fallback time.Duration) (time.Duration, error) {

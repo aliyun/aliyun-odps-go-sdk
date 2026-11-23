@@ -212,10 +212,10 @@ func (c *Config) FormatDSN() (string, error) {
 	}
 	values := make(url.Values)
 	for k, v := range c.Hints {
-		values.Set(k, v)
+		values.Set(configvalue.CanonicalTunnelDSNKey(k), v)
 	}
 	for k, v := range c.Others {
-		values.Set(k, v)
+		values.Set(configvalue.CanonicalTunnelDSNKey(k), v)
 	}
 	// The typed fields always determine the config, even when empty.
 	for _, key := range []string{"project", "stsToken", "httpTimeout", "tcpConnectionTimeout", "tunnelQuotaName", "tunnelEndpoint"} {

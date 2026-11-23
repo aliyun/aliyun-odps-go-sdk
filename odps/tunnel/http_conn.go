@@ -24,9 +24,12 @@ import (
 )
 
 type httpConnection struct {
-	Writer      io.WriteCloser
-	resChan     <-chan resOrErr
-	bytesRecord *bytesRecordWriter // 用于记录http上传的数据大小(压缩后的)
+	Writer       io.WriteCloser
+	input        io.WriteCloser
+	resChan      <-chan resOrErr
+	bytesRecord  *bytesRecordWriter // 用于记录http上传的数据大小(压缩后的)
+	responseRead bool
+	responseErr  error
 }
 
 type resOrErr struct {
@@ -43,19 +46,23 @@ func newHttpConnection(writeCloser io.WriteCloser, resChan <-chan resOrErr, comp
 
 	return &httpConnection{
 		Writer:      writer,
+		input:       writeCloser,
 		resChan:     resChan,
 		bytesRecord: bytesRecord,
 	}
 }
 
 func (conn *httpConnection) closeRes() error {
-	rOrE := <-conn.resChan
-
-	if rOrE.err != nil {
-		return errors.WithStack(rOrE.err)
+	if !conn.responseRead {
+		_ = conn.input.Close()
+		result := <-conn.resChan
+		conn.responseRead = true
+		conn.responseErr = errors.WithStack(result.err)
+		if result.err == nil {
+			conn.responseErr = errors.WithStack(result.res.Body.Close())
+		}
 	}
-
-	return errors.WithStack(rOrE.res.Body.Close())
+	return conn.responseErr
 }
 
 func (conn *httpConnection) bytesCount() int {

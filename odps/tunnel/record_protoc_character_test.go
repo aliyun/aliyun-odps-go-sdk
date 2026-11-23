@@ -68,7 +68,7 @@ func TestProtobufCharacterWireValues(t *testing.T) {
 					}
 					require.NoError(t, err)
 					if test.null {
-						require.Nil(t, row[0])
+						require.Equal(t, data.Null, row[0])
 					} else {
 						require.Equal(t, typ, row[0].Type())
 						require.Equal(t, test.value, row[0].String())

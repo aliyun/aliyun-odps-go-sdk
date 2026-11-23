@@ -65,7 +65,7 @@ func main() {
 			}
 
 			for i, d := range record {
-				if d == nil {
+				if data.IsNull(d) {
 					fmt.Printf("%s=null", schema.Columns[i].Name)
 				} else {
 					fmt.Printf("%s=%s", schema.Columns[i].Name, d.Sql())

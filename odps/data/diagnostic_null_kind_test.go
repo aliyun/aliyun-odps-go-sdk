@@ -20,8 +20,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 )
+
+func TestIsNullDistinguishesMissingValuesFromEmptyData(t *testing.T) {
+	var missing *Array
+	require.True(t, IsNull(missing))
+	require.True(t, IsNull(nil))
+	require.True(t, IsNull(Null))
+	require.False(t, IsNull(String("NULL")))
+	require.False(t, IsNull(String("")))
+	require.False(t, IsNull(Binary(nil)))
+}
 
 // There are two ways to carry "no value" in this package: a nil Data interface, and the
 // explicit data.Null (a non-nil NullData{} whose String() is "NULL"). Both must keep the

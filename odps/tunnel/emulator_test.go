@@ -335,6 +335,25 @@ func TestEmulatorProtobufInstanceDownload(t *testing.T) {
 	requireTunnelError(t, err, http.StatusNotFound, "NoSuchInstance")
 }
 
+func TestEmulatorProtobufInstanceNullCanBeReadDirectly(t *testing.T) {
+	fixture := newTunnelFixture(t)
+	instance := fixture.sql(t, "select cast(null as string) as missing, cast('' as string) as empty_value, 'NULL' as literal_value")
+	session, err := fixture.tunnel.CreateInstanceResultDownloadSession(emulatorProject, instance.Id())
+	require.NoError(t, err)
+	reader, err := session.OpenRecordReader(0, 1, 0, nil)
+	require.NoError(t, err)
+	rows, err := readProtobufRows(t, reader)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	row := rows[0]
+	require.Equal(t, data.Null, row.Get(0))
+	require.True(t, data.IsNull(row.Get(0)))
+	require.Equal(t, "NULL", row.Get(0).String())
+	require.Equal(t, data.String(""), row.Get(1))
+	require.Equal(t, data.String("NULL"), row.Get(2))
+	require.False(t, data.IsNull(row.Get(2)))
+}
+
 func TestEmulatorTunnelPreview(t *testing.T) {
 	e := newTunnelFixture(t)
 	ordinary := e.table(t, "", false)

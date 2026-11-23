@@ -63,6 +63,7 @@ func (r *RecordProtocReader) expectRange(start, count, total int) {
 	}
 }
 
+// Read returns one record. Top-level NULL columns are returned as data.Null.
 func (r *RecordProtocReader) Read() (_ data.Record, err error) {
 	if r.finished {
 		return nil, io.EOF
@@ -159,6 +160,11 @@ LOOP:
 	r.count += 1
 	if r.expectedRows != nil && r.count > *r.expectedRows {
 		return nil, fmt.Errorf("received more than %d rows for the requested range", *r.expectedRows)
+	}
+	for index, value := range record {
+		if value == nil {
+			record[index] = data.Null
+		}
 	}
 	return record, nil
 }

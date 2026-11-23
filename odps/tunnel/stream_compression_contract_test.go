@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/account"
+	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 )
 
@@ -71,6 +73,32 @@ func TestStreamFlushClosesPipeWhenCompressorCloseFails(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBlockUploadClosesPipeWhenCompressorCloseFails(t *testing.T) {
+	compressionErr := errors.New("failed to finish compressed block")
+	transport := blockUploadTransport(func(request *http.Request) (*http.Response, error) {
+		if request.Method == http.MethodPost {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body: io.NopCloser(strings.NewReader(
+					`{"UploadID":"fixture","Status":"NORMAL","Schema":{"columns":[{"name":"value","type":"string"}]}}`)),
+			}, nil
+		}
+		defer request.Body.Close()
+		if _, err := io.Copy(io.Discard, request.Body); err != nil {
+			return nil, err
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+	})
+	client := restclient.NewOdpsRestClientWithTransport(account.NewAliyunAccount("fixture", "secret"), "http://127.0.0.1", transport)
+	session, err := CreateUploadSession("test_project", "fixture", "", client,
+		func(cfg *sessionConfig) { cfg.Compressor = failCompressionClose{err: compressionErr} })
+	require.NoError(t, err)
+	writer, err := session.OpenRecordWriter(0)
+	require.NoError(t, err)
+	require.NoError(t, writer.Write(data.Record{data.String("fixture record")}))
+	require.ErrorIs(t, writer.Close(), compressionErr)
 }
 
 type bufferedWriteCloser struct {

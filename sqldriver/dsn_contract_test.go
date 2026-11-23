@@ -40,6 +40,36 @@ func TestParseDSNIncludesExplicitOptions(t *testing.T) {
 	require.Empty(t, config.Hints)
 }
 
+func TestParseDSNReservesTunnelOptionAliases(t *testing.T) {
+	const dsn = "http://fixture-id:fixture-key@127.0.0.1:8080/api?project=fixture"
+	const transfer = "http%3A%2F%2F127.0.0.1%3A8081"
+	config, err := ParseDSN(dsn + "&TunnelEndpoint=" + transfer + "&odps.sql.type.system.odps2=true")
+	require.NoError(t, err)
+	require.Equal(t, "http://127.0.0.1:8080/api", config.Endpoint)
+	require.Equal(t, "http://127.0.0.1:8081", config.TunnelEndpoint)
+	require.Equal(t, map[string]string{"odps.sql.type.system.odps2": "true"}, config.Hints)
+
+	config, err = ParseDSN(dsn + "&TunnelQuotaName=batch")
+	require.NoError(t, err)
+	require.Equal(t, "batch", config.TunnelQuotaName)
+	require.Empty(t, config.Hints)
+
+	_, err = ParseDSN(dsn + "&TunnelEndpoint=" + transfer + "&tunnelEndpoint=" + transfer)
+	require.ErrorContains(t, err, "duplicate tunnelEndpoint")
+	_, err = ParseDSN(dsn + "&TunnelEndpoint=" + transfer + "&TunnelQuotaName=batch")
+	require.ErrorContains(t, err, "mutually exclusive")
+
+	config.Hints = map[string]string{"TunnelEndpoint": "https://example.invalid"}
+	config.Others = map[string]string{"TUNNELQUOTANAME": "wrong"}
+	formatted, err := config.FormatDSN()
+	require.NoError(t, err)
+	reparsed, err := ParseDSN(formatted)
+	require.NoError(t, err)
+	require.Equal(t, "batch", reparsed.TunnelQuotaName)
+	require.Empty(t, reparsed.TunnelEndpoint)
+	require.Empty(t, reparsed.Hints)
+}
+
 func TestParseDSNRejectsIncompleteCredentials(t *testing.T) {
 	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "")
 	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "")
