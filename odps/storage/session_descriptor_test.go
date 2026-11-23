@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -154,4 +155,131 @@ func TestInstanceReadDescriptorPreservesQueryOptions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, descriptor, reopened.Descriptor())
 	require.False(t, reopened.Plan().CountKnown)
+}
+
+func TestStorageRecoveryHandlesTerminalSessionsAndAmbiguousCommit(t *testing.T) {
+	var offsets atomic.Int32
+	client := localClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("Action") {
+		case "TableCreateReadSession":
+			w.Header().Set(routeTokenHeader, "initial-read")
+			fmt.Fprint(w, "{\"SessionId\":\"pending\",\"SessionStatus\":\"INIT\"}")
+		case "TableGetReadSession":
+			assert.Equal(t, "initial-read", r.Header.Get(routeTokenHeader))
+			w.Header().Set(routeTokenHeader, "latest-read")
+			fmt.Fprint(w, "{\"SessionStatus\":\"CRITICAL\"}")
+		case "TableCreateWriteSession":
+			w.Header().Set(routeTokenHeader, "initial-write")
+			fmt.Fprint(w, "{\"SessionId\":\"staged\",\"SessionStatus\":\"NORMAL\"}")
+		case "TableGetWriteSession":
+			assert.Equal(t, "initial-write", r.Header.Get(routeTokenHeader))
+			w.Header().Set(routeTokenHeader, "latest-write")
+			fmt.Fprint(w, "{\"Streams\":{\"worker\":1}}")
+		case "TableCommitWriteSession":
+			assert.Equal(t, "latest-write", r.Header.Get(routeTokenHeader))
+			w.Header().Set(routeTokenHeader, "commit-write")
+			w.Header().Set("Content-Length", "100")
+			fmt.Fprint(w, "{}")
+		case "TableGetWriteStream":
+			switch offsets.Add(1) {
+			case 1:
+				fmt.Fprint(w, "{}")
+			case 2:
+				fmt.Fprint(w, "{\"RowOffset\":null}")
+			case 3:
+				fmt.Fprint(w, "{\"RowOffset\":-1}")
+			default:
+				fmt.Fprint(w, "{\"RowOffset\":0}")
+			}
+		default:
+			t.Errorf("unexpected request: %s", r.URL)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	ctx := t.Context()
+	pending, err := client.StartTableRead(ctx, Table{Name: "table"}, TableReadOptions{})
+	require.NoError(t, err)
+	latest, err := pending.WaitReady(ctx)
+	require.ErrorContains(t, err, "CRITICAL")
+	require.Equal(t, "CRITICAL", latest.Status())
+	require.Equal(t, "latest-read", latest.Descriptor().RouteToken)
+	_, err = latest.WaitReady(ctx)
+	require.ErrorContains(t, err, "CRITICAL")
+	_, err = latest.OpenReader(ctx, nil)
+	require.ErrorContains(t, err, "not readable")
+
+	upload, err := client.CreateTableWriteSession(ctx, Table{Name: "table"}, TableWriteOptions{})
+	require.NoError(t, err)
+	key := Stream{ID: "worker", Version: 1}
+	for _, want := range []string{"missing durable", "missing durable", "negative durable"} {
+		_, err := upload.GetStream(ctx, key)
+		require.ErrorContains(t, err, want)
+	}
+	writer, err := upload.GetStream(ctx, key)
+	require.NoError(t, err)
+	require.Zero(t, writer.InitialOffset())
+
+	err = upload.CommitStreams(ctx, key)
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+	var commitErr *CommitError
+	require.ErrorAs(t, err, &commitErr)
+	require.Equal(t, "staged", commitErr.Descriptor.ID)
+	require.Equal(t, "commit-write", commitErr.Descriptor.RouteToken)
+	require.Equal(t, upload.Descriptor().Table, commitErr.Descriptor.Table)
+	require.Equal(t, "initial-write", upload.Descriptor().RouteToken)
+}
+
+func TestStorageDescriptorRejectsMismatchedTargetsAndResponseIdentity(t *testing.T) {
+	var requests atomic.Int32
+	client := localClient(t, func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		switch r.URL.Query().Get("Action") {
+		case "TableGetWriteSession":
+			if r.URL.Query().Get("SessionId") == "wrong-streams" {
+				fmt.Fprint(w, "{\"Streams\":{\"worker\":0}}")
+				return
+			}
+			fmt.Fprint(w, "{\"SessionId\":\"unexpected\"}")
+		case "TableGetReadSession":
+			fmt.Fprint(w, "{\"SessionId\":\"unexpected\",\"SessionStatus\":\"NORMAL\"}")
+		default:
+			t.Errorf("unexpected request %s", r.URL)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	ctx := t.Context()
+	target := Table{Project: client.project, Schema: "default", Name: "table"}
+	read := ReadSessionDescriptor{Version: descriptorVersion, Kind: TableSnapshot, Table: target, ID: "expected", QuotaName: client.quota}
+	badRead := read
+	badRead.Kind = "unknown"
+	_, err := client.ResumeRead(ctx, badRead)
+	require.ErrorContains(t, err, "unsupported read session kind")
+	badRead = read
+	badRead.Table.Schema = ""
+	_, err = client.ResumeRead(ctx, badRead)
+	require.ErrorContains(t, err, "invalid table read descriptor")
+	badRead = read
+	badRead.Table.Name = "invalid/schema"
+	_, err = client.ResumeRead(ctx, badRead)
+	require.ErrorContains(t, err, "invalid table")
+	_, err = client.OpenSQLResult(ctx, odps.SQLJobRef{InstanceID: "job", Project: "other"}, InstanceReadOptions{})
+	require.ErrorContains(t, err, "project does not match")
+	write := WriteSessionDescriptor{Version: descriptorVersion, Mode: WriteModeBatch, Table: target, ID: "expected", QuotaName: client.quota}
+	badWrite := write
+	badWrite.Mode = "Streaming"
+	_, err = client.ResumeWrite(ctx, badWrite)
+	require.ErrorContains(t, err, "invalid batch write descriptor")
+	badWrite = write
+	badWrite.Table.Schema = "wrong/schema"
+	_, err = client.ResumeWrite(ctx, badWrite)
+	require.ErrorContains(t, err, "invalid schema")
+	require.Zero(t, requests.Load())
+
+	_, err = client.ResumeRead(ctx, read)
+	require.ErrorContains(t, err, "invalid session descriptor")
+	_, err = client.ResumeWrite(ctx, write)
+	require.ErrorContains(t, err, "unexpected session ID")
+	write.ID = "wrong-streams"
+	_, err = client.ResumeWrite(ctx, write)
+	require.ErrorContains(t, err, "invalid closed stream")
 }

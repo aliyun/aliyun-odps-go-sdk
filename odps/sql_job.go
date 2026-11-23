@@ -5,6 +5,7 @@ package odps
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/options"
@@ -54,11 +55,15 @@ func (c *Client) SubmitSQL(ctx context.Context, request SQLRequest) (*SQLJob, er
 		return nil, fmt.Errorf("SQL statement is required")
 	}
 	opts := request.Options
-	if c.Scope().Schema != "" {
-		// A fixed scope supplies defaults. Explicit per-job options take precedence.
-		if opts.DefaultSchema == "" {
-			opts.DefaultSchema = c.Scope().Schema
-		}
+	// A fixed scope supplies defaults. Explicit per-job options take precedence.
+	if opts.DefaultSchema == "" {
+		opts.DefaultSchema = c.Scope().Schema
+	}
+	if opts.DefaultSchema != "" && opts.Hints["odps.namespace.schema"] == "" {
+		hints := make(map[string]string, len(opts.Hints)+1)
+		maps.Copy(hints, opts.Hints)
+		hints["odps.namespace.schema"] = "true"
+		opts.Hints = hints
 	}
 	instance, err := c.service.execSQLWithOption(ctx, request.Statement, &opts)
 	if instance == nil {

@@ -283,3 +283,95 @@ func TestProtobufRejectsWireIntegerOutsideColumnRange(t *testing.T) {
 	_, err := reader.Read()
 	require.ErrorContains(t, err, "column \"quantity\": integer out of range for TINYINT")
 }
+
+type stalledRecordSink struct {
+	writes int
+	closed bool
+}
+
+func (s *stalledRecordSink) Write(p []byte) (int, error) {
+	s.writes++
+	if s.writes == 1 {
+		return len(p), nil
+	}
+	return 0, nil
+}
+
+func (s *stalledRecordSink) Close() error {
+	s.closed = true
+	return nil
+}
+
+func TestProtobufIOFailureLeavesStreamUncommittable(t *testing.T) {
+	sink := &stalledRecordSink{}
+	writer := newRecordProtocWriter(sink, []tableschema.Column{{Name: "id", Type: datatype.BigIntType}}, false)
+	record := data.Record{data.BigInt(1)}
+	require.ErrorIs(t, writer.Write(record), io.ErrShortWrite)
+	require.ErrorIs(t, writer.Write(record), io.ErrShortWrite)
+	require.ErrorIs(t, writer.Close(), io.ErrShortWrite)
+	require.Equal(t, 2, sink.writes, "a partial record must not be followed by more data or a trailer")
+	require.True(t, sink.closed)
+}
+
+func TestProtobufComplexValuesMatchTheColumnSchema(t *testing.T) {
+	integer := datatype.IntType
+	stringType := datatype.StringType
+	mapType := datatype.NewMapType(stringType, integer)
+	structType := datatype.NewStructType(datatype.NewStructFieldType("a", integer), datatype.NewStructFieldType("b", stringType))
+	array := data.NewArrayWithType(datatype.NewArrayType(integer))
+	badMapKey, badMapValue := data.NewMapWithType(mapType), data.NewMapWithType(mapType)
+	require.NoError(t, badMapKey.Set(data.Int(1), data.Int(1)))
+	require.NoError(t, badMapValue.Set(data.String("k"), data.String("v")))
+	unknownField, wrongFieldType := data.NewStructWithTyp(structType), data.NewStructWithTyp(structType)
+	require.NoError(t, unknownField.SetField("extra", data.Int(1)))
+	require.NoError(t, wrongFieldType.SetField("a", data.String("not an integer")))
+	char, err := data.MakeChar(3, "甲乙丙")
+	require.NoError(t, err)
+	varchar, err := data.MakeVarChar(3, "甲乙丙")
+	require.NoError(t, err)
+	decimalType := datatype.NewDecimalType(3, 1)
+
+	for _, tt := range []struct {
+		expected datatype.DataType
+		value    data.Data
+		want     string
+	}{
+		{nil, data.Int(1), "missing data type"},
+		{datatype.BooleanType, data.Int(1), "got an integer"},
+		{stringType, array, "got ARRAY"},
+		{stringType, badMapKey, "got MAP"},
+		{mapType, badMapKey, "map key"},
+		{mapType, badMapValue, "map value"},
+		{stringType, unknownField, "got STRUCT"},
+		{structType, unknownField, "unexpected struct field"},
+		{structType, wrongFieldType, "struct field"},
+		{stringType, char, "got CHAR"},
+		{datatype.NewCharType(2), char, "width exceeds"},
+		{stringType, varchar, "got VARCHAR"},
+		{stringType, data.NewDecimal(3, 1, "1.0"), "got DECIMAL"},
+		{decimalType, data.NewDecimal(3, 1, "1e2"), "fixed-point"},
+		{decimalType, data.NewDecimal(3, 1, "1."), "fixed-point"},
+		{decimalType, data.NewDecimal(5, 2, "12.01"), "precision or scale"},
+		{stringType, data.Bool(true), "expected STRING"},
+	} {
+		var output bytes.Buffer
+		writer := newRecordProtocWriter(&bufWriter{&output}, []tableschema.Column{{Name: "typed", Type: tt.expected}}, false)
+		require.ErrorContains(t, writer.Write(data.Record{tt.value}), tt.want)
+		require.Empty(t, output.Bytes())
+	}
+
+	reordered := data.NewStructWithTyp(structType)
+	require.NoError(t, reordered.SetField("b", data.String("text")))
+	require.NoError(t, reordered.SetField("a", data.Int(5)))
+	columns := []tableschema.Column{{Name: "typed", Type: structType}}
+	var output bytes.Buffer
+	writer := newRecordProtocWriter(&bufWriter{&output}, columns, false)
+	require.NoError(t, writer.Write(data.Record{reordered}))
+	require.NoError(t, writer.Close())
+	reader := newRecordProtocReader(&http.Response{Body: io.NopCloser(&output)}, columns, false)
+	record, err := reader.Read()
+	require.NoError(t, err)
+	value := record[0].(*data.Struct)
+	require.Equal(t, data.Int(5), value.GetField("a"))
+	require.Equal(t, data.String("text"), value.GetField("b"))
+}

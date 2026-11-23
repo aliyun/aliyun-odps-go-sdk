@@ -103,7 +103,8 @@ func TestTableReadSessionTerminalStatus(t *testing.T) {
 			})
 			session, err := client.GetTableReadSession(t.Context(), Table{Name: "table"}, Session{ID: "snapshot"})
 			require.ErrorContains(t, err, status)
-			require.Nil(t, session)
+			require.NotNil(t, session)
+			require.Equal(t, status, session.Status())
 		})
 	}
 }

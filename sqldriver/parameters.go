@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
@@ -32,6 +33,7 @@ import (
 type placeholder struct {
 	start, end int
 	name       string
+	assignment bool
 }
 
 func bindSQL(query string, args []driver.NamedValue) (string, error) {
@@ -66,6 +68,13 @@ func bindSQL(query string, args []driver.NamedValue) (string, error) {
 		return query, nil
 	}
 
+	variables := make(map[string]bool)
+	for _, p := range placeholders {
+		if p.assignment {
+			variables[p.name] = true
+		}
+	}
+
 	var sql strings.Builder
 	sql.Grow(len(query))
 	used := make(map[string]bool, len(named))
@@ -77,6 +86,11 @@ func bindSQL(query string, args []driver.NamedValue) (string, error) {
 				return "", fmt.Errorf("cannot bind '?' with named SQL arguments")
 			}
 			sql.WriteString(positional[i])
+		} else if variables[p.name] {
+			if _, supplied := named[p.name]; supplied {
+				return "", fmt.Errorf("SQL argument @%s is also a script variable", p.name)
+			}
+			sql.WriteString(query[p.start:p.end])
 		} else {
 			literal, ok := named[p.name]
 			if !ok {
@@ -137,7 +151,10 @@ func scanPlaceholders(query string, bindNamed bool) ([]placeholder, error) {
 			for end < len(query) && identifierByte(query[end]) {
 				end++
 			}
-			found = append(found, placeholder{start: i, end: end, name: query[i+1 : end]})
+			rest := strings.TrimLeftFunc(query[end:], unicode.IsSpace)
+			found = append(found, placeholder{
+				start: i, end: end, name: query[i+1 : end], assignment: strings.HasPrefix(rest, ":="),
+			})
 			i = end
 		default:
 			i++
@@ -219,8 +236,8 @@ func decimalSQLLiteral(value *data.Decimal) (string, error) {
 	if value == nil || !value.Valid {
 		return "NULL", nil
 	}
-	decimal, err := data.DecimalFromStr(value.String())
-	if err != nil {
+	var decimal data.Decimal
+	if err := decimal.Scan(value.String()); err != nil {
 		return "", fmt.Errorf("invalid DECIMAL value")
 	}
 	return "(" + decimal.Sql() + ")", nil
@@ -229,6 +246,9 @@ func decimalSQLLiteral(value *data.Decimal) (string, error) {
 func quoteSQLString(value string) (string, error) {
 	if !utf8.ValidString(value) {
 		return "", fmt.Errorf("invalid UTF-8 string; bind binary data as []byte")
+	}
+	if strings.ContainsAny(value, "￾￿") {
+		return "", fmt.Errorf("SQL string contains a character not representable in XML")
 	}
 	var literal strings.Builder
 	literal.Grow(len(value) + 2)

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -181,7 +182,7 @@ func TestClientSQLJobLifecycle(t *testing.T) {
 		case http.MethodPost:
 			task := readSubmittedSQL(t, r)
 			assert.Equal(t, "select 1", task.Query)
-			assert.JSONEq(t, "{\"odps.default.schema\":\"analytics\"}", task.Properties.Get("settings"))
+			assert.JSONEq(t, "{\"odps.default.schema\":\"analytics\",\"odps.namespace.schema\":\"true\"}", task.Properties.Get("settings"))
 			w.Header().Set("Location", "/projects/alpha/instances/job-1")
 			if submitted.Add(1) == 2 {
 				fmt.Fprint(w, "<incomplete>")
@@ -262,4 +263,263 @@ func TestClientChecksOptionsAndSignsRequestMetadata(t *testing.T) {
 		TraceParent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", TraceState: "tenant=sample",
 	})
 	require.NoError(t, client.Ping(ctx))
+}
+
+func TestCatalogPropagatesScopedValidationAndServiceErrors(t *testing.T) {
+	var requests atomic.Int32
+	client := newV1Client(t, func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		switch {
+		case r.URL.Path == "/api/projects/alpha/tables" && r.URL.Query().Get("marker") == "":
+			assert.Equal(t, "alice", r.URL.Query().Get("owner"))
+			assert.Equal(t, "VIRTUAL_VIEW", r.URL.Query().Get("type"))
+			assert.Empty(t, r.URL.Query().Get("curr_schema"))
+			fmt.Fprint(w, "<Tables><Table><Name>first</Name></Table><Table><Name>second</Name></Table><Marker>next</Marker></Tables>")
+		case r.URL.Path == "/api/projects/alpha/tables/view" && !r.URL.Query().Has("extended"):
+			fmt.Fprint(w, "<Table><Schema>{\"columns\":[{\"name\":\"id\",\"type\":\"bigint\"}]}</Schema></Table>")
+		case r.URL.Path == "/api/projects/beta":
+			fmt.Fprint(w, "<Project/>")
+		default:
+			http.Error(w, "fixture rejected the request", http.StatusForbidden)
+		}
+	})
+	_, err := client.WithScope(odps.Scope{Project: "bad/project"})
+	require.ErrorContains(t, err, "project name")
+	rootScope, err := client.WithScope(odps.Scope{})
+	require.NoError(t, err)
+	require.Equal(t, odps.Scope{Project: "alpha"}, rootScope.Scope())
+
+	ctx := t.Context()
+	badType := odps.TableTypeUnknown
+	_, err = rootScope.Tables().ListPage(ctx, odps.TableListOptions{Type: &badType})
+	require.ErrorContains(t, err, "table type")
+	_, err = client.Tables().Get(ctx, odps.TableRef{Project: "..", Name: "view"})
+	require.ErrorContains(t, err, "project name")
+	_, err = client.Projects().Get(ctx, "..")
+	require.ErrorContains(t, err, "project name")
+	_, err = client.Schemas().Get(ctx, "bad/schema")
+	require.ErrorContains(t, err, "schema name")
+	_, err = client.Resources().Get(ctx, odps.ResourceRef{Name: ".."})
+	require.ErrorContains(t, err, "resource name")
+	_, err = client.Functions().Get(ctx, odps.FunctionRef{Name: ".."})
+	require.ErrorContains(t, err, "function name")
+	require.Zero(t, requests.Load())
+
+	viewType := odps.VirtualView
+	opts := odps.TableListOptions{Owner: "alice", Type: &viewType}
+	for _, test := range []struct {
+		name    string
+		cancel  bool
+		already bool
+		want    string
+	}{
+		{name: "second page rejection", want: "fixture rejected"},
+		{name: "cancel between rows", cancel: true, want: context.Canceled.Error()},
+		{name: "cancel before fetching", cancel: true, already: true, want: context.Canceled.Error()},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(ctx)
+			defer cancel()
+			if test.already {
+				cancel()
+			}
+			var got []string
+			var seqErr error
+			for entry, err := range rootScope.Tables().List(ctx, opts) {
+				if err != nil {
+					seqErr = err
+					break
+				}
+				got = append(got, entry.Ref.Name)
+				if test.cancel {
+					cancel()
+				}
+			}
+			require.ErrorContains(t, seqErr, test.want)
+			switch {
+			case test.already:
+				require.Empty(t, got)
+			case test.cancel:
+				require.Equal(t, []string{"first"}, got)
+			default:
+				require.Equal(t, []string{"first", "second"}, got)
+			}
+		})
+	}
+
+	_, err = client.Tables().Get(ctx, odps.TableRef{Name: "missing"})
+	require.ErrorContains(t, err, "fixture rejected")
+	extended, err := client.Tables().GetExtended(ctx, odps.TableRef{Name: "view"})
+	require.ErrorContains(t, err, "fixture rejected")
+	require.Empty(t, extended.Schema.Columns)
+	meta, err := client.Projects().Get(ctx, "beta")
+	require.NoError(t, err)
+	require.Equal(t, "beta", meta.Name)
+	_, err = client.Projects().Get(ctx, "denied")
+	require.ErrorContains(t, err, "fixture rejected")
+	_, err = client.Schemas().Get(ctx, "denied")
+	require.ErrorContains(t, err, "fixture rejected")
+	_, err = client.Resources().Get(ctx, odps.ResourceRef{Name: "denied"})
+	require.ErrorContains(t, err, "fixture rejected")
+	_, err = client.Functions().Get(ctx, odps.FunctionRef{Name: "denied"})
+	require.ErrorContains(t, err, "fixture rejected")
+
+	badPage := odps.PageOptions{PageSize: -1}
+	_, err = client.Projects().ListPage(ctx, odps.ProjectListOptions{PageOptions: badPage})
+	require.ErrorContains(t, err, "page size")
+	_, err = client.Schemas().ListPage(ctx, odps.SchemaListOptions{PageOptions: badPage})
+	require.ErrorContains(t, err, "page size")
+	_, err = client.Resources().ListPage(ctx, odps.ResourceListOptions{PageOptions: badPage})
+	require.ErrorContains(t, err, "page size")
+	_, err = client.Projects().ListPage(ctx, odps.ProjectListOptions{})
+	require.ErrorContains(t, err, "fixture rejected")
+	_, err = client.Schemas().ListPage(ctx, odps.SchemaListOptions{})
+	require.ErrorContains(t, err, "fixture rejected")
+	_, err = rootScope.Resources().ListPage(ctx, odps.ResourceListOptions{})
+	require.ErrorContains(t, err, "fixture rejected")
+}
+
+func TestSQLJobErrorsPreserveIdentityAndContext(t *testing.T) {
+	var requests atomic.Int32
+	client := newV1Client(t, func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if r.Method == http.MethodPost && r.URL.Query().Has("tryWait") {
+			w.Header().Set("Location", "/projects/alpha/instances/ready")
+			fmt.Fprint(w, "<Instance><Tasks><Task><Name>example</Name><Status>SUCCESS</Status><Result>ready</Result></Task></Tasks></Instance>")
+			return
+		}
+		http.Error(w, "fixture rejected the request", http.StatusForbidden)
+	})
+	ctx := t.Context()
+	done, cancel := context.WithCancel(ctx)
+	cancel()
+	_, err := client.SubmitSQL(done, odps.SQLRequest{Statement: "select 1"})
+	require.ErrorIs(t, err, context.Canceled)
+	_, err = client.SubmitSQL(ctx, odps.SQLRequest{Statement: " "})
+	require.ErrorContains(t, err, "statement is required")
+	for _, invalid := range []odps.SQLJobRef{
+		{Project: "..", InstanceID: "id"}, {InstanceID: "bad/id"},
+	} {
+		_, err = client.ResumeSQL(invalid)
+		require.Error(t, err)
+	}
+	require.Zero(t, requests.Load())
+	missing, err := client.SubmitSQL(ctx, odps.SQLRequest{Statement: "select 1"})
+	require.ErrorContains(t, err, "fixture rejected")
+	require.Nil(t, missing)
+
+	normal, err := client.ResumeSQL(odps.SQLJobRef{InstanceID: "job"})
+	require.NoError(t, err)
+	_, err = normal.Status(done)
+	require.ErrorIs(t, err, context.Canceled)
+	_, err = normal.Status(ctx)
+	require.ErrorContains(t, err, "fixture rejected")
+	_, err = normal.Wait(ctx)
+	var known *odps.SQLJobError
+	require.ErrorAs(t, err, &known)
+	require.Equal(t, "job", known.Job.InstanceID)
+
+	job, err := client.SubmitSQL(ctx, odps.SQLRequest{
+		Statement: "select 1",
+		Options: options.SQLTaskOptions{
+			DefaultSchema: "analytics", Hints: map[string]string{"odps.namespace.schema": "true"},
+			InstanceOption: options.NewCreateInstanceOptions(options.WithTryWait(true)),
+		},
+	})
+	require.NoError(t, err)
+	status, err := job.Status(ctx)
+	require.NoError(t, err)
+	require.Equal(t, odps.InstanceTerminated, status)
+	result, err := job.Wait(ctx)
+	require.NoError(t, err)
+	_, err = result.Inline(done)
+	require.ErrorIs(t, err, context.Canceled)
+	tasks, err := result.Inline(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "ready", tasks[0].Content())
+
+	_, err = client.TunnelEndpoint(ctx, "bad/project", "")
+	require.ErrorContains(t, err, "project name")
+	_, err = client.TunnelEndpoint(ctx, "", "fixture-quota")
+	require.ErrorContains(t, err, "fixture rejected")
+}
+
+func TestInstanceCatalogListsJobsWithTypedFilters(t *testing.T) {
+	var requests atomic.Int32
+	client := newV1Client(t, func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		assert.Equal(t, "/api/projects/alpha/instances", r.URL.Path)
+		q := r.URL.Query()
+		switch q.Get("marker") {
+		case "":
+			fmt.Fprint(w, "<Instances><Instance><Name>first</Name><Owner>alice</Owner><Status>Running</Status></Instance><Marker>next</Marker></Instances>")
+		case "next":
+			assert.Equal(t, "1", q.Get("maxitems"))
+			assert.Equal(t, "yes", q.Get("onlyowner"))
+			assert.Equal(t, "Running", q.Get("status"))
+			assert.Equal(t, "shared", q.Get("quotaindex"))
+			assert.Equal(t, "0:60", q.Get("daterange"))
+			fmt.Fprint(w, "<Instances><Instance><Name>second</Name><Status>Suspended</Status></Instance></Instances>")
+		default:
+			http.Error(w, "fixture page missing", http.StatusNotFound)
+		}
+	})
+	instances := client.Instances()
+	ctx := t.Context()
+	_, err := instances.ListPage(ctx, odps.InstanceListOptions{PageOptions: odps.PageOptions{PageSize: -1}})
+	require.ErrorContains(t, err, "page size")
+	_, err = instances.ListPage(ctx, odps.InstanceListOptions{Status: odps.InstanceStatusUnknown})
+	require.ErrorContains(t, err, "status filter")
+	_, err = instances.ListPage(ctx, odps.InstanceListOptions{StartTime: time.Unix(0, 0)})
+	require.ErrorContains(t, err, "start and end time")
+	require.Zero(t, requests.Load())
+	for item, err := range instances.List(ctx, odps.InstanceListOptions{}) {
+		require.NoError(t, err)
+		require.Equal(t, odps.SQLJobRef{Project: "alpha", InstanceID: "first"}, item.Ref)
+		require.Equal(t, "alice", item.Owner)
+		break
+	}
+	require.EqualValues(t, 1, requests.Load())
+
+	opts := odps.InstanceListOptions{
+		PageOptions: odps.PageOptions{PageSize: 1, PageToken: "next"},
+		OnlyOwner:   true, Status: odps.InstanceRunning, QuotaIndex: "shared",
+		StartTime: time.Unix(0, 0), EndTime: time.Unix(60, 0),
+	}
+	page, err := instances.ListPage(ctx, opts)
+	require.NoError(t, err)
+	require.Empty(t, page.NextPageToken)
+	require.Equal(t, "second", page.Items[0].Ref.InstanceID)
+	require.Equal(t, odps.InstanceSuspended, page.Items[0].Status)
+	opts.PageToken = "absent"
+	_, err = instances.ListPage(ctx, opts)
+	require.ErrorContains(t, err, "fixture page missing")
+}
+
+func TestSQLJobRejectsTerminatedInstanceWithoutTaskStatus(t *testing.T) {
+	client := newV1Client(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			w.Header().Set("Location", "/projects/alpha/instances/ready?ignored=true")
+			w.WriteHeader(http.StatusCreated)
+			return
+		}
+		assert.Equal(t, "/api/projects/alpha/instances/ready", r.URL.Path)
+		if r.URL.Query().Has("taskstatus") {
+			fmt.Fprint(w, "<Instance><Tasks/></Instance>")
+			return
+		}
+		fmt.Fprint(w, "<Instance><Status>Terminated</Status></Instance>")
+	})
+	job, err := client.SubmitSQL(t.Context(), odps.SQLRequest{Statement: "select 1;"})
+	require.NoError(t, err)
+	require.Equal(t, "ready", job.Ref().InstanceID)
+	recovered, err := client.ResumeSQL(job.Ref())
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	_, err = recovered.Wait(ctx)
+	require.ErrorContains(t, err, "terminated without task status")
+	var jobErr *odps.SQLJobError
+	require.ErrorAs(t, err, &jobErr)
+	require.Equal(t, job.Ref(), jobErr.Job)
 }

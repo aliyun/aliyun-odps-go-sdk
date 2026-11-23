@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -373,4 +374,40 @@ func TestAttachedSessionsKeepNamedQuota(t *testing.T) {
 	require.Equal(t, quota, download.QuotaName)
 	_, err = download.OpenRecordReader(0, 1, nil)
 	require.Error(t, err)
+}
+
+func TestScopedSQLResultPoolLifetime(t *testing.T) {
+	for _, reuse := range []bool{false, true} {
+		t.Run(fmt.Sprintf("keepalive=%t", reuse), func(t *testing.T) {
+			var idle, closed atomic.Int32
+			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/projects/project/instances/known", r.URL.Path)
+				assert.Equal(t, "project", r.URL.Query().Get("curr_project"))
+				fmt.Fprint(w, "{\"DownloadID\":\"session\",\"Status\":\"NORMAL\",\"RecordCount\":0,\"Schema\":{\"columns\":[{\"name\":\"id\",\"type\":\"bigint\"}]}}")
+			}))
+			server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+				if state == http.StateIdle {
+					idle.Add(1)
+				}
+				if state == http.StateClosed {
+					closed.Add(1)
+				}
+			}
+			server.Start()
+			t.Cleanup(server.Close)
+			client, err := odps.NewClient(account.NewAliyunAccount("fixture-ak", "fixture-sk"), odps.ClientOptions{
+				Endpoint: server.URL, Project: "project",
+			})
+			require.NoError(t, err)
+			t.Cleanup(client.CloseIdleConnections)
+			session, err := OpenSQLResult(t.Context(), client, odps.SQLJobRef{InstanceID: "known"},
+				ResultOptions{Endpoint: server.URL, KeepAlive: reuse})
+			require.NoError(t, err)
+			if reuse {
+				require.Eventually(t, func() bool { return idle.Load() > 0 }, time.Second, time.Millisecond)
+				session.CloseIdleConnections()
+			}
+			require.Eventually(t, func() bool { return closed.Load() > 0 }, time.Second, time.Millisecond)
+		})
+	}
 }

@@ -26,13 +26,16 @@ User-Agent suffix through core, Tunnel and Storage requests.
 Table metadata `Get` requests the basic schema. Use `GetExtended` to request
 additional statistics. `ListPage` returns lightweight entries and an opaque
 `NextPageToken`. `List` fetches pages as needed and stops when the loop ends.
-Projects, schemas and resources follow the same pagination pattern. Use
+Projects, schemas, resources and instances follow the same pagination pattern. Use
 `client.Functions().Get` to read one scoped function.
 
 Existing catalog and Tunnel entry points remain available for operations such
 as DDL, permission management and writes through the Protobuf protocol. The
 three project mutation methods that always returned an unimplemented error
 have been removed.
+
+The `storage.Table` compatibility name now accepts a project in addition to a
+schema and name. Use keyed fields with `odps.TableRef`.
 
 ## SQL jobs and results
 
@@ -45,7 +48,9 @@ remote termination. If a submission or wait fails after acknowledgement,
 
 After `job.Wait`, use `result.Inline(ctx)` for inline outputs, or open a
 result transfer with `tunnel.OpenSQLResult` or `storage.Client.OpenSQLResult`.
-Pass the result's reference to identify the same instance.
+Pass the result's reference to identify the same instance. If you opt into
+SDK connection pooling on a Protobuf result session, call
+`CloseIdleConnections` after closing its readers.
 
 ## Database/sql changes
 

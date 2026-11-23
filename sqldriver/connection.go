@@ -98,7 +98,7 @@ func (c *connection) queryContext(ctx context.Context, query string) (driver.Row
 	}
 
 	session, err := tunnel.OpenSQLResult(ctx, c.connector.client, result.Ref(), tunnel.ResultOptions{
-		Endpoint: opts.TunnelEndpoint, QuotaName: opts.TunnelQuotaName, DisableKeepAlives: true,
+		Endpoint: opts.TunnelEndpoint, QuotaName: opts.TunnelQuotaName,
 	})
 	if err != nil {
 		return nil, instanceError(job, err)
@@ -111,7 +111,7 @@ func (c *connection) queryContext(ctx context.Context, query string) (driver.Row
 
 	reader, err := session.OpenRecordReaderContext(ctx, 0, recordCount, 0, nil)
 	if err != nil {
-		session.RestClient.CloseIdleConnections()
+		session.CloseIdleConnections()
 		return nil, instanceError(job, err)
 	}
 
@@ -122,7 +122,7 @@ func (c *connection) queryContext(ctx context.Context, query string) (driver.Row
 		ctx:     ctx,
 		// 注意取的是 session 里那个 RestClient 的地址：它的 http.Client 是
 		// 惰性建的，值拷贝会拿到一个还没建过连接的副本，关不掉任何东西。
-		releaseIdleConns: session.RestClient.CloseIdleConnections,
+		releaseIdleConns: session.CloseIdleConnections,
 	}
 	rows.startCancelWatch()
 

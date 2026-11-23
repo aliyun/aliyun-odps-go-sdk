@@ -254,10 +254,10 @@ func (c *Client) jsonRequest(ctx context.Context, method string, op operation, i
 	defer func() { _ = resp.Body.Close() }()
 	if output != nil {
 		if err := json.NewDecoder(resp.Body).Decode(output); err != nil {
-			return nil, fmt.Errorf("storage %s: decode response: %w", op.action, err)
+			return resp.Header, fmt.Errorf("storage %s: decode response: %w", op.action, err)
 		}
 	} else if _, err := io.Copy(io.Discard, resp.Body); err != nil {
-		return nil, fmt.Errorf("storage %s: read response: %w", op.action, err)
+		return resp.Header, fmt.Errorf("storage %s: read response: %w", op.action, err)
 	}
 	return resp.Header, nil
 }

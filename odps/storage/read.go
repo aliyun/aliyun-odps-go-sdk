@@ -301,10 +301,15 @@ func (s *ReadSession) WaitReady(ctx context.Context) (*ReadSession, error) {
 			return current, fmt.Errorf("storage: wait for read session %q: %w", current.descriptor.ID, err)
 		}
 		next, err := current.client.ResumeRead(ctx, current.descriptor)
+		if next != nil {
+			current = next
+		}
 		if err != nil {
 			return current, err
 		}
-		current = next
+	}
+	if current.descriptor.Kind == TableSnapshot && current.status != "NORMAL" {
+		return current, fmt.Errorf("storage: read session is not ready in status %q", current.status)
 	}
 	return current, ctx.Err()
 }
@@ -315,12 +320,16 @@ func (c *Client) tableReadSession(ctx context.Context, desc ReadSessionDescripto
 	if err != nil {
 		return nil, err
 	}
-	if reply.TableStatus != "NORMAL" && reply.TableStatus != "INIT" {
-		return nil, fmt.Errorf("storage %s: read session %q has status %q", op.action, reply.SessionID, reply.TableStatus)
-	}
 	stream := tableReadStreamRequest{MaxBatchRows: tableReadBatchRows, DataColumns: []string{}}
 	stream.DataFormat.Type, stream.DataFormat.Version = "Arrow", "V5"
-	return c.newReadSession(desc, op, "TableRead", reply.SessionID, reply.TableStatus, reply.RecordCount, headers, stream, reply.DataSchema)
+	snapshot, err := c.newReadSession(desc, op, "TableRead", reply.SessionID, reply.TableStatus, reply.RecordCount, headers, stream, reply.DataSchema)
+	if err != nil {
+		return nil, err
+	}
+	if reply.TableStatus != "NORMAL" && reply.TableStatus != "INIT" {
+		return snapshot, fmt.Errorf("storage %s: read session %q has status %q", op.action, snapshot.descriptor.ID, reply.TableStatus)
+	}
+	return snapshot, nil
 }
 
 // OpenSQLResult opens an Arrow snapshot of a completed SQL job in the client's project.
@@ -404,6 +413,9 @@ func (s *ReadSession) OpenReader(ctx context.Context, rows *RowRange) (*ArrowRea
 	}
 	if s.status == "INIT" {
 		return nil, fmt.Errorf("storage: read session is not ready; call WaitReady")
+	}
+	if s.descriptor.Kind == TableSnapshot && s.status != "NORMAL" {
+		return nil, fmt.Errorf("storage: read session is not readable in status %q", s.status)
 	}
 	if rows == nil && s.rows < 0 {
 		return nil, fmt.Errorf("storage: row count is unknown; supply an explicit range")

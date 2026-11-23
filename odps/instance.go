@@ -427,6 +427,9 @@ func (instance *Instance) tasksCompleted(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	if instance.status == InstanceTerminated && len(tasks) == 0 {
+		return false, errors.Errorf("instance %q terminated without task status", instance.Id())
+	}
 	done := len(tasks) != 0
 	for _, task := range tasks {
 		switch task.Status {

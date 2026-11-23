@@ -82,3 +82,33 @@ func TestSQLParameterBinding(t *testing.T) {
 		})
 	}
 }
+
+func TestSQLBindingPreservesScriptVariablesAndRejectsXMLLoss(t *testing.T) {
+	query := "@result := select @n as v; select v from @result;"
+	got, err := bindSQL(query, []driver.NamedValue{{Name: "n", Value: int64(1)}})
+	require.NoError(t, err)
+	require.Equal(t, "@result := select 1 as v; select v from @result;", got)
+	_, err = bindSQL(query, []driver.NamedValue{{Name: "result", Value: int64(1)}})
+	require.ErrorContains(t, err, "also a script variable")
+	for _, value := range []string{"before\ufffeafter", "before\uffffafter"} {
+		_, err := bindSQL("select ?", []driver.NamedValue{{Value: value}})
+		require.ErrorContains(t, err, "not representable in XML")
+	}
+	for _, query := range []string{"select ? /* !", "select R'(?", "select ? -- end"} {
+		got, err := bindSQL(query, []driver.NamedValue{{Value: int64(1)}})
+		if query == "select ? -- end" {
+			require.NoError(t, err)
+			require.Equal(t, "select 1 -- end", got)
+		} else {
+			require.ErrorContains(t, err, "unterminated")
+		}
+	}
+	_, err = sqlLiteral(time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC))
+	require.ErrorContains(t, err, "timestamp year")
+	value, err := sqlLiteral(float64(1e20))
+	require.NoError(t, err)
+	require.Equal(t, "(1e+20)", value)
+	value, err = sqlLiteral((*data.Decimal)(nil))
+	require.NoError(t, err)
+	require.Equal(t, "NULL", value)
+}

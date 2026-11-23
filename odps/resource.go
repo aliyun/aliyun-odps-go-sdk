@@ -124,6 +124,9 @@ func (r *Resource) Load() error {
 }
 
 func (r *Resource) loadContext(ctx context.Context) error {
+	if r.OdpsIns == nil {
+		return errors.New("resource metadata requires a client")
+	}
 	client := r.OdpsIns.restClient
 	rb := common.ResourceBuilder{ProjectName: r.ProjectName}
 	resource := rb.Resource(r.Name())

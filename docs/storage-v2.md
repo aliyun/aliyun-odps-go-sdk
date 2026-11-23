@@ -70,8 +70,8 @@ Save the JSON-serializable write-session descriptor and all intended stream
 versions before submitting a commit. If the outcome is uncertain, call
 `ResumeWrite` using the same project and quota and repeat the commit with the
 same versions. `Refresh` and `ClosedStreams` let the coordinator inspect
-acknowledged streams. For a
-partitioned upload, supply the partition spec in `TableWriteOptions.Partition`.
+acknowledged streams. A `*storage.CommitError` also carries the latest
+descriptor for recovery. For a partitioned upload, supply the partition spec in `TableWriteOptions.Partition`.
 Set `Overwrite` when the commit should replace the target's rows.
 
 Use `TableReadOptions.PartitionColumns` to include partition keys in Arrow

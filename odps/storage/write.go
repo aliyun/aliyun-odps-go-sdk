@@ -166,8 +166,28 @@ func (s *WriteSession) operation(action string) operation {
 // selection. Use CommitStreams when the table requires explicit stream versions.
 // Repeat the same commit on the same session after an ambiguous transport failure.
 func (s *WriteSession) Commit(ctx context.Context) error {
-	_, err := s.client.jsonRequest(ctx, http.MethodPost, s.operation("TableCommitWriteSession"), struct{}{}, nil)
-	return err
+	return s.commit(ctx, struct{}{})
+}
+
+// CommitError carries the latest write-session descriptor when the server's
+// commit outcome is uncertain or the request fails. Retry with the same streams.
+type CommitError struct {
+	Descriptor WriteSessionDescriptor
+	Err        error
+}
+
+func (e *CommitError) Error() string { return e.Err.Error() }
+
+func (e *CommitError) Unwrap() error { return e.Err }
+
+func (s *WriteSession) commit(ctx context.Context, input any) error {
+	headers, err := s.client.jsonRequest(ctx, http.MethodPost, s.operation("TableCommitWriteSession"), input, nil)
+	if err == nil {
+		return nil
+	}
+	descriptor := s.Descriptor()
+	descriptor.RouteToken = updatedRoute(headers, descriptor.RouteToken)
+	return &CommitError{Descriptor: descriptor, Err: err}
 }
 
 // CommitStreams commits a session with explicit stream versions. Finish creating
@@ -205,8 +225,7 @@ func (s *WriteSession) CommitStreams(ctx context.Context, streams ...Stream) err
 	if !maps.Equal(current.streams, versions) {
 		return fmt.Errorf("storage: commit descriptors must match all streams and versions in the write session")
 	}
-	_, err = s.client.jsonRequest(ctx, http.MethodPost, current.operation("TableCommitWriteSession"), input, nil)
-	return err
+	return current.commit(ctx, input)
 }
 
 // Abort discards the staged rows.
@@ -272,18 +291,25 @@ func (s *WriteSession) openStream(ctx context.Context, stream Stream, action str
 	}
 	reply := struct {
 		AccessToken string
-		RowOffset   int64
+		RowOffset   *int64
 	}{}
 	headers, err := s.client.jsonRequest(ctx, http.MethodPost, op, input, &reply)
 	if err != nil {
 		return nil, err
 	}
-	if reply.RowOffset < 0 {
-		return nil, fmt.Errorf("storage: negative durable row offset")
+	if action == "TableGetWriteStream" && reply.RowOffset == nil {
+		return nil, fmt.Errorf("storage: missing durable row offset on stream recovery")
+	}
+	offset := int64(0)
+	if reply.RowOffset != nil {
+		offset = *reply.RowOffset
+		if offset < 0 {
+			return nil, fmt.Errorf("storage: negative durable row offset")
+		}
 	}
 	return &WriteStream{
 		session: s, stream: stream, route: updatedRoute(headers, s.descriptor.RouteToken),
-		accessToken: reply.AccessToken, offset: reply.RowOffset,
+		accessToken: reply.AccessToken, offset: offset,
 	}, nil
 }
 

@@ -82,7 +82,7 @@ func NewConfigFromIni(iniPath string) (*Config, error) {
 		section.DeleteKey(p)
 	}
 
-	if strings.TrimSpace(conf.ProjectName) == "" || conf.AccessId == "" || conf.AccessKey == "" {
+	if strings.TrimSpace(conf.ProjectName) == "" || strings.TrimSpace(conf.AccessId) == "" || strings.TrimSpace(conf.AccessKey) == "" {
 		return nil, errors.New("project and complete access credentials are required")
 	}
 	if _, err := configvalue.Endpoint(conf.Endpoint, "endpoint"); err != nil {
@@ -147,7 +147,7 @@ func NewConfigFromIni(iniPath string) (*Config, error) {
 func (c *Config) GenAccount() account2.Account {
 	var account account2.Account
 
-	if c.StsToken == "" {
+	if strings.TrimSpace(c.StsToken) == "" {
 		account = account2.NewAliyunAccount(c.AccessId, c.AccessKey)
 	} else {
 		account = account2.NewStsAccount(c.AccessId, c.AccessKey, c.StsToken)
@@ -196,7 +196,8 @@ func (c *Config) FormatDSN() (string, error) {
 	if strings.TrimSpace(c.ProjectName) == "" {
 		return "", errors.New("project name is not set")
 	}
-	if (c.AccessId == "") != (c.AccessKey == "") || (c.AccessId == "" && c.StsToken != "") {
+	explicit := c.AccessId != "" || c.AccessKey != "" || strings.TrimSpace(c.StsToken) != ""
+	if explicit && (strings.TrimSpace(c.AccessId) == "" || strings.TrimSpace(c.AccessKey) == "") {
 		return "", errors.New("incomplete explicit ODPS credentials")
 	}
 	if c.TunnelEndpoint != "" {
@@ -223,7 +224,7 @@ func (c *Config) FormatDSN() (string, error) {
 		values.Del(key)
 	}
 	values.Set("project", c.ProjectName)
-	if c.StsToken != "" {
+	if strings.TrimSpace(c.StsToken) != "" {
 		values.Set("stsToken", c.StsToken)
 	}
 	if c.HttpTimeout > 0 {

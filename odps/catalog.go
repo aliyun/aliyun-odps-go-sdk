@@ -538,3 +538,95 @@ func (f FunctionCatalog) Get(ctx context.Context, ref FunctionRef) (FunctionMeta
 		SQLDefinition: m.SQLDefinitionText, Language: m.ProgramLanguage,
 	}, nil
 }
+
+// InstanceSummary contains the status and identity reported by the job catalog.
+type InstanceSummary struct {
+	Ref       SQLJobRef
+	Owner     string
+	Status    InstanceStatus
+	StartTime time.Time
+	EndTime   time.Time
+}
+
+// InstanceListOptions filters jobs in the client's project.
+type InstanceListOptions struct {
+	PageOptions
+	Status     InstanceStatus
+	OnlyOwner  bool
+	QuotaIndex string
+	StartTime  time.Time
+	EndTime    time.Time
+}
+
+// InstanceCatalog lists jobs in the client's project.
+type InstanceCatalog struct{ client *Client }
+
+// Instances provides paginated job metadata. Use ResumeSQL to act on a listed SQL job.
+func (c *Client) Instances() InstanceCatalog { return InstanceCatalog{client: c} }
+
+type instanceListModel struct {
+	Name      string
+	Owner     string
+	StartTime common.GMTTime
+	EndTime   common.GMTTime
+	Status    InstanceStatus
+}
+
+func instancesPage(ctx context.Context, client restclient.RestClient, project string, q url.Values) (Page[instanceListModel], error) {
+	var result struct {
+		XMLName   xml.Name            `xml:"Instances"`
+		Instances []instanceListModel `xml:"Instance"`
+		Marker    string
+	}
+	rb := common.NewResourceBuilder(project)
+	err := client.GetWithModelContext(ctx, rb.Instances(), q, nil, &result)
+	return Page[instanceListModel]{Items: result.Instances, NextPageToken: result.Marker}, err
+}
+
+// ListPage returns one page of jobs in the client's project.
+func (i InstanceCatalog) ListPage(ctx context.Context, opts InstanceListOptions) (Page[InstanceSummary], error) {
+	q, err := pageQuery(opts.PageOptions, "", "")
+	if err != nil {
+		return Page[InstanceSummary]{}, err
+	}
+	if opts.Status < 0 || opts.Status >= InstanceStatusUnknown {
+		return Page[InstanceSummary]{}, fmt.Errorf("invalid instance status filter")
+	}
+	InstanceFilter.Status(opts.Status)(q)
+	q.Set("onlyowner", "no")
+	if opts.OnlyOwner {
+		q.Set("onlyowner", "yes")
+	}
+	if opts.QuotaIndex != "" {
+		InstanceFilter.QuotaIndex(opts.QuotaIndex)(q)
+	}
+	if opts.StartTime.IsZero() != opts.EndTime.IsZero() || opts.EndTime.Before(opts.StartTime) {
+		return Page[InstanceSummary]{}, fmt.Errorf("require both start and end time in ascending order")
+	}
+	if !opts.StartTime.IsZero() {
+		InstanceFilter.TimeRange(opts.StartTime, opts.EndTime)(q)
+	}
+
+	project := i.client.Scope().Project
+	raw, err := instancesPage(ctx, i.client.RestClient(), project, q)
+	if err != nil {
+		return Page[InstanceSummary]{}, err
+	}
+	items := make([]InstanceSummary, 0, len(raw.Items))
+	for _, m := range raw.Items {
+		items = append(items, InstanceSummary{
+			Ref: SQLJobRef{Project: project, InstanceID: m.Name}, Owner: m.Owner, Status: m.Status,
+			StartTime: time.Time(m.StartTime), EndTime: time.Time(m.EndTime),
+		})
+	}
+	return Page[InstanceSummary]{Items: items, NextPageToken: raw.NextPageToken}, nil
+}
+
+// List iterates jobs lazily. An early break prevents further requests.
+func (i InstanceCatalog) List(ctx context.Context, opts InstanceListOptions) iter.Seq2[InstanceSummary, error] {
+	return listPages(ctx, opts.PageToken, func(token string) (Page[InstanceSummary], error) {
+		current := opts
+		current.PageToken = token
+		return i.ListPage(ctx, current)
+	})
+}

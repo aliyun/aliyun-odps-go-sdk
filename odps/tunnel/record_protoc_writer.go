@@ -37,6 +37,7 @@ type RecordProtocWriter struct {
 	crcOfCrc            Crc32CheckSum // crc of record crc
 	count               int64
 	closed              bool
+	writeErr            error
 }
 
 func newRecordProtocWriter(w io.WriteCloser, columns []tableschema.Column, shouldTransformDate bool) RecordProtocWriter {
@@ -65,14 +66,20 @@ func newRecordProtocHttpWriter(conn *httpConnection, columns []tableschema.Colum
 }
 
 func (r *RecordProtocWriter) Write(record data.Record) error {
-	err := r.write(record)
-	return errors.WithStack(err)
-}
-
-func (r *RecordProtocWriter) write(record data.Record) error {
 	if r.closed {
 		return errors.New("cannot write to a closed RecordProtocWriter")
 	}
+	if r.writeErr != nil {
+		return r.writeErr
+	}
+	if err := r.validateRecord(record); err != nil {
+		return errors.WithStack(err)
+	}
+	r.writeErr = errors.WithStack(r.writeRecord(record))
+	return r.writeErr
+}
+
+func (r *RecordProtocWriter) validateRecord(record data.Record) error {
 	if record.Len() > len(r.columns) {
 		return errors.New("record values are more than schema")
 	}
@@ -90,6 +97,10 @@ func (r *RecordProtocWriter) write(record data.Record) error {
 			return errors.Wrapf(err, "column %q", col.Name)
 		}
 	}
+	return nil
+}
+
+func (r *RecordProtocWriter) writeRecord(record data.Record) error {
 	for i, value := range record {
 		value = wireValue(value)
 		if value == nil {
@@ -372,6 +383,10 @@ func (r *RecordProtocWriter) close() (err error) {
 		}
 	}()
 
+	if r.writeErr != nil {
+		return r.writeErr
+	}
+
 	err = r.protocWriter.WriteTag(MetaCount, protowire.VarintType)
 	if err != nil {
 		return errors.WithStack(err)
@@ -406,7 +421,7 @@ func (r *RecordProtocWriter) Close() error {
 	if r.httpRes != nil {
 		closeHttpError := errors.WithStack(r.httpRes.closeRes())
 
-		if closeHttpError != nil {
+		if err == nil && closeHttpError != nil {
 			return errors.WithStack(closeHttpError)
 		}
 	}

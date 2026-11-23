@@ -144,6 +144,12 @@ func (is *InstanceResultDownloadSession) ShouldTransformDate() bool {
 	return is.shouldTransformDate
 }
 
+// CloseIdleConnections closes SDK-owned connections for the result session.
+// Active readers and caller-owned transports remain usable.
+func (is *InstanceResultDownloadSession) CloseIdleConnections() {
+	is.RestClient.CloseIdleConnections()
+}
+
 func (is *InstanceResultDownloadSession) ResourceUrl() string {
 	rb := common.NewResourceBuilder(is.ProjectName)
 	return rb.Instance(is.InstanceId)

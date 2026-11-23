@@ -124,3 +124,37 @@ func TestDecimalScannerPreservesScale(t *testing.T) {
 	require.Equal(t, "-1.020", (*data.Decimal)(&d).String())
 	require.Equal(t, 3, (*data.Decimal)(&d).Scale())
 }
+
+func TestCompatibilityScannersKeepWideDecimalAndNumericRanges(t *testing.T) {
+	const exact = "-123456789012345678901234567890123456789.020"
+	column := tableschema.Column{Name: "decimal_value", Type: datatype.NewDecimalType(45, 3)}
+	reader := &rowsReader{
+		columns: []tableschema.Column{column},
+		inner:   &fakeRecordReader{records: []data.Record{{data.NewDecimal(45, 3, exact)}}},
+	}
+	values := make([]driver.Value, 1)
+	require.NoError(t, reader.Next(values))
+	require.Equal(t, exact, values[0])
+	var core data.Decimal
+	require.NoError(t, core.Scan(values[0]))
+	require.Equal(t, exact, core.String())
+	require.Equal(t, 3, core.Scale())
+	var compat Decimal
+	require.NoError(t, compat.Scan(values[0]))
+	require.Equal(t, exact, (*data.Decimal)(&compat).String())
+	require.Error(t, compat.Scan("invalid"))
+	require.NoError(t, compat.Scan(nil))
+	require.False(t, (*data.Decimal)(&compat).Valid)
+	require.NoError(t, reader.Close())
+
+	var small NullInt16
+	require.NoError(t, small.Scan(int16(7)))
+	require.ErrorContains(t, small.Scan(int64(1<<16)), "SMALLINT")
+	var tiny NullInt8
+	require.NoError(t, tiny.Scan(int8(7)))
+	require.ErrorContains(t, tiny.Scan(int64(128)), "TINYINT")
+	var single NullFloat32
+	require.NoError(t, single.Scan(float64(1.25)))
+	require.Equal(t, float32(1.25), single.Float32)
+	require.ErrorContains(t, single.Scan(float64(1e100)), "FLOAT")
+}

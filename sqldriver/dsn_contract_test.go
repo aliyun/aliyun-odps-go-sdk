@@ -76,3 +76,26 @@ func TestParseDSNUsesCredentialsFromOneSource(t *testing.T) {
 		require.NotContains(t, err.Error(), "explicit-secret")
 	}
 }
+
+func TestDSNCredentialWhitespaceAndInvalidRoute(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "fixture-id")
+	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "fixture-secret")
+	t.Setenv("ALIBABA_CLOUD_SECURITY_TOKEN", "  \t")
+	dsn := "https://api.example.test/api?project=fixture"
+	config, err := ParseDSN(dsn)
+	require.NoError(t, err)
+	require.Empty(t, config.StsToken)
+	for _, invalid := range []string{
+		"/api?project=fixture",
+		dsn + "&tcpConnectionTimeout=invalid",
+		dsn + "&tunnelEndpoint=ftp%3A%2F%2Fexample.test",
+	} {
+		_, err := ParseDSN(invalid)
+		require.Error(t, err)
+	}
+	for _, idOrKey := range []struct{ id, key string }{{"  ", "real-key"}, {"real-id", "\t"}} {
+		config.AccessId, config.AccessKey = idOrKey.id, idOrKey.key
+		_, err := config.FormatDSN()
+		require.ErrorContains(t, err, "incomplete explicit")
+	}
+}

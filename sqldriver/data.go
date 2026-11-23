@@ -75,14 +75,6 @@ func (n *NullTimeStampNtz) Scan(value interface{}) error {
 }
 
 func (n *Decimal) Scan(value interface{}) error {
-	if text, ok := value.(string); ok {
-		decimal, err := data.DecimalFromStr(text)
-		if err != nil {
-			return err
-		}
-		*n = Decimal(*decimal)
-		return nil
-	}
 	return (*data.Decimal)(n).Scan(value)
 }
 

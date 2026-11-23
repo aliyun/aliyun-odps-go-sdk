@@ -50,7 +50,8 @@ func ParseDSN(dsn string) (*Config, error) {
 	if err != nil {
 		return nil, errors.New("invalid query parameters in ODPS DSN")
 	}
-	for _, key := range []string{"project", "stsToken", "tcpConnectionTimeout", "httpTimeout", "tunnelEndpoint", "tunnelQuotaName", "enableLogview"} {
+	reserved := []string{"project", "stsToken", "tcpConnectionTimeout", "httpTimeout", "tunnelEndpoint", "tunnelQuotaName", "enableLogview"}
+	for _, key := range reserved {
 		if len(params[key]) > 1 {
 			return nil, fmt.Errorf("duplicate %s in ODPS DSN", key)
 		}
@@ -79,6 +80,9 @@ func ParseDSN(dsn string) (*Config, error) {
 		config.AccessKey = os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
 		config.StsToken = os.Getenv("ALIBABA_CLOUD_SECURITY_TOKEN")
 	}
+	if strings.TrimSpace(config.StsToken) == "" {
+		config.StsToken = ""
+	}
 	if strings.TrimSpace(config.AccessId) == "" {
 		return nil, errors.New("AccessId is not set")
 	}
@@ -105,7 +109,7 @@ func ParseDSN(dsn string) (*Config, error) {
 	if v := params.Get("enableLogview"); v != "" {
 		config.Others["enableLogview"] = v
 	}
-	for _, key := range []string{"project", "stsToken", "tcpConnectionTimeout", "httpTimeout", "tunnelEndpoint", "tunnelQuotaName", "enableLogview"} {
+	for _, key := range reserved {
 		params.Del(key)
 	}
 	config.Hints = make(map[string]string, len(params))

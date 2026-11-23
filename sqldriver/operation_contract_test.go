@@ -332,3 +332,24 @@ func TestDatabaseSQLBindsBeforeSubmissionAndPingsProject(t *testing.T) {
 	require.ErrorIs(t, db.PingContext(ctx), context.Canceled)
 	require.EqualValues(t, 2, pings.Load())
 }
+
+func TestConnectorValidatesInputAndUsesBorrowedClient(t *testing.T) {
+	_, err := NewConnector(nil, ConnectorOptions{})
+	require.ErrorContains(t, err, "ODPS client")
+	f := newFakeService(t)
+	old := f.config()
+	client, err := odps.NewClient(old.GenAccount(), odps.ClientOptions{Endpoint: old.Endpoint, Project: old.ProjectName})
+	require.NoError(t, err)
+	t.Cleanup(client.CloseIdleConnections)
+	_, err = NewConnector(client, ConnectorOptions{TunnelEndpoint: "ftp://example.test"})
+	require.ErrorContains(t, err, "Tunnel endpoint")
+	connector, err := NewConnector(client, ConnectorOptions{TunnelEndpoint: f.tunnel.URL})
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err = connector.Connect(ctx)
+	require.ErrorIs(t, err, context.Canceled)
+	db := sql.OpenDB(connector)
+	require.NoError(t, db.Close())
+	require.False(t, connector.ownsClient)
+}
