@@ -21,6 +21,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	datatype2 "github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
@@ -28,6 +29,11 @@ import (
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 )
 
+// Every object this suite creates is named through livetest.Fixture, so the
+// creator, the readers in the other test files and the cleanup below all agree
+// on one name per run. With MAXCOMPUTE_LIVE_RUN_ID unset the names are the
+// historical ones and dropRunScopedFixtures does nothing, which leaves a
+// fixture a human created alone.
 var (
 	account            = account2.AccountFromEnv()
 	endpoint           = restclient.LoadEndpointFromEnv()
@@ -44,8 +50,8 @@ func init() {
 	// odpsIns.SetDefaultProjectName("odps_smoke_test")
 	odpsIns.SetDefaultProjectName(defaultProjectName)
 	// 在这里初始化表、分区等
-	createUserTable("user")
-	createUserTable("user_temp")
+	createUserTable(livetest.Fixture("user"))
+	createUserTable(livetest.Fixture("user_temp"))
 	createTableWithComplexData()
 	createSaleDetailTable()
 	createTestSchema()
@@ -117,7 +123,7 @@ func createTableWithComplexData() {
 	}
 
 	builder := tableschema.NewSchemaBuilder()
-	builder.Name("has_struct").Columns(column)
+	builder.Name(livetest.Fixture("has_struct")).Columns(column)
 	schema := builder.Build()
 
 	hints := make(map[string]string)
@@ -156,7 +162,7 @@ func createSaleDetailTable() {
 	}
 
 	builder := tableschema.NewSchemaBuilder()
-	builder.Name("sale_detail").
+	builder.Name(livetest.Fixture("sale_detail")).
 		Columns(c1, c2, c3).
 		PartitionColumns(p1, p2).
 		Lifecycle(2)
@@ -174,23 +180,81 @@ func createSaleDetailTable() {
 
 func createTestSchema() {
 	schemas := odps.NewSchemas(odpsIns, defaultProjectName)
-	err := schemas.Create("exist_schema", true, "create by ut")
+	err := schemas.Create(livetest.Fixture("exist_schema"), true, "create by ut")
 	if err != nil {
 		log.Fatalf("%+v", err)
 		return
 	}
 
 	// create some tables in exist_schema
-	tables := odps.NewTables(odpsIns, defaultProjectName, "exist_schema")
+	table := livetest.Fixture("exist_schema")
+	tables := odps.NewTables(odpsIns, defaultProjectName, table)
 	c := tableschema.Column{
 		Name: "name",
 		Type: datatype2.StringType,
 	}
 	schemaBuilder := tableschema.NewSchemaBuilder()
-	err = tables.Create(schemaBuilder.Name("table1").Column(c).Build(), true, nil, nil)
-	err = tables.Create(schemaBuilder.Name("table2").Build(), true, nil, nil)
+	err = tables.Create(schemaBuilder.Name(livetest.Fixture("table1")).Column(c).Build(), true, nil, nil)
+	err = tables.Create(schemaBuilder.Name(livetest.Fixture("table2")).Build(), true, nil, nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
 		return
 	}
+}
+
+// dropRunScopedFixtures removes the objects created above once the run is
+// done. It only ever drops namespaced names: without a namespace the names
+// point at the shared fixtures other people's runs may still be using, and
+// deleting those would be the very hazard this file is about.
+func dropRunScopedFixtures() []string {
+	if livetest.RunID() == "" {
+		return nil
+	}
+
+	failures := []string{}
+	defaultTables := odps.NewTables(odpsIns, defaultProjectName, "")
+	for _, name := range []string{
+		livetest.Fixture("user"),
+		livetest.Fixture("user_temp"),
+		livetest.Fixture("has_struct"),
+		livetest.Fixture("sale_detail"),
+	} {
+		if err := defaultTables.Delete(name, true); err != nil {
+			failures = append(failures, "drop table "+name+": "+err.Error())
+		}
+	}
+
+	schemaTables := odps.NewTables(odpsIns, defaultProjectName, livetest.Fixture("exist_schema"))
+	for _, name := range []string{livetest.Fixture("table1"), livetest.Fixture("table2")} {
+		if err := schemaTables.Delete(name, true); err != nil {
+			failures = append(failures, "drop table "+livetest.Fixture("exist_schema")+"."+name+": "+err.Error())
+		}
+	}
+
+	schemas := odps.NewSchemas(odpsIns, defaultProjectName)
+	if err := schemas.Delete(livetest.Fixture("exist_schema")); err != nil {
+		failures = append(failures, "drop schema "+livetest.Fixture("exist_schema")+": "+err.Error())
+	}
+	return failures
+}
+
+// TestMain keeps the offline behaviour untouched: with the live gate closed
+// nothing here contacts a service, so it is m.Run() and its exit code exactly
+// as before. With the gate open, the fixtures this package created in init are
+// dropped once the tests finish.
+//
+// A failed drop is reported on stdout but does not change the exit code. The
+// run that just executed its assertions is the thing this suite grades; a
+// leftover namespaced table is noise someone can read, not evidence that the
+// SDK misbehaved.
+func TestMain(m *testing.M) {
+	code := m.Run()
+
+	if liveServiceEnabled() && os.Getenv(livetest.EnvKeepFixtures) != "1" {
+		for _, failure := range dropRunScopedFixtures() {
+			println("live fixture cleanup: " + failure)
+		}
+	}
+
+	os.Exit(code)
 }

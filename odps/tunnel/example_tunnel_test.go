@@ -19,6 +19,8 @@ package tunnel_test
 import (
 	"log"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
+
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
@@ -26,6 +28,10 @@ import (
 	tunnel2 "github.com/aliyun/aliyun-odps-go-sdk/odps/tunnel"
 )
 
+// The table "test" and the schema "new_Schema" below are preconditions of the
+// regression project, not fixtures of a run: nothing in this repository creates
+// them, so they stay spelled as they are and an unprovisioned project fails
+// here rather than silently testing a name nobody made.
 func ExampleTunnel_CreateUploadSession_withSchema() {
 	session, err := tunnelIns.CreateUploadSession(ProjectName, "test",
 		tunnel2.SessionCfg.WithSchemaName("new_Schema"),
@@ -76,7 +82,7 @@ func ExampleTunnel_CreateDownloadSession_withSchema() {
 }
 
 func ExampleTunnel_Preview() {
-	tableName := "ExampleTunnel_Preview"
+	tableName := livetest.Fixture("ExampleTunnel_Preview")
 	exists, err := odpsIns.Tables().Get(tableName).Exists()
 	if err != nil {
 		log.Fatalf("%+v", err)

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
@@ -39,11 +40,14 @@ func ExampleTables_List() {
 
 func ExampleTables_BatchLoadTables() {
 	tablesIns := odps.NewTables(odpsIns, "", "")
+	// "testtable" stays bare on purpose: nothing in this suite creates it, so it
+	// is a property of the regression project rather than a fixture of the run,
+	// and namespacing it would only hide that.
 	tableNames := []string{
-		"has_struct",
-		"sale_detail",
+		livetest.Fixture("has_struct"),
+		livetest.Fixture("sale_detail"),
 		"testtable",
-		"user",
+		livetest.Fixture("user"),
 	}
 
 	tables, err := tablesIns.BatchLoadTables(tableNames)
@@ -95,7 +99,7 @@ func ExampleTables_Create() {
 	hints["odps.namespace.schema"] = "false"
 
 	builder := tableschema.NewSchemaBuilder()
-	builder.Name("user_temp").
+	builder.Name(livetest.Fixture("user_temp")).
 		Comment("这就是一条注释").
 		Columns(c1, c2).
 		PartitionColumns(p1, p2).
@@ -114,7 +118,7 @@ func ExampleTables_Create() {
 
 func ExampleTables_Delete() {
 	tables := odps.NewTables(odpsIns, odpsIns.DefaultProjectName(), "")
-	err := tables.Delete("user_temp", false)
+	err := tables.Delete(livetest.Fixture("user_temp"), false)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

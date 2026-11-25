@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 )
 
@@ -35,18 +36,25 @@ func TestSchemas_ListWithFilter(t *testing.T) {
 	requireLiveService(t)
 	schemas := odps.NewSchemas(odpsIns, defaultProjectName)
 
+	// The filter has to point at this run's schemas. Unscoped, that is the
+	// historical prefix the shared fixtures were filed under; scoped, it is the
+	// namespace, so the callback has something of ours to look at either way.
+	prefix := livetest.RunID()
+	if prefix == "" {
+		prefix = "new"
+	}
 	schemas.ListWithFilter(func(schema *odps.Schema, err error) {
 		if err != nil {
 			t.Logf("Error (may be expected): %+v", err)
 			return
 		}
 		t.Logf("Schema name: %s", schema.Name())
-	}, odps.SchemaFilter.NamePrefix("new"))
+	}, odps.SchemaFilter.NamePrefix(prefix))
 }
 
 func TestSchemas_GetSchema(t *testing.T) {
 	requireLiveService(t)
-	schema := odps.NewSchema(odpsIns, defaultProjectName, "exist_schema")
+	schema := odps.NewSchema(odpsIns, defaultProjectName, livetest.Fixture("exist_schema"))
 	err := schema.Load()
 	if err != nil {
 		t.Fatalf("%+v", err)
@@ -56,7 +64,7 @@ func TestSchemas_GetSchema(t *testing.T) {
 
 func TestSchemas_ListTableBySchema(te *testing.T) {
 	requireLiveService(te)
-	ts := odps.NewTables(odpsIns, defaultProjectName, "exist_schema")
+	ts := odps.NewTables(odpsIns, defaultProjectName, livetest.Fixture("exist_schema"))
 	f := func(t *odps.Table, err error) {
 		if err != nil {
 			te.Fatalf("%+v", err)
@@ -70,13 +78,19 @@ func TestSchemas_ListTableBySchema(te *testing.T) {
 func TestSchemas_CheckExists(t *testing.T) {
 	requireLiveService(t)
 	schemas := odps.NewSchemas(odpsIns, defaultProjectName)
-	schema := schemas.Get("not_exists")
+	// not_exists is the fixture this suite asserts is absent. Naming it through
+	// the same rule as the created fixtures is what makes that assertion mean
+	// something: a leftover object from an unscoped run cannot answer for it.
+	schema := schemas.Get(livetest.Fixture("not_exists"))
 	exists, err := schema.Exists()
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
+	if exists {
+		t.Errorf("%s exists, the test needs an absent schema", livetest.Fixture("not_exists"))
+	}
 
-	schema = odps.NewSchema(odpsIns, defaultProjectName, "exist_schema")
+	schema = odps.NewSchema(odpsIns, defaultProjectName, livetest.Fixture("exist_schema"))
 	exists, err = schema.Exists()
 	if err != nil {
 		t.Fatalf("%+v", err)
@@ -87,12 +101,18 @@ func TestSchemas_CheckExists(t *testing.T) {
 func TestSchemas_CreateSchema(t *testing.T) {
 	requireLiveService(t)
 	schemas := odps.NewSchemas(odpsIns, defaultProjectName)
-	err := schemas.Create("new_schema", true, "new comment")
+	created := livetest.Fixture("new_schema")
+	err := schemas.Create(created, true, "new comment")
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
+	t.Cleanup(func() {
+		if err := schemas.Delete(created); err != nil {
+			println("live fixture cleanup: drop schema " + created + ": " + err.Error())
+		}
+	})
 
-	schema := odps.NewSchema(odpsIns, defaultProjectName, "new_schema")
+	schema := odps.NewSchema(odpsIns, defaultProjectName, created)
 	schema.Load()
 	println(schema.Comment())
 }
@@ -101,13 +121,14 @@ func TestSchemas_DeleteSchema(t *testing.T) {
 	requireLiveService(t)
 	schemas := odps.NewSchemas(odpsIns, defaultProjectName)
 
-	err := schemas.Create("to_delete_schema", true, "to delete")
+	target := livetest.Fixture("to_delete_schema")
+	err := schemas.Create(target, true, "to delete")
 
-	schema := odps.NewSchema(odpsIns, defaultProjectName, "to_delete_schema")
+	schema := odps.NewSchema(odpsIns, defaultProjectName, target)
 	exists, err := schema.Exists()
 	print(exists)
 
-	err = schemas.Delete("to_delete_schema")
+	err = schemas.Delete(target)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}

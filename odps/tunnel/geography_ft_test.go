@@ -21,6 +21,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
@@ -37,7 +38,7 @@ import (
 func TestGeographyEndToEnd(t *testing.T) {
 	requireLiveTunnel(t)
 
-	tableName := "odps_sdk_geography_test_go"
+	tableName := livetest.Fixture("odps_sdk_geography_test_go")
 	hints := map[string]string{"odps.sql.type.system.odps2": "true"}
 
 	tables := odpsIns.Tables()

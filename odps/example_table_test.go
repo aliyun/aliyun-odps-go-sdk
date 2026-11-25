@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
 )
@@ -58,7 +59,7 @@ func ExampleTableSchema_ToSQLString() {
 	jars := []string{"odps-udf-example.jar", "another.jar"}
 
 	builder := tableschema.NewSchemaBuilder()
-	builder.Name("user").
+	builder.Name(livetest.Fixture("user")).
 		Comment("这就是一条注释").
 		Columns(c1, c2).
 		PartitionColumns(p1, p2).
@@ -91,7 +92,7 @@ func ExampleTableSchema_ToSQLString() {
 }
 
 func ExampleTable_Load() {
-	table := odpsIns.Table("has_struct")
+	table := odpsIns.Table(livetest.Fixture("has_struct"))
 	err := table.Load()
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -102,7 +103,7 @@ func ExampleTable_Load() {
 }
 
 func ExampleTable_AddPartition() {
-	table := odpsIns.Table("sale_detail")
+	table := odpsIns.Table(livetest.Fixture("sale_detail"))
 	err := table.AddPartition(true, "sale_date=202111/region=hangzhou")
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -110,7 +111,7 @@ func ExampleTable_AddPartition() {
 }
 
 func ExampleTable_GetPartitions() {
-	table := odpsIns.Table("sale_detail")
+	table := odpsIns.Table(livetest.Fixture("sale_detail"))
 	partitions, err := table.GetPartitions()
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -127,9 +128,9 @@ func ExampleTable_GetPartitions() {
 
 func ExampleTable_ExecSql() {
 	// table := odps.NewTable(odpsIns, "go_sdk_regression_testing", "sale_detail")
-	table := odpsIns.Table("has_struct")
+	table := odpsIns.Table(livetest.Fixture("has_struct"))
 	// instance, err := table.ExecSql("SelectSale_detail", "select * from sale_detail;")
-	instance, err := table.ExecSql("Select_has_struct", "select * from has_struct;")
+	instance, err := table.ExecSql("Select_has_struct", fmt.Sprintf("select * from %s;", livetest.Fixture("has_struct")))
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

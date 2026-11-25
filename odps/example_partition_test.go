@@ -20,16 +20,18 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 )
 
 func ExamplePartition_Load() {
-	err := odpsIns.Table("sale_detail").AddPartitions(true, []string{"sale_date=201910/region=shanghai"})
+	saleDetail := livetest.Fixture("sale_detail")
+	err := odpsIns.Table(saleDetail).AddPartitions(true, []string{"sale_date=201910/region=shanghai"})
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
 
-	partition := odps.NewPartition(odpsIns, defaultProjectName, "", "sale_detail", "sale_date=201910/region=shanghai")
+	partition := odps.NewPartition(odpsIns, defaultProjectName, "", saleDetail, "sale_date=201910/region=shanghai")
 	err = partition.Load()
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -41,12 +43,13 @@ func ExamplePartition_Load() {
 }
 
 func ExamplePartition_LoadExtended() {
-	err := odpsIns.Table("sale_detail").AddPartitions(true, []string{"sale_date=201910/region=shanghai"})
+	saleDetail := livetest.Fixture("sale_detail")
+	err := odpsIns.Table(saleDetail).AddPartitions(true, []string{"sale_date=201910/region=shanghai"})
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
 
-	partition := odps.NewPartition(odpsIns, defaultProjectName, "", "sale_detail", "sale_date=201910/region=shanghai")
+	partition := odps.NewPartition(odpsIns, defaultProjectName, "", saleDetail, "sale_date=201910/region=shanghai")
 	err = partition.LoadExtended()
 	if err != nil {
 		log.Fatalf("%+v", err)
