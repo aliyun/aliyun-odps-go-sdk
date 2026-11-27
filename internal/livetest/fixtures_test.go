@@ -17,10 +17,13 @@
 package livetest
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
 )
+
+var validPrefix = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
 func env(values map[string]string) func(string) (string, bool) {
 	return func(key string) (string, bool) {
@@ -47,47 +50,111 @@ func TestUnsetNamespaceKeepsTheLegacyNames(t *testing.T) {
 }
 
 func TestExplicitRunIDNamespacesEveryFixture(t *testing.T) {
-	lookup := env(map[string]string{EnvRunID: "nightly-7"})
+	lookup := env(map[string]string{EnvRunID: "nightly7"})
 
-	if got := RunIDFrom(lookup); got != "nightly_7" {
-		t.Fatalf("RunIDFrom() = %q, want nightly_7", got)
+	if got := RunIDFrom(lookup); got != "nightly7" {
+		t.Fatalf("RunIDFrom() = %q, want nightly7", got)
 	}
 	for _, base := range Bases() {
-		want := "nightly_7_" + base
+		want := "nightly7_" + base
 		if got := FixtureFrom(lookup, base); got != want {
 			t.Errorf("FixtureFrom(_, %q) = %q, want %q", base, got, want)
 		}
 	}
 }
 
-// TestGitHubIdentitySeparatesRunsAndJobs covers why the Actions fallback folds
-// in the attempt and the job: two runs of the same workflow must not share a
-// namespace, and neither must two jobs of one run, because a workflow_dispatch
-// live run and a push run can overlap.
-func TestGitHubIdentitySeparatesRunsAndJobs(t *testing.T) {
-	cases := []struct {
-		name   string
-		env    map[string]string
-		prefix string
-	}{
-		{"run and job", map[string]string{"GITHUB_RUN_ID": "1234", "GITHUB_JOB": "live"}, "r1234_live"},
-		{"attempt separates a rerun", map[string]string{"GITHUB_RUN_ID": "1234", "GITHUB_RUN_ATTEMPT": "2", "GITHUB_JOB": "live"}, "r1234_2_live"},
-		{"job separates matrix legs", map[string]string{"GITHUB_RUN_ID": "1234", "GITHUB_JOB": "live-tunnel"}, "r1234_live_tunnel"},
-		{"run id alone still namespaces", map[string]string{"GITHUB_RUN_ID": "1234"}, "r1234"},
+// TestLossyIdentityKeepsItsOwnDigest covers the alias problem: two spellings of
+// one readable prefix must not become one namespace.
+func TestLossyIdentityKeepsItsOwnDigest(t *testing.T) {
+	pairs := [][2]string{
+		{"ci-a", "ci_a"},
+		{"CI-42", "ci-42"},
+		{"run.7", "run-7"},
+	}
+	for _, pair := range pairs {
+		first, second := Sanitize(pair[0]), Sanitize(pair[1])
+		if first == "" || second == "" {
+			t.Fatalf("Sanitize(%q)=%q, Sanitize(%q)=%q, both must be usable", pair[0], first, pair[1], second)
+		}
+		if first == second {
+			t.Errorf("%q and %q collapse to the namespace %q", pair[0], pair[1], first)
+		}
+		if strings.Split(first, "_")[0] != strings.Split(second, "_")[0] {
+			t.Errorf("%q and %q should share a readable prefix, got %q and %q", pair[0], pair[1], first, second)
+		}
 	}
 
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			if got := RunIDFrom(env(c.env)); got != c.prefix {
-				t.Errorf("RunIDFrom() = %q, want %q", got, c.prefix)
-			}
-		})
+	// Truncation is the other way a readable prefix loses information.
+	long := strings.Repeat("identity", 12)
+	if Sanitize(long) == Sanitize(long[:len(long)-20]) {
+		t.Error("a truncated identity must not reuse the shorter identity's namespace")
+	}
+	if Sanitize(long) != Sanitize(long) {
+		t.Error("Sanitize must be deterministic, or a run cannot clean up its own fixtures")
+	}
+}
+
+// TestGitHubIdentitySeparatesRunsAttemptsAndJobs pins what the Actions fallback
+// really separates: a different run, a different attempt, or a different job id.
+// It does NOT separate matrix legs - GITHUB_JOB is the job_id and every leg of
+// that job reports the same one - which is what the leg cases below document.
+func TestGitHubIdentitySeparatesRunsAttemptsAndJobs(t *testing.T) {
+	identities := []map[string]string{
+		{"GITHUB_RUN_ID": "1234", "GITHUB_JOB": "live"},
+		{"GITHUB_RUN_ID": "1234", "GITHUB_RUN_ATTEMPT": "2", "GITHUB_JOB": "live"},
+		{"GITHUB_RUN_ID": "1235", "GITHUB_JOB": "live"},
+		{"GITHUB_RUN_ID": "1234", "GITHUB_JOB": "live-tunnel"},
+		{"GITHUB_RUN_ID": "1234"},
 	}
 
-	first := env(map[string]string{"GITHUB_RUN_ID": "1234", "GITHUB_RUN_ATTEMPT": "1", "GITHUB_JOB": "live"})
-	second := env(map[string]string{"GITHUB_RUN_ID": "1234", "GITHUB_RUN_ATTEMPT": "2", "GITHUB_JOB": "live"})
-	if RunIDFrom(first) == RunIDFrom(second) {
-		t.Error("a rerun must not reuse the previous attempt's namespace")
+	seen := map[string]string{}
+	for _, values := range identities {
+		got := RunIDFrom(env(values))
+		if got == "" {
+			t.Errorf("RunIDFrom(%v) = empty, a hosted run must be namespaced", values)
+			continue
+		}
+		if !validPrefix.MatchString(got) || len(got) > maxPrefixLength {
+			t.Errorf("RunIDFrom(%v) = %q, not a usable prefix", values, got)
+		}
+		key := fmt.Sprint(values)
+		if before, dup := seen[got]; dup {
+			t.Errorf("identities %s and %s share the namespace %q", before, key, got)
+		}
+		seen[got] = key
+	}
+}
+
+// TestMatrixLegsOfOneJobNeedTheIndex covers the gap that the fallback cannot
+// close on its own: two legs of one job have the same run id, attempt and job
+// id, so without a leg discriminator they land in one namespace and their
+// setup and cleanup target the same names. Passing strategy.job-index through
+// MAXCOMPUTE_LIVE_RUN_INDEX separates them, and an explicit run id wins.
+func TestMatrixLegsOfOneJobNeedTheIndex(t *testing.T) {
+	leg := func(index string) map[string]string {
+		values := map[string]string{"GITHUB_RUN_ID": "1234", "GITHUB_RUN_ATTEMPT": "1", "GITHUB_JOB": "live"}
+		if index != "" {
+			values[EnvRunIndex] = index
+		}
+		return values
+	}
+
+	if a, b := RunIDFrom(env(leg(""))), RunIDFrom(env(leg(""))); a != b {
+		t.Errorf("two legs without a discriminator should share a namespace, got %q and %q", a, b)
+	}
+
+	namespaces := map[string]bool{}
+	for _, index := range []string{"0", "1", "2"} {
+		got := RunIDFrom(env(leg(index)))
+		if namespaces[got] {
+			t.Errorf("leg index %s reused namespace %q", index, got)
+		}
+		namespaces[got] = true
+	}
+
+	override := env(map[string]string{EnvRunID: "leg2", EnvRunIndex: "9", "GITHUB_RUN_ID": "1234", "GITHUB_JOB": "live"})
+	if got := RunIDFrom(override); got != "leg2" {
+		t.Errorf("RunIDFrom() = %q, want the explicit run id to win over the fallback", got)
 	}
 }
 
@@ -103,11 +170,16 @@ func TestExplicitRunIDWinsOverGitHub(t *testing.T) {
 	}
 }
 
-func TestSanitizingTheNamespace(t *testing.T) {
+// TestSanitizingTheNamespace pins the character-set rules of the readable part.
+// Identities that survive normalization unchanged keep their shape; the rest get
+// a digest, which TestLossyIdentityKeepsItsOwnDigest covers.
+func TestReadablePrefixRules(t *testing.T) {
 	cases := []struct {
 		raw  string
 		want string
 	}{
+		{"nightly7", "nightly7"},
+		{"a_b", "a_b"},
 		{"CI-42", "ci_42"},
 		{"release/v1.2", "release_v1_2"},
 		{"a  b", "a_b"},
@@ -116,16 +188,25 @@ func TestSanitizingTheNamespace(t *testing.T) {
 		{"0726xmas", "r0726xmas"},
 		{"***", ""},
 		{"", ""},
-		{"用户", ""},
-		{strings.Repeat("v", 60), strings.Repeat("v", maxPrefixLength)},
+		{"\u7528\u6237", ""},
 	}
 
 	for _, c := range cases {
 		t.Run(c.raw, func(t *testing.T) {
-			if got := RunIDFrom(env(map[string]string{EnvRunID: c.raw})); got != c.want {
-				t.Errorf("RunIDFrom() with %q = %q, want %q", c.raw, got, c.want)
+			if got := readablePrefix(c.raw); got != c.want {
+				t.Errorf("readablePrefix(%q) = %q, want %q", c.raw, got, c.want)
 			}
 		})
+	}
+
+	for _, raw := range []string{"CI-42", "release/v1.2", "0726xmas"} {
+		got := Sanitize(raw)
+		if !strings.HasPrefix(got, readablePrefix(raw)) || got == readablePrefix(raw) {
+			t.Errorf("Sanitize(%q) = %q, want the readable prefix %q plus a digest", raw, got, readablePrefix(raw))
+		}
+	}
+	if got := Sanitize("nightly7"); got != "nightly7" {
+		t.Errorf("Sanitize of an already valid prefix = %q, want it left alone", got)
 	}
 }
 
