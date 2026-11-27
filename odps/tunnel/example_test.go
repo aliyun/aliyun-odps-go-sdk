@@ -17,10 +17,12 @@
 package tunnel_test
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"testing"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
@@ -48,6 +50,11 @@ func init() {
 	odpsIns.SetDefaultProjectName(ProjectName)
 	tunnelIns = tunnel.NewTunnel(odpsIns, tunnelEndpoint)
 
+	// These three creators are left unwired on purpose. Their tables are built by
+	// the odps package's live setup under the same livetest.Fixture names, and a
+	// second builder here is how has_struct ended up defined twice in the first
+	// place. Wiring them back means deleting the copy in odps/example_test.go,
+	// not adding a name here.
 	//createTableWithComplexData()
 	//createSaleDetailTable()
 	///createUploadSampleArrowTable()
@@ -68,7 +75,7 @@ func createTableWithComplexData() {
 	}
 
 	builder := tableschema.NewSchemaBuilder()
-	builder.Name("has_struct").Columns(column)
+	builder.Name(livetest.Fixture("has_struct")).Columns(column)
 	schema := builder.Build()
 
 	tables := odps.NewTables(odpsIns, ProjectName, "")
@@ -105,7 +112,7 @@ func createSaleDetailTable() {
 	}
 
 	builder := tableschema.NewSchemaBuilder()
-	builder.Name("sale_detail").
+	builder.Name(livetest.Fixture("sale_detail")).
 		Columns(c1, c2, c3).
 		PartitionColumns(p1, p2).
 		Lifecycle(2)
@@ -119,7 +126,8 @@ func createSaleDetailTable() {
 }
 
 func createUploadSampleArrowTable() {
-	ins, err := odpsIns.ExecSQl("CREATE TABLE IF NOT EXISTS go_sdk_regression_testing.upload_sample_arrow(payload STRING);")
+	ins, err := odpsIns.ExecSQl(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.%s(payload STRING);",
+		ProjectName, livetest.Fixture("upload_sample_arrow")))
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/security"
@@ -47,9 +48,12 @@ func ExampleManager_CheckPermissionV1() {
 	p := security.NewPermission(
 		projectName,
 		security.ObjectTypeTable,
-		"sale_detail",
+		livetest.Fixture("sale_detail"),
 		security.ActionTypeAll,
 	)
+	// The permission check names a table this suite creates in the odps package
+	// under the same run namespace; with no namespace both sides fall back to
+	// the historical shared name, so the pair keeps meaning the same object.
 	p.Params["User"] = "Aliyun$odpstest1@aliyun.com;"
 
 	r, err := sm.CheckPermissionV1(p)
@@ -65,7 +69,7 @@ func ExampleManager_CheckPermissionV0() {
 
 	r, err := sm.CheckPermissionV0(
 		security.ObjectTypeTable,
-		"sale_detail",
+		livetest.Fixture("sale_detail"),
 		security.ActionTypeAll,
 		nil,
 	)

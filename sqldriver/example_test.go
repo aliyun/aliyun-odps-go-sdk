@@ -18,9 +18,11 @@ package sqldriver_test
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"time"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
@@ -60,12 +62,13 @@ func Example() {
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
-	_, err = db.Exec("create table if not exists data_type_demo(ti tinyint, si smallint, i int, bi bigint, b binary, f float, d double);", nil)
+	_, err = db.Exec(fmt.Sprintf("create table if not exists %s(ti tinyint, si smallint, i int, bi bigint, b binary, f float, d double);",
+		livetest.Fixture("data_type_demo")), nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
 
-	rows, err := db.Query("select ti, si, i, bi, b, f, d from data_type_demo;", nil)
+	rows, err := db.Query(fmt.Sprintf("select ti, si, i, bi, b, f, d from %s;", livetest.Fixture("data_type_demo")), nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -118,7 +121,7 @@ func Example_structField() {
 		log.Fatalf("%+v", err)
 	}
 
-	rows, err := db.Query("select struct_field from has_struct;", nil)
+	rows, err := db.Query(fmt.Sprintf("select struct_field from %s;", livetest.Fixture("has_struct")), nil)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -163,8 +166,9 @@ func Example_insert() {
 		log.Fatalf("%+v", err)
 	}
 
-	db.Exec("drop table if exists simple_struct;")
-	db.Exec("create table if not exists simple_struct (col struct<a:int, b:struct<b1:STRING>>);")
+	simpleStructTable := livetest.Fixture("simple_struct")
+	db.Exec(fmt.Sprintf("drop table if exists %s;", simpleStructTable))
+	db.Exec(fmt.Sprintf("create table if not exists %s (col struct<a:int, b:struct<b1:STRING>>);", simpleStructTable))
 
 	type SimpleStruct struct {
 		A int32
@@ -185,8 +189,8 @@ func Example_insert() {
 		log.Fatalf("%+v", err)
 	}
 
-	_, err = db.Exec("insert into simple_struct values (named_struct('a', cast(? as int), 'b', named_struct('b1', ?)));",
-		simpleStruct.A, simpleStruct.B.B1)
+	_, err = db.Exec(fmt.Sprintf("insert into %s values (named_struct('a', cast(? as int), 'b', named_struct('b1', ?)));",
+		simpleStructTable), simpleStruct.A, simpleStruct.B.B1)
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -229,7 +233,8 @@ func Example_createTable() {
 		)),
 	)
 
-	_, err = db.Exec("create table if not exists simple_struct (struct_field " + structType.String() + ");")
+	_, err = db.Exec(fmt.Sprintf("create table if not exists %s (struct_field %s);",
+		livetest.Fixture("simple_struct"), structType.String()))
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

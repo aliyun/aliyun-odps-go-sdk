@@ -21,6 +21,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 )
 
@@ -55,7 +56,7 @@ func ExampleInstances_ListInstancesQueued() {
 
 func ExampleInstances_CreateTask() {
 	instances := odpsIns.Instances()
-	sqlTask := odps.NewSqlTask("hello", "select count(*) from sale_detail;", nil)
+	sqlTask := odps.NewSqlTask("hello", fmt.Sprintf("select count(*) from %s;", livetest.Fixture("sale_detail")), nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -115,7 +116,7 @@ Loop:
 
 func ExampleInstance_Terminate() {
 	instances := odps.NewInstances(odpsIns)
-	sqlTask := odps.NewSqlTask("hello", "select count(*) from user;", nil)
+	sqlTask := odps.NewSqlTask("hello", fmt.Sprintf("select count(*) from %s;", livetest.Fixture("user")), nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -138,7 +139,7 @@ func ExampleInstance_Terminate() {
 
 func ExampleInstance_GetTaskProgress() {
 	instances := odps.NewInstances(odpsIns)
-	sqlTask := odps.NewSqlTask("hello", "select count(*) from sale_detail;", nil)
+	sqlTask := odps.NewSqlTask("hello", fmt.Sprintf("select count(*) from %s;", livetest.Fixture("sale_detail")), nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -169,7 +170,7 @@ func ExampleInstance_GetTaskProgress() {
 
 func ExampleInstance_GetTaskSummary() {
 	instances := odps.NewInstances(odpsIns)
-	sqlTask := odps.NewSqlTask("hello1", "select count(*) from sale_detail;", nil)
+	sqlTask := odps.NewSqlTask("hello1", fmt.Sprintf("select count(*) from %s;", livetest.Fixture("sale_detail")), nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
 	if err != nil {
 		log.Fatalf("%+v", err)
@@ -186,7 +187,7 @@ func ExampleInstance_GetTaskSummary() {
 
 func ExampleInstance_GetCachedInfo() {
 	instances := odps.NewInstances(odpsIns)
-	sqlTask := odps.NewSqlTask("hello1", "select * from user;", nil)
+	sqlTask := odps.NewSqlTask("hello1", fmt.Sprintf("select * from %s;", livetest.Fixture("user")), nil)
 	instance, err := instances.CreateTask(defaultProjectName, &sqlTask)
 	if err != nil {
 		log.Fatalf("%+v", err)

@@ -17,8 +17,10 @@
 package tunnel_test
 
 import (
+	"fmt"
 	"log"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps"
 	account2 "github.com/aliyun/aliyun-odps-go-sdk/odps/account"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
@@ -39,7 +41,7 @@ func Example_tunnel_download_instance_result() {
 		log.Fatalf("%+v", err)
 	}
 
-	ins, err := odpsIns.ExecSQl("select * from data_type_demo;")
+	ins, err := odpsIns.ExecSQl(fmt.Sprintf("select * from %s;", livetest.Fixture("data_type_demo")))
 	if err != nil {
 		log.Fatalf("%+v", err)
 	}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
@@ -15,15 +16,24 @@ import (
 
 func TestUploadSession_Overwrite(t *testing.T) {
 	requireLiveTunnel(t)
-	tableName := "overwrite_test"
+	tableName := livetest.Fixture("overwrite_test")
 	tableSchema := tableschema.NewSchemaBuilder().Name(tableName).Column(
 		tableschema.Column{Name: "c1", Type: datatype.BigIntType},
 	).Column(tableschema.Column{Name: "c2", Type: datatype.StringType}).Build()
 
-	err := odpsIns.Schema(SchemaName).Tables().Create(tableSchema, true, nil, nil)
+	tables := odpsIns.Schema(SchemaName).Tables()
+	err := tables.Create(tableSchema, true, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// This test commits an Overwrite() session and then asserts the table holds
+	// exactly one row. Without dropping the table on the way out, the next run
+	// that shares the name decides what "one row" means.
+	t.Cleanup(func() {
+		if err := tables.Delete(tableName, true); err != nil {
+			println("live fixture cleanup: drop table " + SchemaName + "." + tableName + ": " + err.Error())
+		}
+	})
 
 	session, err := tunnelIns.CreateUploadSession(ProjectName, tableName, tunnel.SessionCfg.WithSchemaName(SchemaName), tunnel.SessionCfg.Overwrite())
 	if err != nil {
@@ -67,7 +77,7 @@ func TestUploadSession_CreatePartition(t *testing.T) {
 	requireLiveTunnel(t)
 	t.Skip("跳过此测试：服务端尚未发布该功能")
 
-	tableName := "upload_create_partition_test"
+	tableName := livetest.Fixture("upload_create_partition_test")
 	tableSchema := tableschema.NewSchemaBuilder().Name(tableName).Column(
 		tableschema.Column{Name: "c1", Type: datatype.BigIntType},
 	).Column(tableschema.Column{Name: "c2", Type: datatype.StringType}).PartitionColumn(tableschema.Column{Name: "p1", Type: datatype.StringType}).Build()
@@ -76,6 +86,11 @@ func TestUploadSession_CreatePartition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := odpsIns.Tables().Delete(tableName, true); err != nil {
+			println("live fixture cleanup: drop table " + tableName + ": " + err.Error())
+		}
+	})
 
 	session, err := tunnelIns.CreateUploadSession(ProjectName, tableName, tunnel.SessionCfg.WithPartitionKey("p1='hello'"), tunnel.SessionCfg.WithCreatePartition())
 	if err != nil {

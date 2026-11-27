@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/restclient"
@@ -16,7 +17,7 @@ import (
 
 func TestStreamUploadSessionTest_SchemaEvolution(t *testing.T) {
 	requireLiveTunnel(t)
-	tableName := "TestStreamUploadSessionTest_SchemaEvolution"
+	tableName := livetest.Fixture("TestStreamUploadSessionTest_SchemaEvolution")
 
 	column1 := tableschema.Column{
 		Name: "id",
@@ -27,10 +28,19 @@ func TestStreamUploadSessionTest_SchemaEvolution(t *testing.T) {
 		Type: datatype.StringType,
 	}
 	tableSchema := tableschema.NewSchemaBuilder().Columns(column1, column2).Name(tableName).Build()
-	err := odpsIns.Table(tableName).Delete()
+	// Clear a leftover from an earlier run of this namespace. Two things changed
+	// here on purpose: the delete tolerates the table being absent, and the
+	// failure is reported to this test instead of log.Fatalf, which used to
+	// terminate the whole test binary and take every other result with it.
+	err := odpsIns.Tables().Delete(tableName, true)
 	if err != nil {
-		log.Fatalf("%+v", err)
+		t.Fatalf("drop leftover %s: %+v", tableName, err)
 	}
+	t.Cleanup(func() {
+		if err := odpsIns.Tables().Delete(tableName, true); err != nil {
+			println("live fixture cleanup: drop table " + tableName + ": " + err.Error())
+		}
+	})
 
 	err2 := odpsIns.Tables().Create(tableSchema, true, nil, nil)
 	if err2 != nil {

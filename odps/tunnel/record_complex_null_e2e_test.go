@@ -24,6 +24,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aliyun/aliyun-odps-go-sdk/internal/livetest"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/data"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/datatype"
 	"github.com/aliyun/aliyun-odps-go-sdk/odps/tableschema"
@@ -40,7 +41,10 @@ import (
 // download, and the record that comes back can still be printed - which is what
 // https://github.com/aliyun/aliyun-odps-go-sdk/issues/27 reported as a panic.
 
-const complexNullE2ETable = "tunnel_complex_null_e2e"
+// complexNullE2ETable is namespaced per run: the test overwrites it and reads
+// the rows back, so a second concurrent run would be comparing against rows it
+// did not write.
+var complexNullE2ETable = livetest.Fixture("tunnel_complex_null_e2e")
 
 func mustParseE2EDataType(t *testing.T, typeText string) datatype.DataType {
 	t.Helper()
@@ -211,6 +215,11 @@ func TestEndToEndComplexTypeWithNulls(t *testing.T) {
 	if err := odpsIns.Tables().Create(builder.Build(), true, nil, nil); err != nil {
 		t.Fatalf("create table %s: %v", complexNullE2ETable, err)
 	}
+	t.Cleanup(func() {
+		if err := odpsIns.Tables().Delete(complexNullE2ETable, true); err != nil {
+			println("live fixture cleanup: drop table " + complexNullE2ETable + ": " + err.Error())
+		}
+	})
 
 	records, wants := complexNullE2ERecords(t)
 
